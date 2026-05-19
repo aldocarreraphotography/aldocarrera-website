@@ -63,7 +63,13 @@ function Portfolio({ view, onSetView, onOpenProject, onSetCrumb }) {
    PROJECT WINDOW (single project archive)
    ============================================================ */
 function ProjectDetail({ project, onOpenPhoto }) {
-  const items = vsUseMemo(() => ARCHIVE.filter(a => a.project === project.id), [project.id]);
+  const [dataTick, setDataTick] = vsUseState(0);
+  vsUseEffect(() => {
+    const onUpdate = () => setDataTick(t => t + 1);
+    window.addEventListener('aldo-data-updated', onUpdate);
+    return () => window.removeEventListener('aldo-data-updated', onUpdate);
+  }, []);
+  const items = vsUseMemo(() => ARCHIVE.filter(a => a.project === project.id), [project.id, dataTick]);
   return (
     <div>
       <div style={{padding: '24px 26px 18px', borderBottom: '1px solid var(--rule)', background: 'var(--window)'}}>
