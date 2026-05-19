@@ -478,9 +478,9 @@ function DeckOverlay({ deck, onClose }) {
     });
     await Promise.all(Array.from(sources).map(src => new Promise(resolve => {
       const i = new Image();
+      i.crossOrigin = 'anonymous';  // prime CORS-enabled cache for html2canvas
       i.onload = i.onerror = resolve;
-      // hard cap so a broken src doesn't deadlock the export
-      setTimeout(resolve, 5000);
+      setTimeout(resolve, 15000);
       i.src = src;
     })));
   };
@@ -515,9 +515,9 @@ function DeckOverlay({ deck, onClose }) {
           scale: 2,
           backgroundColor: '#ffffff',
           useCORS: true,
-          allowTaint: true,
+          allowTaint: false,
           logging: false,
-          imageTimeout: 0,
+          imageTimeout: 30000,
           width: pages[i].offsetWidth,
           height: pages[i].offsetHeight,
         });
