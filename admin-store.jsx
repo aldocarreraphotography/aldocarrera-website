@@ -417,7 +417,7 @@ const AdminStore = {
     if (!p) return null;
     return { ...p, images: sortImagesByOrder(p.images) };
   },
-  createProject(input) {
+  async createProject(input) {
     const project = {
       id: input.id || nextId('PRJ'),
       name: input.name || 'Untitled project',
@@ -433,6 +433,28 @@ const AdminStore = {
       images: [],
     };
     patchStore(s => { s.projects.unshift(project); });
+
+    // Write to Blobs immediately so the project exists when images are
+    // uploaded. Without this, the upload endpoint returns 404 (project not
+    // found) because the debounced sync hasn't fired yet, causing images to
+    // silently fall through to IndexedDB and never reach the public site.
+    const token = _getAuthToken();
+    if (_isRealJWT(token)) {
+      try {
+        const r = await fetch('/api/projects', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify(project),
+        });
+        // 201 = created, 422 = already exists (e.g. a sync raced us) — both fine.
+        if (!r.ok && r.status !== 422) {
+          console.warn('[admin-store] createProject API returned', r.status);
+        }
+      } catch (_) {
+        // Network failure — local write succeeded; debounced sync will push later.
+      }
+    }
+
     return project;
   },
   updateProject(id, patch) {
@@ -480,7 +502,34 @@ const AdminStore = {
               body: fd,
             }
           );
-          if (r.ok) record = await r.json();
+          if (r.ok) {
+            record = await r.json();
+          } else if (r.status === 404) {
+            // Project not in Blobs yet (sync hasn't fired). Create it now
+            // then retry the upload once.
+            const proj = readStore().projects.find(x => x.id === projectId);
+            if (proj) {
+              try {
+                const cr = await fetch('/api/projects', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                  body: JSON.stringify({ ...proj, images: [] }),
+                });
+                if (cr.ok || cr.status === 422) {
+                  const fd2 = new FormData();
+                  fd2.append('file', file, filename);
+                  fd2.append('filename', filename);
+                  if (exif.dateTaken)  fd2.append('dateTaken',  exif.dateTaken);
+                  if (exif.dimensions) fd2.append('dimensions', exif.dimensions);
+                  const retry = await fetch(
+                    `/api/projects/${encodeURIComponent(projectId)}/images/upload`,
+                    { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd2 }
+                  );
+                  if (retry.ok) record = await retry.json();
+                }
+              } catch (_) {}
+            }
+          }
         } catch (_) {
           // Network blip → fall through to local stash so the upload isn't lost.
         }

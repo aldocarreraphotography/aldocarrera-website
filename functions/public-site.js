@@ -251,7 +251,6 @@ export default async function handler(req) {
   ]);
 
   // Resolve each section: Blobs if populated, else inline defaults.
-  const projects = pickArray(projectsFile?.projects, DEFAULT_PROJECTS);
   const about    = pickObject(aboutFile,             DEFAULT_ABOUT, 'bio');
   const clients  = pickArray(clientsFile?.clients,   DEFAULT_CLIENTS);
   const services = pickArray(servicesFile?.services, DEFAULT_SERVICES);
@@ -259,9 +258,12 @@ export default async function handler(req) {
 
   // Strip rejected images; keep everything else so Archive shows the full
   // curated set, not just `selected: true` frames.
-  const cleanedProjects = projects
+  // Apply pickArray AFTER filtering so that projects existing in Blobs with
+  // no images yet (created in admin but not uploaded) don't suppress defaults.
+  const cleanedFromBlobs = (projectsFile?.projects || [])
     .map(p => ({ ...p, images: (p.images || []).filter(img => !img.rejected) }))
     .filter(p => p.images.length > 0);
+  const cleanedProjects = pickArray(cleanedFromBlobs, DEFAULT_PROJECTS);
 
   const body = {
     projects: cleanedProjects,
