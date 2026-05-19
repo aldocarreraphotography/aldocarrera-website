@@ -457,7 +457,8 @@ function _aldoNotify(source) {
    nor any intermediary CDN can hand us a stale copy. */
 async function _aldoFetchFromApi() {
   try {
-    const url = `/api/public/site?t=${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+    const base = (typeof window !== 'undefined' && window.API_BASE) || '';
+    const url = `${base}/api/public/site?t=${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
     const res = await fetch(url, {
       cache: 'no-store',
       headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' },
