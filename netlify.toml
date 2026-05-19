@@ -24,92 +24,10 @@
   targetPort = 3999
 
 ################################################################
-# /api/* → Netlify Functions
+# API is now served by the NAS Express server (nas-server/).
+# window.API_BASE in Admin.html and index.html points the frontend
+# directly to the NAS host — no Netlify functions needed.
 ################################################################
-
-# --- Auth ---------------------------------------------------------------
-[[redirects]]
-  from   = "/api/auth/login"
-  to     = "/.netlify/functions/auth-login"
-  status = 200
-[[redirects]]
-  from   = "/api/auth/verify"
-  to     = "/.netlify/functions/auth-verify"
-  status = 200
-[[redirects]]
-  from   = "/api/auth/logout"
-  to     = "/.netlify/functions/auth-logout"
-  status = 200
-
-# --- Debug / diagnostics (no auth) -------------------------------------
-[[redirects]]
-  from   = "/api/debug"
-  to     = "/.netlify/functions/debug"
-  status = 200
-
-# --- Public read-only (no auth, edge-cached) ----------------------------
-[[redirects]]
-  from   = "/api/public/site"
-  to     = "/.netlify/functions/public-site"
-  status = 200
-
-# Belt-and-braces: never let the CDN cache the public-site response. The
-# function sets Cache-Control: no-store already; this header rule is here
-# in case any intermediary tries to override it.
-[[headers]]
-  for = "/api/public/site"
-  [headers.values]
-    Cache-Control = "no-store, no-cache, must-revalidate, max-age=0"
-    Pragma        = "no-cache"
-    Expires       = "0"
-
-# --- Projects (auth required, enforced in function) ---------------------
-[[redirects]]
-  from   = "/api/projects/:id/images/upload"
-  to     = "/.netlify/functions/projects-images-upload?id=:id"
-  status = 200
-[[redirects]]
-  from   = "/api/projects/:id/images/:filename"
-  to     = "/.netlify/functions/projects-images?id=:id&filename=:filename"
-  status = 200
-[[redirects]]
-  from   = "/api/projects/:id"
-  to     = "/.netlify/functions/projects-id?id=:id"
-  status = 200
-[[redirects]]
-  from   = "/api/projects"
-  to     = "/.netlify/functions/projects"
-  status = 200
-
-# --- Content ------------------------------------------------------------
-[[redirects]]
-  from   = "/api/admin/sync"
-  to     = "/.netlify/functions/admin-sync"
-  status = 200
-[[redirects]]
-  from   = "/api/about"
-  to     = "/.netlify/functions/content-about"
-  status = 200
-[[redirects]]
-  from   = "/api/services/:id"
-  to     = "/.netlify/functions/content-services?id=:id"
-  status = 200
-[[redirects]]
-  from   = "/api/services"
-  to     = "/.netlify/functions/content-services"
-  status = 200
-[[redirects]]
-  from   = "/api/clients/:slug"
-  to     = "/.netlify/functions/content-clients?slug=:slug"
-  status = 200
-[[redirects]]
-  from   = "/api/clients"
-  to     = "/.netlify/functions/content-clients"
-  status = 200
-[[redirects]]
-  from   = "/api/settings"
-  to     = "/.netlify/functions/content-settings"
-  status = 200
 
 ################################################################
 # SPA fallbacks
