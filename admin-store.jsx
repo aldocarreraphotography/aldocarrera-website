@@ -591,11 +591,17 @@ const AdminStore = {
             let body = '';
             try { body = await r.text(); } catch (_) {}
             console.error(`[upload] server error ${r.status} for ${filename}:`, body);
+            // Server returned a real error — throw so the user sees the toast.
+            // Don't silently fall through to IndexedDB; that masks the failure.
+            throw new Error(`Server error ${r.status} uploading ${filename}${body ? ': ' + body.slice(0, 200) : ''}`);
           }
         } catch (err) {
           clearTimeout(timer);
           console.error('[upload] fetch failed for', filename, ':', err?.message, err);
-          // fall through to local stash so the upload isn't silently lost.
+          // Re-throw server errors. Only fall through to IDB for genuine network
+          // failures (offline, abort) where the user can't do anything differently.
+          if (err.message && !err.message.startsWith('Server error')) throw err;
+          // Network blip — stash locally so the upload isn't silently lost.
         }
       }
 

@@ -29,8 +29,29 @@ export default async function handler(req) {
     results.read = { ok: false, error: e.message };
   }
 
+  // Read actual projects.json from Blobs so we can see if real data ever landed.
+  let projectsState = null;
+  try {
+    const pjs = await getJson('projects.json');
+    if (pjs) {
+      projectsState = {
+        projectCount: pjs.projects?.length ?? 0,
+        projects: (pjs.projects || []).map(p => ({
+          id: p.id,
+          imageCount: p.images?.length ?? 0,
+          blobPaths: (p.images || []).slice(0, 3).map(i => i.blobPath),
+        })),
+      };
+    } else {
+      projectsState = { projectCount: 0, note: 'projects.json not found in Blobs' };
+    }
+  } catch (e) {
+    projectsState = { error: e.message };
+  }
+
   return new Response(JSON.stringify({
     blobs: results,
+    projectsInBlobs: projectsState,
     env: {
       hasJwtSecret:       !!process.env.JWT_SECRET,
       hasAdminPassword:   !!process.env.ADMIN_PASSWORD,

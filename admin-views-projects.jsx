@@ -360,17 +360,19 @@ function ProjectUploadView({ projectId, navigate }) {
     setBusy(true);
     setProgress({ index: 0, total: queue.length });
     const files = queue.map(q => q.file);
+    let failed = false;
     try {
       await window.AdminStore.uploadImages(project.id, files, (p) => setProgress(p));
       toast(`${files.length} ${files.length === 1 ? 'file' : 'files'} added to ${project.id}`, 'ok');
       navigate(`#/projects/${encodeURIComponent(project.id)}/images`);
     } catch (err) {
+      failed = true;
       console.error('[upload] commit failed:', err);
       toast(`Upload failed: ${err?.message || 'unknown error'}`, 'error');
     } finally {
       setBusy(false);
       setProgress(null);
-      setQueue([]);
+      if (!failed) setQueue([]); // keep queue on failure so user can retry
     }
   };
 
