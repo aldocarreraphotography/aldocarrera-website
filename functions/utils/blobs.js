@@ -29,7 +29,7 @@ export async function setJson(key, value) {
 }
 
 export async function getBytes(key) {
-  return store.get(key, { type: 'buffer' });
+  return store.get(key, { type: 'arrayBuffer' });
 }
 
 export async function setBytes(key, bytes, contentType = 'application/octet-stream') {

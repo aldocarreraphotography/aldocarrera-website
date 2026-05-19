@@ -21,7 +21,7 @@
   functions = "functions"
   publish   = "dist"
   port      = 8888
-  command   = "npm run build && npx serve dist"
+  targetPort = 3999
 
 ################################################################
 # /api/* → Netlify Functions
