@@ -761,6 +761,9 @@ function DeckOverlay({ deck, onClose }) {
     setExportStatus({ state: 'preparing', current: 0, total: totalPgs });
 
     try {
+      // Ensure web fonts (IBM Plex Mono, Inter) are loaded before canvas draws
+      await document.fonts.ready;
+
       // Pre-load logos (SVG → Image element)
       const [logoLgImg, logoSmImg] = await Promise.all([
         loadImg(makeSvgLogoUrl('#d63e5a', 58)),
