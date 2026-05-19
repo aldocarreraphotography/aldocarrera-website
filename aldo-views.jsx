@@ -575,7 +575,7 @@ function Services() {
   return (
     <div className="services">
       <div className="hello">Services · v2026.05</div>
-      <h1>What I make.</h1>
+      <h1>What I offer.</h1>
       <p className="lede">
         A full-service practice — available as a complete creative partnership
         or à la carte. Photography is the spine; everything around it (casting,

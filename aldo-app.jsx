@@ -3,13 +3,13 @@
 const { useState: aUseState, useEffect: aUseEffect, useRef: aUseRef, useMemo: aUseMemo, useCallback: aUseCallback } = React;
 
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
-  "accent": "#e8a0b2",
+  "accent": "#f6c2cf",
   "tone": "warm",
   "saturation": 88
 }/*EDITMODE-END*/;
 
 const TONES = {
-  warm:    { paper: "#f8f7f5", paperSoft: "#eeedeb", rule: "#d4cfca", ruleSoft: "#e4e0db", window: "#fafaf9" },
+  warm:    { paper: "#f5f2ee", paperSoft: "#ece8e3", rule: "#cdc8c2", ruleSoft: "#e0dbd5", window: "#faf9f7" },
   cool:    { paper: "#eef0f3", paperSoft: "#e3e6eb", rule: "#bfc4cc", ruleSoft: "#d6dae2", window: "#fafbfc" },
   neutral: { paper: "#f0efeb", paperSoft: "#e5e3dd", rule: "#c5c2ba", ruleSoft: "#d8d5cb", window: "#fbfaf7" },
 };
@@ -533,7 +533,7 @@ function DeckOverlay({ deck, onClose }) {
     const ctx = cv.getContext('2d');
     ctx.scale(SC, SC);
 
-    const PAPER = '#f8f7f5', INK = '#1a1714', SOFT = '#7a7675', RULE = '#d4cfca';
+    const PAPER = '#f5f2ee', INK = '#1a1714', SOFT = '#7a7675', RULE = '#cdc8c2';
     const PL = 64, PT = 60;
 
     ctx.fillStyle = PAPER; ctx.fillRect(0, 0, PW, PH);
@@ -619,7 +619,7 @@ function DeckOverlay({ deck, onClose }) {
     const ctx = cv.getContext('2d');
     ctx.scale(SC, SC);
 
-    const PAPER = '#f8f7f5', INK = '#1a1714', SOFT = '#7a7675', RULE = '#d4cfca';
+    const PAPER = '#f5f2ee', INK = '#1a1714', SOFT = '#7a7675', RULE = '#cdc8c2';
     const PAPER_SOFT = '#eeedeb';
     const PL = 64, PT = 60;
 
@@ -680,7 +680,7 @@ function DeckOverlay({ deck, onClose }) {
     const ctx = cv.getContext('2d');
     ctx.scale(SC, SC);
 
-    const PAPER = '#f8f7f5', INK = '#1a1714', SOFT = '#7a7675', RULE = '#d4cfca';
+    const PAPER = '#f5f2ee', INK = '#1a1714', SOFT = '#7a7675', RULE = '#cdc8c2';
     ctx.fillStyle = PAPER; ctx.fillRect(0, 0, PW, PH);
     drawChrome(ctx, logoSmallImg, pageNum, totalPgs);
 
@@ -766,8 +766,8 @@ function DeckOverlay({ deck, onClose }) {
 
       // Pre-load logos (SVG → Image element)
       const [logoLgImg, logoSmImg] = await Promise.all([
-        loadImg(makeSvgLogoUrl('#e8a0b2', 58)),
-        loadImg(makeSvgLogoUrl('#e8a0b2', 13)),
+        loadImg(makeSvgLogoUrl('#f6c2cf', 58)),
+        loadImg(makeSvgLogoUrl('#f6c2cf', 13)),
       ]);
 
       // Pre-fetch all photos as data URLs (bypasses CORS in canvas)
@@ -1292,7 +1292,7 @@ function ArchiveApp() {
           date: it.date, dims: it.dims, size: it.size, photo: it.photo,
           note: it.note, project: it.project,
         })),
-        accent: t ? t.accent : '#e8a0b2',
+        accent: t ? t.accent : '#f6c2cf',
       }));
     } catch (_) {}
   }, [selectedIds, t]);
@@ -1580,7 +1580,7 @@ function ArchiveApp() {
       <TweakColor
         label="Accent"
         value={t.accent}
-        options={['#e8a0b2', '#f2b8c6', '#d48ca0', '#b8d4e8', '#94bcd4', '#d63e5a']}
+        options={['#f6c2cf', '#f0a8bc', '#e48aaa', '#b8d4e8', '#8ab4cc', '#d63e5a']}
         onChange={(v) => setTweak('accent', v)}
       />
       <TweakSection label="Photographs"/>

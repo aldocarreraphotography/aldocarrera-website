@@ -84,7 +84,7 @@ function AdminSidebar({ route, onLogout }) {
       </nav>
 
       <div className="ad-side-foot">
-        <a className="ad-side-public" href="The Archive.html">
+        <a className="ad-side-public" href="/" target="_blank" rel="noopener">
           <span>View public archive</span>
           <span>↗</span>
         </a>

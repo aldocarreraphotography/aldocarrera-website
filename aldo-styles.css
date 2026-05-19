@@ -3,21 +3,21 @@
    ============================================================ */
 
 :root {
-  --paper:        #f8f7f5;   /* clean off-white, no beige */
-  --paper-soft:   #eeedeb;
-  --window:       #fafaf9;
-  --rule:         #d4cfca;   /* cooler hairline */
-  --rule-soft:    #e4e0db;
+  --paper:        #f5f2ee;   /* warm off-white */
+  --paper-soft:   #ece8e3;
+  --window:       #faf9f7;
+  --rule:         #cdc8c2;   /* warm hairline */
+  --rule-soft:    #e0dbd5;
   --ink:          #1a1714;   /* deep charcoal */
   --ink-soft:     #4a4845;
   --ink-muted:    #7a7675;
-  --accent:       #e8a0b2;   /* soft blush pink */
+  --accent:       #f6c2cf;   /* baby blush pink */
   --accent-ink:   #2a1820;   /* dark text on light pink */
-  --accent-soft:  rgba(232, 160, 178, 0.14);
-  --accent-line:  rgba(232, 160, 178, 0.30);
-  --selection:    rgba(184, 212, 232, 0.22);   /* powder blue selection */
+  --accent-soft:  rgba(246, 194, 207, 0.20);
+  --accent-line:  rgba(246, 194, 207, 0.40);
+  --selection:    rgba(184, 212, 232, 0.25);   /* powder blue selection */
   --accent2:      #b8d4e8;   /* powder blue — secondary */
-  --accent2-soft: rgba(184, 212, 232, 0.18);
+  --accent2-soft: rgba(184, 212, 232, 0.20);
   --sidebar-w:    240px;
   --easing:       cubic-bezier(0.32, 0.72, 0.24, 1);
 }
@@ -1855,7 +1855,7 @@ input, textarea, select {
   text-transform: none;
   border-radius: 4px;
   white-space: nowrap;
-  box-shadow: 0 6px 18px rgba(232, 160, 178, 0.40);
+  box-shadow: 0 6px 18px rgba(246, 194, 207, 0.50);
   z-index: 50;
   animation: hintPulse 1.4s ease-out infinite alternate;
   cursor: pointer;

@@ -370,7 +370,8 @@ async function pullFromAPI() {
     ]);
     patchStore(s => {
       if (pjs?.projects?.length) s.projects = pjs.projects;
-      if (ab && Object.keys(ab).length) s.about = ab;
+      // Only apply API about if it has real content (not an empty defaultAbout shell)
+      if (ab && (ab.bio || ab.location || (ab.practice && ab.practice.length) || (ab.education && (ab.education.school || ab.education.degree || ab.education.year)))) s.about = ab;
       if (cl?.clients?.length) s.clients = cl.clients;
       if (sv?.services?.length) s.services = sv.services;
       if (st && Object.keys(st).length) s.settings = st;
