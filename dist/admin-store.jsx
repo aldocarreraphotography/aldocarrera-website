@@ -598,10 +598,9 @@ const AdminStore = {
         } catch (err) {
           clearTimeout(timer);
           console.error('[upload] fetch failed for', filename, ':', err?.message, err);
-          // Re-throw server errors. Only fall through to IDB for genuine network
-          // failures (offline, abort) where the user can't do anything differently.
-          if (err.message && !err.message.startsWith('Server error')) throw err;
-          // Network blip — stash locally so the upload isn't silently lost.
+          // Server errors we threw ourselves: re-throw so the error toast fires.
+          if (err.message?.startsWith('Server error')) throw err;
+          // Genuine network failure (offline, abort): fall through to local stash.
         }
       }
 
