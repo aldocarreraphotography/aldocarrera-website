@@ -225,7 +225,8 @@ function ProjectEditorView({ projectId, navigate }) {
   const clientOptions = useMemoClients();
   const set = (k, v) => setDraft(d => ({ ...d, [k]: v }));
 
-  const save = () => {
+  const [saving, setSaving] = vS(false);
+  const save = async () => {
     const e = {};
     if (!draft.name) e.name = 'Required';
     if (!draft.client) e.client = 'Required';
@@ -234,7 +235,9 @@ function ProjectEditorView({ projectId, navigate }) {
     if (Object.keys(e).length) return;
     if (isNew) {
       const id = draft.id.toUpperCase().replace(/[^A-Z0-9_]+/g, '_');
-      window.AdminStore.createProject({ ...draft, id });
+      setSaving(true);
+      await window.AdminStore.createProject({ ...draft, id });
+      setSaving(false);
       toast(`Project ${id} created`, 'ok');
       navigate(`#/projects/${encodeURIComponent(id)}/upload`);
     } else {
@@ -263,7 +266,7 @@ function ProjectEditorView({ projectId, navigate }) {
         actions={
           <>
             <Btn variant="ghost" onClick={() => navigate(isNew ? '#/projects' : `#/projects/${encodeURIComponent(existing.id)}/images`)}>Cancel</Btn>
-            <Btn onClick={save}>{isNew ? 'Create + add photos' : 'Save changes'}</Btn>
+            <Btn onClick={save} disabled={saving}>{saving ? 'Creating…' : (isNew ? 'Create + add photos' : 'Save changes')}</Btn>
           </>
         }
       />
