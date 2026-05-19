@@ -462,16 +462,24 @@ function DeckOverlay({ deck, onClose }) {
   const shellRef = aUseRef(null);
   const [exportStatus, setExportStatus] = aUseState({ state: 'idle', current: 0, total: 0 });
 
-  // Load an image from a URL (data URL or cross-origin) into an HTMLImageElement.
+  // ── PDF canvas helpers ────────────────────────────────────────────
+
+  const LOGO_SVG_D1 = "M251.26,311.81c-20.41,8.99-48.31,8.03-59.87-14.11-3.88-7.43-4.92-15.21-4.91-24.26-28,6.38-54.77,14.5-81.4,23.53-10.5,9.27-20.26,17.42-31.89,24.47-4.87,2.95-18.4,8.75-21.77,3.24-2.27-3.72,6.89-2.89,12.74-6.42,7.4-4.46,13.68-9.24,20.25-15.1-18.34,4.45-35,7.75-52.8,3.75-14.35-3.23-27.04-12.81-30.24-27.52-6.87-31.59,12.98-70.87,32.17-95.53,15.62-20.07,32.69-38.17,52.33-54.57,50.52-42.21,106.49-76.75,167.47-101.79,30.55-12.55,61.52-22.08,94.23-26.43,13.49-1.79,26.57-.99,39.93-.02,34.53,2.49,65.67,22.9,64.81,60.77-.25,10.94-.59,21.08-3.28,31.67-4.9,19.24-12.69,36.69-23.4,53.4-24.1,37.6-57.61,70.29-90.29,101.9,19.86,5.47,32.69,19.49,44.84,34.78,1.96,4.43,3.9,8.77,1.29,13.54-9.81-11.63-19.66-21.92-31.22-31.04-6.8-5.37-14.96-8.03-23.84-9.12-23,20.31-47.01,42.47-75.16,54.87ZM288.73,93.35c-17.55,32.15-41.56,59.54-65.09,87.17-12.36,24.44-24.62,53.23-27.1,80.91,42.52-8.01,83.23-15.3,126.23-14.22,21.63-20.25,42.32-40.86,62.18-63.07,24.4-27.28,45.62-57.44,54.77-93.16,2.72-10.6,3.21-21.17,3.01-32.08-.34-18.78-11.06-33.95-27.93-41.53-13.41-6.02-27.38-7.56-42.21-7.97-17.07-.47-32.64,1.25-49.42,5.09-79.68,18.25-160.19,63.3-223.49,114.65-22.48,18.24-42.51,37.93-59.91,61.03-17.21,22.85-36,57.87-29.98,87.1,5.24,25.4,42.05,25.42,60.93,19.83l31.69-9.38,53.1-49.69c21.52-20.14,40.85-41.1,60.46-63.26,13.85-27.22,29.55-52.33,48.79-75.85,4.66-5.69,16.4-20.8,22.94-14.57,2.02,1.92,2.76,5.82,1.02,9ZM187.17,263.37c.79-20.75,7.81-38.58,13.74-57.35l-75.13,73.61,61.39-16.25ZM270.64,290.13c14.59-10.25,27.74-21.11,41.11-33.3-7.4-.29-13.77-.21-21.05.38-32.05,2.61-63.05,7.3-94.38,14.11-1.93,14.53,3.54,30.15,18.01,34.65,20.12,6.25,39.79-4.22,56.32-15.84Z";
+  const LOGO_SVG_D2 = "M367.54,313.59c-.39,2.14-6.52,2.45-10.33-5.47-2.03-4.21.38-9,4.14-10.1,2.35,10.4,7.2,10.04,6.2,15.57Z";
+
+  const makeSvgLogoUrl = (color, h) => {
+    const w = h * (452.33 / 326.97);
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 452.33 326.97"><g fill="${color}"><path d="${LOGO_SVG_D1}"/><path d="${LOGO_SVG_D2}"/></g></svg>`;
+    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  };
+
   const loadImg = (src) => new Promise(resolve => {
     const img = new Image();
-    img.crossOrigin = 'anonymous';
     img.onload = () => resolve(img);
     img.onerror = () => resolve(null);
     img.src = src;
   });
 
-  // Fetch a URL as a data URL (removes CORS from canvas operations entirely).
   const toDataUrl = async (src) => {
     try {
       const r = await fetch(src, { mode: 'cors', cache: 'no-store' });
@@ -480,101 +488,260 @@ function DeckOverlay({ deck, onClose }) {
     } catch (_) { return src; }
   };
 
-  // Draw one image cover-fitted into a rect on ctx.
-  const drawCover = (ctx, img, x, y, w, h) => {
+  // Draw image contain-fitted (full image visible, background fills gaps).
+  const drawContain = (ctx, img, x, y, w, h, bg) => {
+    ctx.fillStyle = bg; ctx.fillRect(x, y, w, h);
     if (!img) return;
     const ia = img.naturalWidth / img.naturalHeight;
     const sa = w / h;
-    let dx, dy, dw, dh;
-    if (ia > sa) { dh = h; dw = h * ia; dx = x - (dw - w) / 2; dy = y; }
-    else         { dw = w; dh = w / ia; dx = x; dy = y - (dh - h) / 2; }
-    ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+    let dw, dh, dx, dy;
+    if (ia > sa) { dw = w; dh = w / ia; dx = x; dy = y + (h - dh) / 2; }
+    else         { dh = h; dw = h * ia; dy = y; dx = x + (w - dw) / 2; }
     ctx.drawImage(img, dx, dy, dw, dh);
-    ctx.restore();
   };
 
-  // Render one image page directly to a canvas — no html2canvas, no CORS.
-  const renderImagePage = async (dataUrls, pageNum, totalPgs) => {
+  // Draw page header + footer chrome (logo, title, contact, page number).
+  const drawChrome = (ctx, logoImg, pageNum, totalPgs) => {
+    const PW = 816, PH = 1056;
+    const SOFT = '#7a7468', RULE = '#c8c2b3';
+    // Header
+    if (logoImg) {
+      const lh = 13, lw = lh * (452.33 / 326.97);
+      ctx.drawImage(logoImg, 48, 26, lw, lh);
+      ctx.fillStyle = SOFT; ctx.font = '10px "IBM Plex Mono", monospace';
+      ctx.fillText('ALDO CARRERA', 48 + lw + 9, 38);
+    } else {
+      ctx.fillStyle = SOFT; ctx.font = '10px "IBM Plex Mono", monospace';
+      ctx.fillText('ALDO CARRERA', 48, 38);
+    }
+    ctx.fillStyle = SOFT; ctx.font = '10px "IBM Plex Mono", monospace';
+    const dl = (meta.title || '').toUpperCase();
+    ctx.fillText(dl, PW - 48 - ctx.measureText(dl).width, 38);
+    // Footer rule + text
+    ctx.strokeStyle = RULE; ctx.lineWidth = 0.75;
+    ctx.beginPath(); ctx.moveTo(48, PH - 36); ctx.lineTo(PW - 48, PH - 36); ctx.stroke();
+    ctx.fillStyle = SOFT; ctx.font = '10px "IBM Plex Mono", monospace';
+    ctx.fillText('aldo@aldocarrera.com  ·  +1 (619) 971-7182  ·  @aldocarrera', 48, PH - 20);
+    const pgLabel = `${pageNum} / ${totalPgs}`;
+    ctx.fillText(pgLabel, PW - 48 - ctx.measureText(pgLabel).width, PH - 20);
+  };
+
+  const renderCoverPage = async (logoImg) => {
     const PW = 816, PH = 1056, SC = 2;
     const cv = document.createElement('canvas');
     cv.width = PW * SC; cv.height = PH * SC;
     const ctx = cv.getContext('2d');
     ctx.scale(SC, SC);
 
-    const PAPER = '#f6f4ef', INK = '#1a1a1a', SOFT = '#7a7468', RULE = '#c8c2b3';
-    const HEAD_H = 44, FOOT_H = 36, PAD = 26;
+    const PAPER = '#f7f3eb', INK = '#1a1a1a', SOFT = '#7a7468', RULE = '#c8c2b3';
+    const PL = 64, PT = 60;
 
     ctx.fillStyle = PAPER; ctx.fillRect(0, 0, PW, PH);
 
-    // header rule
-    ctx.strokeStyle = RULE; ctx.lineWidth = 0.5;
-    ctx.beginPath(); ctx.moveTo(PAD, HEAD_H); ctx.lineTo(PW - PAD, HEAD_H); ctx.stroke();
-    // footer rule
-    ctx.beginPath(); ctx.moveTo(PAD, PH - FOOT_H); ctx.lineTo(PW - PAD, PH - FOOT_H); ctx.stroke();
+    // Top stamp
+    ctx.fillStyle = SOFT; ctx.font = '500 10px "IBM Plex Mono", monospace';
+    ctx.fillText('ALDO CARRERA  ·  TO-GO DECK', PL, PT + 14);
+    const stampR = `${totalPages} PAGES  ·  ${items.length} IMAGES`;
+    ctx.fillText(stampR, PW - PL - ctx.measureText(stampR).width, PT + 14);
+    ctx.strokeStyle = RULE; ctx.lineWidth = 0.75;
+    ctx.beginPath(); ctx.moveTo(PL, PT + 30); ctx.lineTo(PW - PL, PT + 30); ctx.stroke();
 
-    ctx.font = '11px "IBM Plex Mono", monospace';
-    ctx.fillStyle = INK;
-    ctx.fillText('Aldo Carrera', PAD, 28);
-    ctx.fillStyle = SOFT;
-    ctx.fillText(meta.title || '', PW / 2 - ctx.measureText(meta.title || '').width / 2, 28);
-    ctx.fillText('aldo@aldocarrera.com  ·  +1 (619) 971-7182  ·  @aldocarrera', PAD, PH - 14);
-    const pgLabel = `${pageNum} / ${totalPgs}`;
-    ctx.fillText(pgLabel, PW - PAD - ctx.measureText(pgLabel).width, PH - 14);
-
-    const imgArea = { x: PAD, y: HEAD_H + 10, w: PW - PAD * 2, h: PH - HEAD_H - FOOT_H - 20 };
-
-    if (dataUrls.length === 1) {
-      const img = await loadImg(dataUrls[0].url);
-      drawCover(ctx, img, imgArea.x, imgArea.y, imgArea.w, imgArea.h);
-      // caption strip
-      ctx.fillStyle = 'rgba(0,0,0,0.5)';
-      ctx.fillRect(imgArea.x, imgArea.y + imgArea.h - 26, imgArea.w, 26);
-      ctx.fillStyle = '#fff'; ctx.font = '10px "IBM Plex Mono", monospace';
-      ctx.fillText(`${dataUrls[0].client}  ·  ${dataUrls[0].name}`, imgArea.x + 10, imgArea.y + imgArea.h - 9);
-    } else {
-      const half = (imgArea.w - 8) / 2;
-      for (let s = 0; s < 2; s++) {
-        const d = dataUrls[s];
-        if (!d) continue;
-        const sx = imgArea.x + s * (half + 8);
-        const img = await loadImg(d.url);
-        drawCover(ctx, img, sx, imgArea.y, half, imgArea.h);
-        ctx.fillStyle = 'rgba(0,0,0,0.5)';
-        ctx.fillRect(sx, imgArea.y + imgArea.h - 26, half, 26);
-        ctx.fillStyle = '#fff'; ctx.font = '10px "IBM Plex Mono", monospace';
-        ctx.fillText(`${d.client}  ·  ${d.name}`, sx + 8, imgArea.y + imgArea.h - 9);
-      }
+    // Mid: logo + title block, vertically centered in upper 2/3
+    const midCtrY = 390;
+    if (logoImg) {
+      const lh = 46, lw = lh * (452.33 / 326.97);
+      ctx.drawImage(logoImg, PL, midCtrY - lh, lw, lh);
     }
+    const eyebrowY = midCtrY + 24;
+    ctx.fillStyle = SOFT; ctx.font = '11px "IBM Plex Mono", monospace';
+    ctx.fillText(`SELECTED,  ${(meta.date || new Date().toISOString().slice(0,10)).toUpperCase()}`, PL, eyebrowY);
+
+    ctx.fillStyle = INK; ctx.font = '500 58px Inter, sans-serif';
+    const titleStr = meta.title || 'Selected Work';
+    const titleWords = titleStr.split(' ');
+    let line = '', lineY = eyebrowY + 70;
+    for (const w of titleWords) {
+      const test = line ? line + ' ' + w : w;
+      if (ctx.measureText(test).width > 600 && line) {
+        ctx.fillText(line, PL, lineY); line = w; lineY += 64;
+      } else { line = test; }
+    }
+    ctx.fillText(line, PL, lineY);
+
+    if (meta.recipient) {
+      lineY += 40;
+      ctx.fillStyle = SOFT; ctx.font = '400 18px Inter, sans-serif';
+      ctx.fillText(`for ${meta.recipient}`, PL, lineY);
+    }
+
+    if (meta.note) {
+      lineY += 36;
+      ctx.strokeStyle = RULE; ctx.lineWidth = 0.75;
+      ctx.beginPath(); ctx.moveTo(PL, lineY - 12); ctx.lineTo(PL + 460, lineY - 12); ctx.stroke();
+      ctx.fillStyle = SOFT; ctx.font = '13px Inter, sans-serif';
+      const noteWords = meta.note.split(' ');
+      let nl = '', ny = lineY + 6;
+      for (const w of noteWords) {
+        const t = nl ? nl + ' ' + w : w;
+        if (ctx.measureText(t).width > 440 && nl) { ctx.fillText(nl, PL, ny); nl = w; ny += 20; }
+        else nl = t;
+      }
+      ctx.fillText(nl, PL, ny);
+    }
+
+    // Footer 3-column grid
+    const footRuleY = PH - PT - 88;
+    ctx.strokeStyle = RULE; ctx.lineWidth = 0.75;
+    ctx.beginPath(); ctx.moveTo(PL, footRuleY); ctx.lineTo(PW - PL, footRuleY); ctx.stroke();
+    const colW = (PW - PL * 2 - 18 * 2) / 3;
+    const cols = [
+      { label: 'STUDIO',    v1: 'Aldo Carrera',          v2: 'Photographer · LA' },
+      { label: 'CONTACT',   v1: 'aldo@aldocarrera.com',  v2: '@aldocarrera' },
+      { label: 'THIS DECK', v1: meta.date || new Date().toISOString().slice(0,10), v2: `${items.length} ${items.length === 1 ? 'image' : 'images'}` },
+    ];
+    cols.forEach((col, i) => {
+      const cx = PL + i * (colW + 18);
+      ctx.fillStyle = SOFT; ctx.font = '9px "IBM Plex Mono", monospace';
+      ctx.fillText(col.label, cx, footRuleY + 20);
+      ctx.fillStyle = INK; ctx.font = '500 11px "IBM Plex Mono", monospace';
+      ctx.fillText(col.v1, cx, footRuleY + 40);
+      ctx.fillStyle = SOFT; ctx.font = '400 11px "IBM Plex Mono", monospace';
+      ctx.fillText(col.v2, cx, footRuleY + 58);
+    });
+
     return cv;
   };
 
-  // Render cover or closing page directly — no html2canvas.
-  const renderTextPage = (type) => {
+  const renderBackPage = async (logoImg) => {
     const PW = 816, PH = 1056, SC = 2;
     const cv = document.createElement('canvas');
     cv.width = PW * SC; cv.height = PH * SC;
     const ctx = cv.getContext('2d');
     ctx.scale(SC, SC);
-    const PAPER = '#f6f4ef', INK = '#1a1a1a', SOFT = '#7a7468', RULE = '#c8c2b3';
+
+    const PAPER = '#f7f3eb', INK = '#1a1a1a', SOFT = '#7a7468', RULE = '#c8c2b3';
+    const PAPER_SOFT = '#ede8df';
+    const PL = 64, PT = 60;
+
     ctx.fillStyle = PAPER; ctx.fillRect(0, 0, PW, PH);
-    ctx.strokeStyle = RULE; ctx.lineWidth = 0.5;
-    if (type === 'cover') {
-      ctx.beginPath(); ctx.moveTo(26, PH / 2 + 60); ctx.lineTo(PW - 26, PH / 2 + 60); ctx.stroke();
-      ctx.fillStyle = INK; ctx.font = 'bold 36px Inter, sans-serif';
-      ctx.fillText('Aldo Carrera', 26, PH / 2 - 10);
-      ctx.font = '13px "IBM Plex Mono", monospace'; ctx.fillStyle = SOFT;
-      ctx.fillText('PHOTOGRAPHER  ·  LOS ANGELES', 26, PH / 2 + 22);
-      ctx.font = '11px "IBM Plex Mono", monospace'; ctx.fillStyle = INK;
-      ctx.fillText(meta.title || 'Selected Work', 26, PH / 2 + 90);
-      ctx.fillStyle = SOFT;
-      ctx.fillText(new Date().toISOString().slice(0, 10), PW - 26 - ctx.measureText(new Date().toISOString().slice(0,10)).width, PH / 2 + 90);
-    } else {
-      ctx.beginPath(); ctx.moveTo(26, PH / 2 - 20); ctx.lineTo(PW - 26, PH / 2 - 20); ctx.stroke();
-      ctx.fillStyle = INK; ctx.font = '11px "IBM Plex Mono", monospace';
-      ctx.fillText('aldo@aldocarrera.com  ·  +1 (619) 971-7182  ·  @aldocarrera', 26, PH / 2 + 10);
-      ctx.fillStyle = SOFT;
-      ctx.fillText('aldocarrera.com', 26, PH / 2 + 30);
+
+    // Top row
+    ctx.fillStyle = SOFT; ctx.font = '500 10px "IBM Plex Mono", monospace';
+    ctx.fillText('END OF DECK', PL, PT + 14);
+    const topR = `${items.length} ${items.length === 1 ? 'IMAGE' : 'IMAGES'}  ·  ${(meta.date || '').toUpperCase()}`;
+    ctx.fillText(topR, PW - PL - ctx.measureText(topR).width, PT + 14);
+
+    // Center block
+    const ctrY = PH / 2;
+    if (logoImg) {
+      const lh = 58, lw = lh * (452.33 / 326.97);
+      ctx.drawImage(logoImg, PW / 2 - lw / 2, ctrY - 165, lw, lh);
     }
+    ctx.fillStyle = INK; ctx.font = '500 36px Inter, sans-serif';
+    const nameText = 'Aldo Carrera';
+    ctx.fillText(nameText, PW / 2 - ctx.measureText(nameText).width / 2, ctrY - 80);
+    ctx.fillStyle = SOFT; ctx.font = '400 15px Inter, sans-serif';
+    const roleText = 'Photographer · Los Angeles';
+    ctx.fillText(roleText, PW / 2 - ctx.measureText(roleText).width / 2, ctrY - 52);
+
+    // Contact box
+    const boxW = 440, boxH = 84;
+    const boxX = PW / 2 - boxW / 2, boxY = ctrY - 20;
+    ctx.fillStyle = PAPER_SOFT;
+    ctx.strokeStyle = RULE; ctx.lineWidth = 0.75;
+    ctx.fillRect(boxX, boxY, boxW, boxH);
+    ctx.strokeRect(boxX, boxY, boxW, boxH);
+    const c1x = boxX + 28, c2x = boxX + boxW / 2 + 14;
+    ctx.fillStyle = SOFT; ctx.font = '9px "IBM Plex Mono", monospace';
+    ctx.fillText('CONTACT', c1x, boxY + 20);
+    ctx.fillText('WEB', c2x, boxY + 20);
+    ctx.fillStyle = INK; ctx.font = '11px "IBM Plex Mono", monospace';
+    ctx.fillText('aldo@aldocarrera.com', c1x, boxY + 38);
+    ctx.fillText('aldocarrera.com', c2x, boxY + 38);
+    ctx.fillStyle = SOFT; ctx.font = '11px "IBM Plex Mono", monospace';
+    ctx.fillText('+1 (619) 971-7182', c1x, boxY + 56);
+    ctx.fillText('@aldocarrera', c2x, boxY + 56);
+
+    // Copyright
+    const copyRuleY = PH - PT - 28;
+    ctx.strokeStyle = RULE; ctx.lineWidth = 0.75;
+    ctx.beginPath(); ctx.moveTo(PL, copyRuleY); ctx.lineTo(PW - PL, copyRuleY); ctx.stroke();
+    ctx.fillStyle = SOFT; ctx.font = '9px "IBM Plex Mono", monospace';
+    const copyText = '© 2026 ALDO CARRERA  ·  ALL RIGHTS RESERVED';
+    ctx.fillText(copyText, PW / 2 - ctx.measureText(copyText).width / 2, copyRuleY + 18);
+
+    return cv;
+  };
+
+  const renderImagePage = async (dataUrls, pageNum, totalPgs, layout, logoSmallImg) => {
+    const PW = 816, PH = 1056, SC = 2;
+    const cv = document.createElement('canvas');
+    cv.width = PW * SC; cv.height = PH * SC;
+    const ctx = cv.getContext('2d');
+    ctx.scale(SC, SC);
+
+    const PAPER = '#f7f3eb', INK = '#1a1a1a', SOFT = '#7a7468', RULE = '#c8c2b3';
+    ctx.fillStyle = PAPER; ctx.fillRect(0, 0, PW, PH);
+    drawChrome(ctx, logoSmallImg, pageNum, totalPgs);
+
+    if (layout === 'full') {
+      const img = await loadImg(dataUrls[0].url);
+      drawContain(ctx, img, 48, 80, 720, 896, PAPER);
+
+    } else if (layout === 'duo') {
+      const slotH = Math.floor((896 - 14) / 2);
+      for (let s = 0; s < 2; s++) {
+        const d = dataUrls[s]; if (!d) continue;
+        const img = await loadImg(d.url);
+        const sy = 80 + s * (slotH + 14);
+        drawContain(ctx, img, 48, sy, 720, slotH, PAPER);
+        // Meta strip with cream background + rule border (matches .dk-meta-strip)
+        ctx.font = '10px "IBM Plex Mono", monospace';
+        const stripText = d.client ? `${d.client} · ${d.name}` : d.name;
+        const stripW = Math.min(ctx.measureText(stripText).width + 18, 680);
+        ctx.fillStyle = 'rgba(247,243,235,0.93)';
+        ctx.fillRect(58, sy + slotH - 30, stripW, 22);
+        ctx.strokeStyle = RULE; ctx.lineWidth = 0.75;
+        ctx.strokeRect(58, sy + slotH - 30, stripW, 22);
+        ctx.fillStyle = INK;
+        ctx.fillText(stripText, 66, sy + slotH - 13);
+      }
+
+    } else {
+      // Caption layout — image takes flex-1, caption section sits below
+      // cap-stack inset: top=80, right=48, bottom=90, left=48
+      const capPadTop = 18, capLabelH = 16, capV1H = 22, capV2H = 18, capBorder = 1;
+      const capSectionH = capBorder + capPadTop + capLabelH + capV1H + capV2H; // ~75px
+      const gapH = 22;
+      const imgH = 886 - gapH - capSectionH; // 886 = PH - 80 - 90
+      const imgY = 80;
+
+      const img = await loadImg(dataUrls[0].url);
+      drawContain(ctx, img, 48, imgY, 720, imgH, PAPER);
+
+      // Caption section
+      const capY = imgY + imgH + gapH;
+      ctx.strokeStyle = RULE; ctx.lineWidth = 0.75;
+      ctx.beginPath(); ctx.moveTo(48, capY); ctx.lineTo(768, capY); ctx.stroke();
+
+      const colW = (720 - 22 * 2) / 3;
+      const d = dataUrls[0];
+      const capCols = [
+        { label: 'PROJECT', v1: d.client || '—', v1font: '500 17px Inter, sans-serif',   v2: d.project || '' },
+        { label: 'FRAME',   v1: d.name   || '—', v1font: '12px "IBM Plex Mono", monospace', v2: [d.dims, d.size].filter(Boolean).join(' · ') },
+        { label: 'DATE',    v1: d.date   || '—', v1font: '12px "IBM Plex Mono", monospace', v2: d.type  || '' },
+      ];
+      capCols.forEach((col, i) => {
+        const cx = 48 + i * (colW + 22);
+        ctx.fillStyle = SOFT; ctx.font = '9.5px "IBM Plex Mono", monospace';
+        ctx.fillText(col.label, cx, capY + capPadTop + capLabelH - 4);
+        ctx.fillStyle = INK; ctx.font = col.v1font;
+        ctx.fillText(col.v1, cx, capY + capPadTop + capLabelH + capV1H - 4);
+        ctx.fillStyle = SOFT; ctx.font = '11px "IBM Plex Mono", monospace';
+        ctx.fillText(col.v2, cx, capY + capPadTop + capLabelH + capV1H + capV2H - 2);
+      });
+    }
+
     return cv;
   };
 
@@ -584,47 +751,62 @@ function DeckOverlay({ deck, onClose }) {
     const totalPgs = totalPages;
     setExportStatus({ state: 'preparing', current: 0, total: totalPgs });
 
-    // Pre-fetch all images as data URLs in parallel — zero CORS in canvas ops
-    const itemDataUrls = await Promise.all(items.map(async it => ({
-      url:    await toDataUrl(it.photo),
-      name:   it.name,
-      client: it.client || '',
-    })));
-
-    const { jsPDF } = window.jspdf;
-    const pdf = new jsPDF({ unit: 'pt', format: 'letter', orientation: 'portrait' });
-    const PAGE_W = 612, PAGE_H = 792;
-
     try {
-      // Cover page
+      // Pre-load logos (SVG → Image element)
+      const [logoLgImg, logoSmImg] = await Promise.all([
+        loadImg(makeSvgLogoUrl('#d63e5a', 58)),
+        loadImg(makeSvgLogoUrl('#d63e5a', 13)),
+      ]);
+
+      // Pre-fetch all photos as data URLs (bypasses CORS in canvas)
+      const itemDataUrls = await Promise.all(items.map(async it => ({
+        url:     await toDataUrl(it.photo),
+        name:    it.name    || '',
+        client:  it.client  || '',
+        project: it.project || '',
+        dims:    it.dims    || '',
+        size:    it.size    || '',
+        date:    it.date    || '',
+        type:    it.type    || '',
+      })));
+
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF({ unit: 'pt', format: 'letter', orientation: 'portrait' });
+      const PW = 612, PH = 792;
+
+      // Cover
       setExportStatus({ state: 'rendering', current: 1, total: totalPgs });
-      pdf.addImage(renderTextPage('cover').toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, PAGE_W, PAGE_H, undefined, 'FAST');
+      const coverCv = await renderCoverPage(logoLgImg);
+      pdf.addImage(coverCv.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, PW, PH, undefined, 'FAST');
       await new Promise(r => setTimeout(r, 0));
 
-      // Image pages — direct canvas, no html2canvas
-      if (meta.layout === 'duo') {
+      // Image pages
+      const layout = meta.layout || 'caption';
+      if (layout === 'duo') {
         for (let i = 0; i < itemDataUrls.length; i += 2) {
           const pgNum = 2 + Math.floor(i / 2);
           setExportStatus({ state: 'rendering', current: pgNum, total: totalPgs });
-          const cv = await renderImagePage([itemDataUrls[i], itemDataUrls[i + 1]].filter(Boolean), pgNum, totalPgs);
+          const cv = await renderImagePage([itemDataUrls[i], itemDataUrls[i + 1]].filter(Boolean), pgNum, totalPgs, 'duo', logoSmImg);
           pdf.addPage('letter', 'portrait');
-          pdf.addImage(cv.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, PAGE_W, PAGE_H, undefined, 'FAST');
+          pdf.addImage(cv.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, PW, PH, undefined, 'FAST');
           await new Promise(r => setTimeout(r, 0));
         }
       } else {
         for (let i = 0; i < itemDataUrls.length; i++) {
           const pgNum = i + 2;
           setExportStatus({ state: 'rendering', current: pgNum, total: totalPgs });
-          const cv = await renderImagePage([itemDataUrls[i]], pgNum, totalPgs);
+          const cv = await renderImagePage([itemDataUrls[i]], pgNum, totalPgs, layout, logoSmImg);
           pdf.addPage('letter', 'portrait');
-          pdf.addImage(cv.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, PAGE_W, PAGE_H, undefined, 'FAST');
+          pdf.addImage(cv.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, PW, PH, undefined, 'FAST');
           await new Promise(r => setTimeout(r, 0));
         }
       }
 
-      // Closing page
+      // Back cover
+      setExportStatus({ state: 'rendering', current: totalPgs, total: totalPgs });
       pdf.addPage('letter', 'portrait');
-      pdf.addImage(renderTextPage('closing').toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, PAGE_W, PAGE_H, undefined, 'FAST');
+      const backCv = await renderBackPage(logoLgImg);
+      pdf.addImage(backCv.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, PW, PH, undefined, 'FAST');
 
       const today = new Date().toISOString().slice(0, 10);
       pdf.save(`Aldo_Carrera_SelectedWork_${today}.pdf`);
