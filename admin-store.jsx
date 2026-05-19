@@ -11,9 +11,10 @@ const IDB_NAME  = 'aldo_admin_images';
 const IDB_STORE = 'blobs';
 
 // When deployed with a NAS backend, Admin.html sets window.API_BASE to the
-// NAS server URL (e.g. https://nas.aldocarrera.synology.me). Falls back to
-// '' so all relative /api/ paths keep working in local netlify dev.
-const API_BASE = (typeof window !== 'undefined' && window.API_BASE) || '';
+// NAS server URL (e.g. https://api.aldocarrera.com). Falls back to '' so
+// all relative /api/ paths keep working in local netlify dev.
+// Read at call-time (not module init) so Babel async loading order doesn't matter.
+const getAPI = () => (window.API_BASE || '');
 
 /* -------- seed data ---------------------------------------------------- */
 
@@ -334,7 +335,7 @@ async function pushToAPI() {
     images: (p.images || []).filter(img => isServedPath(img.blobPath)),
   }));
   try {
-    const r = await fetch(API_BASE + '/api/admin/sync', {
+    const r = await fetch(getAPI() + '/api/admin/sync', {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -361,11 +362,11 @@ async function pullFromAPI() {
   if (!_isRealJWT(token)) return false;
   try {
     const [pjs, ab, cl, sv, st] = await Promise.all([
-      fetch(API_BASE + '/api/projects',  { headers: { Authorization: `Bearer ${token}` } }).then(r => r.ok ? r.json() : null),
-      fetch(API_BASE + '/api/about',     { headers: { Authorization: `Bearer ${token}` } }).then(r => r.ok ? r.json() : null),
-      fetch(API_BASE + '/api/clients',   { headers: { Authorization: `Bearer ${token}` } }).then(r => r.ok ? r.json() : null),
-      fetch(API_BASE + '/api/services',  { headers: { Authorization: `Bearer ${token}` } }).then(r => r.ok ? r.json() : null),
-      fetch(API_BASE + '/api/settings',  { headers: { Authorization: `Bearer ${token}` } }).then(r => r.ok ? r.json() : null),
+      fetch(getAPI() + '/api/projects',  { headers: { Authorization: `Bearer ${token}` } }).then(r => r.ok ? r.json() : null),
+      fetch(getAPI() + '/api/about',     { headers: { Authorization: `Bearer ${token}` } }).then(r => r.ok ? r.json() : null),
+      fetch(getAPI() + '/api/clients',   { headers: { Authorization: `Bearer ${token}` } }).then(r => r.ok ? r.json() : null),
+      fetch(getAPI() + '/api/services',  { headers: { Authorization: `Bearer ${token}` } }).then(r => r.ok ? r.json() : null),
+      fetch(getAPI() + '/api/settings',  { headers: { Authorization: `Bearer ${token}` } }).then(r => r.ok ? r.json() : null),
     ]);
     patchStore(s => {
       if (pjs?.projects?.length) s.projects = pjs.projects;
@@ -412,7 +413,7 @@ const AdminStore = {
     // and `netlify dev`), this issues a JWT signed with JWT_SECRET that
     // every admin-only endpoint will accept.
     try {
-      const r = await fetch(API_BASE + '/api/auth/login', {
+      const r = await fetch(getAPI() + '/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password }),
@@ -446,7 +447,7 @@ const AdminStore = {
   },
   logout() {
     // Best-effort; the server treats logout as a no-op anyway (JWTs are stateless).
-    fetch(API_BASE + '/api/auth/logout', { method: 'POST' }).catch(() => {});
+    fetch(getAPI() + '/api/auth/logout', { method: 'POST' }).catch(() => {});
     localStorage.removeItem(AUTH_KEY);
     window.dispatchEvent(new CustomEvent('admin-store-changed'));
   },
@@ -495,7 +496,7 @@ const AdminStore = {
     const token = _getAuthToken();
     if (_isRealJWT(token)) {
       try {
-        const r = await fetch(API_BASE + '/api/projects', {
+        const r = await fetch(getAPI() + '/api/projects', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify(project),
@@ -554,7 +555,7 @@ const AdminStore = {
           if (exif.dimensions) fd.append('dimensions', exif.dimensions);
 
           const r = await fetch(
-            `${API_BASE}/api/projects/${encodeURIComponent(projectId)}/images/upload`,
+            `${getAPI()}/api/projects/${encodeURIComponent(projectId)}/images/upload`,
             {
               method: 'POST',
               headers: { Authorization: `Bearer ${token}` },
@@ -571,7 +572,7 @@ const AdminStore = {
             const proj = readStore().projects.find(x => x.id === projectId);
             if (proj) {
               try {
-                const cr = await fetch(API_BASE + '/api/projects', {
+                const cr = await fetch(getAPI() + '/api/projects', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
                   body: JSON.stringify({ ...proj, images: [] }),
@@ -583,7 +584,7 @@ const AdminStore = {
                   if (exif.dateTaken)  fd2.append('dateTaken',  exif.dateTaken);
                   if (exif.dimensions) fd2.append('dimensions', exif.dimensions);
                   const retry = await fetch(
-                    `${API_BASE}/api/projects/${encodeURIComponent(projectId)}/images/upload`,
+                    `${getAPI()}/api/projects/${encodeURIComponent(projectId)}/images/upload`,
                     { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd2 }
                   );
                   if (retry.ok) record = await retry.json();
@@ -719,7 +720,7 @@ const AdminStore = {
     if (useAPI) {
       try {
         await fetch(
-          `${API_BASE}/api/projects/${encodeURIComponent(projectId)}/images/${encodeURIComponent(filename)}`,
+          `${getAPI()}/api/projects/${encodeURIComponent(projectId)}/images/${encodeURIComponent(filename)}`,
           { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }
         );
       } catch (_) {}
