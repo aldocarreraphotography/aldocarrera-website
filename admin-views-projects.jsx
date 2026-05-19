@@ -377,7 +377,12 @@ function ProjectUploadView({ projectId, navigate }) {
   const totalBytes = queue.reduce((s, q) => s + q.file.size, 0);
   const exifDates = queue.map(q => q.exif?.dateTaken).filter(Boolean);
   const exifInfo = exifDates.length ? `${exifDates.length} of ${queue.length} have EXIF dates` : null;
-  const oversized = queue.filter(q => q.file.size > 5 * 1024 * 1024);
+  // HEIC/AVIF can't be compressed by Canvas — warn if they're over the limit.
+  const oversized = queue.filter(q =>
+    q.file.size > 5 * 1024 * 1024 &&
+    !q.file.type.match(/^image\/(jpeg|jpg|png|webp)$/) &&
+    !q.file.name.match(/\.(jpe?g|png|webp)$/i)
+  );
 
   return (
     <>
@@ -420,7 +425,7 @@ function ProjectUploadView({ projectId, navigate }) {
             </div>
             {oversized.length > 0 && (
               <div className="ad-warn">
-                {oversized.length} file{oversized.length > 1 ? 's' : ''} exceed 5 MB — Netlify has a 6 MB function limit. Compress before uploading or uploads may fail.
+                {oversized.length} file{oversized.length > 1 ? 's' : ''} {oversized.length > 1 ? 'are' : 'is'} HEIC/AVIF and over 5 MB — convert to JPEG before uploading.
               </div>
             )}
             <div className="ad-queue-list">

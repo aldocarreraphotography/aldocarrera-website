@@ -173,6 +173,55 @@ function sortImagesByOrder(images) {
   });
 }
 
+/* -------- Client-side image compression before upload ----------------- */
+/*
+ * Netlify Functions have a 6 MB body limit. Photographer JPEGs are often
+ * 10–25 MB. Compress to max 2400 px at 82 % JPEG quality before uploading —
+ * visually identical to the original at any web display size. EXIF data is
+ * already extracted by parseExif() before this runs, so nothing is lost.
+ *
+ * Returns the original file unchanged if:
+ *   - it's already ≤ 5 MB, or
+ *   - it's a format Canvas can't encode (HEIC, AVIF) — those will hit the
+ *     size warning in the UI and the user should pre-convert them.
+ */
+async function compressForUpload(file) {
+  const LIMIT   = 5 * 1024 * 1024; // 5 MB — stay safely under the 6 MB gate
+  const MAX_DIM = 2400;             // px — fine for any retina display
+  const QUALITY = 0.82;
+
+  if (file.size <= LIMIT) return file;
+  if (!file.type.match(/^image\/(jpeg|jpg|png|webp)$/) &&
+      !file.name.match(/\.(jpe?g|png|webp)$/i)) {
+    return file; // can't compress via Canvas — UI already warned about size
+  }
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    const blobURL = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(blobURL);
+      let { width, height } = img;
+      if (width > MAX_DIM || height > MAX_DIM) {
+        if (width >= height) { height = Math.round(height * MAX_DIM / width); width = MAX_DIM; }
+        else                 { width = Math.round(width * MAX_DIM / height); height = MAX_DIM; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width; canvas.height = height;
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+      canvas.toBlob((blob) => {
+        if (!blob) { resolve(file); return; }
+        const name = file.name.replace(/\.[^.]+$/, '.jpg');
+        const compressed = new File([blob], name, { type: 'image/jpeg', lastModified: file.lastModified });
+        compressed.__exif = file.__exif; // carry EXIF metadata forward
+        resolve(compressed);
+      }, 'image/jpeg', QUALITY);
+    };
+    img.onerror = () => { URL.revokeObjectURL(blobURL); resolve(file); };
+    img.src = blobURL;
+  });
+}
+
 /* -------- IndexedDB for user-dropped image blobs ---------------------- */
 /* The prototype lets the user drag actual photos in; we store them as
    Blobs in IndexedDB so they survive reload and don't blow up localStorage. */
@@ -477,8 +526,11 @@ const AdminStore = {
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      const filename = file.name;
-      const exif = file.__exif || {};
+      // Compress before upload if the file is over 5 MB (Netlify's 6 MB limit).
+      // compressForUpload preserves __exif and returns the original if it can't compress.
+      const uploadFile = await compressForUpload(file);
+      const filename = uploadFile.name;
+      const exif = uploadFile.__exif || file.__exif || {};
 
       let record = null;
 
@@ -491,7 +543,7 @@ const AdminStore = {
         const timer = setTimeout(() => controller.abort(), 30_000);
         try {
           const fd = new FormData();
-          fd.append('file', file, filename);
+          fd.append('file', uploadFile, filename);
           fd.append('filename', filename);
           if (exif.dateTaken)  fd.append('dateTaken',  exif.dateTaken);
           if (exif.dimensions) fd.append('dimensions', exif.dimensions);
@@ -521,7 +573,7 @@ const AdminStore = {
                 });
                 if (cr.ok || cr.status === 422) {
                   const fd2 = new FormData();
-                  fd2.append('file', file, filename);
+                  fd2.append('file', uploadFile, filename);
                   fd2.append('filename', filename);
                   if (exif.dateTaken)  fd2.append('dateTaken',  exif.dateTaken);
                   if (exif.dimensions) fd2.append('dimensions', exif.dimensions);
@@ -554,7 +606,7 @@ const AdminStore = {
         // user is online and uploads complete via the real API.
         try {
           const blobPath = `${projectId}/${Date.now()}_${filename}`;
-          await idbPut(blobPath, file);
+          await idbPut(blobPath, uploadFile);
           record = {
             filename,
             blobPath,
@@ -566,7 +618,7 @@ const AdminStore = {
             exif: {
               dateTaken: exif.dateTaken || null,
               dimensions: exif.dimensions || '',
-              fileSize: file.size,
+              fileSize: uploadFile.size,
             },
           };
         } catch (idbErr) {
