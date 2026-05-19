@@ -1436,16 +1436,17 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
 
   let body;
   if (project) {
+    const projectImages = ARCHIVE.filter(a => a.project === project.id);
     body = (
       <div className="mobile-page portfolio">
         <button className="btn ghost" onClick={() => setProject(null)} style={{marginBottom: 16}}>← back</button>
         <h2 className="headline" style={{fontSize: 24, margin: '0 0 4px'}}>{project.name}</h2>
         <div className="ui-label" style={{marginBottom:14}}>{project.client} · {project.year} · {project.type}</div>
-        <p style={{fontSize:14, color:'var(--ink-soft)', marginBottom:18, fontStyle:'italic'}}>"{project.note}"</p>
-        {Array.from({length: Math.min(project.count, 6)}).map((_,i) => (
-          <div key={i} className="mp-project" onClick={() => setOpenPhoto({ photo: { photo: project.photo, name: `${project.id}_${i+1}.jpg`, client: project.client, date: project.month, dims: '—', size: '—' }, list: null })}>
-            <div className="photo"><img src={project.photo} alt=""/></div>
-            <div className="info"><div className="name">Frame {i+1}</div><div className="year">{project.month}</div></div>
+        {project.note && <p style={{fontSize:14, color:'var(--ink-soft)', marginBottom:18, fontStyle:'italic'}}>"{project.note}"</p>}
+        {projectImages.map((img) => (
+          <div key={img.id} className="mp-project" onClick={() => setOpenPhoto({ photo: img, list: projectImages })}>
+            <div className="photo"><img src={img.photo} alt={img.name}/></div>
+            <div className="info"><div className="name">{img.name}</div><div className="year">{img.date ? img.date.slice(0,7) : project.month}</div></div>
           </div>
         ))}
       </div>
