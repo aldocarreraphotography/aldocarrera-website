@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Aldo Carrera — Studio Admin</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap"/>
+
+<link rel="stylesheet" href="admin-styles.css"/>
+
+</head>
+<body>
+<div id="root"></div>
+
+<!--
+  One-time data restore (see index.html for full notes). Repeated here so a
+  user landing on Admin.html directly also benefits. Idempotent: the MARK
+  key in localStorage prevents this from running more than once.
+-->
+<script>
+(function aldoRestoreV1() {
+  var KEY  = 'aldo_admin_v1';
+  var MARK = 'aldo_seed_restore_2026_05';
+  if (localStorage.getItem(MARK)) return;
+  try {
+    var raw = localStorage.getItem(KEY);
+    var s   = raw ? JSON.parse(raw) : {};
+    s.projects      = Array.isArray(s.projects)      ? s.projects      : [];
+    s.uploadHistory = Array.isArray(s.uploadHistory) ? s.uploadHistory : [];
+    s.about = {
+      bio: "Photography has always been more than a profession \u2014 it's a way to tell stories, evoke emotion, and create work that resonates. From early experiments in the darkroom to collaborations with some of the most iconic brands in fashion, I've always sought to push the boundaries of visual storytelling.",
+      bio2: "My work is spontaneous, driven by ingenuity, and rooted in authenticity. I aim to tell a story in every frame \u2014 bringing out the soul of the moment.",
+      location: "Los Angeles",
+      role: "Photographer",
+      education: { school: "Academy of Art University", degree: "BFA, Fine Art Photography", year: 2019 },
+      practice: ["High-end fashion","Campaign","Lookbook","Editorial","Casting","Art Direction","Creative Direction","Post Production"]
+    };
+    s.clients = [
+      { name: 'BAPE',                slug: 'bape',                yearsActive: [2023, 2024] },
+      { name: 'Christian Cowan',     slug: 'christian-cowan',     yearsActive: [2022, 2023, 2024] },
+      { name: 'Dim Mak',             slug: 'dim-mak',             yearsActive: [2022, 2024] },
+      { name: 'For Love and Lemons', slug: 'for-love-and-lemons', yearsActive: [2020, 2024] },
+      { name: 'Halston',             slug: 'halston',             yearsActive: [2023] },
+      { name: 'Hasbro',              slug: 'hasbro',              yearsActive: [2024] },
+      { name: 'Lucky Brand',         slug: 'lucky-brand',         yearsActive: [2022, 2023] },
+      { name: 'Marvel',              slug: 'marvel',              yearsActive: [2022, 2024] },
+      { name: 'Mattel',              slug: 'mattel',              yearsActive: [2023, 2024] },
+      { name: 'Recycled Karma',      slug: 'recycled-karma',      yearsActive: [2021, 2023] },
+      { name: 'Sanrio',              slug: 'sanrio',              yearsActive: [2024] },
+      { name: 'Thomas Wylde',        slug: 'thomas-wylde',        yearsActive: [2022] },
+      { name: 'Viacom',              slug: 'viacom',              yearsActive: [2023] },
+      { name: "Victoria's Secret",   slug: 'victorias-secret',    yearsActive: [2021, 2024] },
+      { name: 'Viz Media',           slug: 'viz-media',           yearsActive: [2024] }
+    ];
+    s.services = [
+      { id: 1, title: 'Photography',        description: 'Campaign \u00b7 Lookbook \u00b7 Editorial \u00b7 High-end fashion',         order: 1 },
+      { id: 2, title: 'Creative Direction', description: 'Concept development \u00b7 Mood \u00b7 Visual narrative',                    order: 2 },
+      { id: 3, title: 'Art Direction',      description: 'On-set styling decisions \u00b7 Composition \u00b7 Set design',              order: 3 },
+      { id: 4, title: 'Casting',            description: 'Talent sourcing \u00b7 Model selection \u00b7 Fit confirmation',             order: 4 },
+      { id: 5, title: 'Post Production',    description: 'Color grading \u00b7 Retouching \u00b7 Final delivery',                      order: 5 }
+    ];
+    s.settings = {
+      contactEmail: 'aldo@aldocarrera.com',
+      contactPhone: '+1 (619) 971-7182',
+      instagram:    '@aldocarrera',
+      accentColor:  '#d63e5a'
+    };
+    localStorage.setItem(KEY,  JSON.stringify(s));
+    localStorage.setItem(MARK, '1');
+  } catch (e) {}
+})();
+</script>
+
+<!-- React + Babel -->
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<!-- EXIF library (window.exifr) -->
+<script src="https://cdn.jsdelivr.net/npm/exifr@7.1.3/dist/full.umd.js"></script>
+
+<!-- Public-site logo component, reused -->
+<script type="text/babel" src="logo.jsx"></script>
+
+<!-- Admin app -->
+<script type="text/babel" src="admin-exif.jsx"></script>
+<script type="text/babel" src="admin-store.jsx"></script>
+<script type="text/babel" src="admin-components.jsx"></script>
+<script type="text/babel" src="admin-views-auth.jsx"></script>
+<script type="text/babel" src="admin-views-projects.jsx"></script>
+<script type="text/babel" src="admin-views-content.jsx"></script>
+<script type="text/babel" src="admin-shell.jsx"></script>
+
+<script type="text/babel">
+  // Default to dashboard on first load
+  if (!window.location.hash) {
+    window.location.hash = window.AdminStore.isAuthenticated() ? '#/dashboard' : '#/login';
+  }
+  ReactDOM.createRoot(document.getElementById('root')).render(<AdminApp/>);
+</script>
+</body>
+</html>

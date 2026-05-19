@@ -41,6 +41,12 @@
   to     = "/.netlify/functions/auth-logout"
   status = 200
 
+# --- Debug / diagnostics (no auth) -------------------------------------
+[[redirects]]
+  from   = "/api/debug"
+  to     = "/.netlify/functions/debug"
+  status = 200
+
 # --- Public read-only (no auth, edge-cached) ----------------------------
 [[redirects]]
   from   = "/api/public/site"

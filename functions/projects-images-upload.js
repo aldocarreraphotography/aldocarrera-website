@@ -25,6 +25,7 @@ import { readProjects, writeProjects, setBytes } from './utils/blobs.js';
 import { withAuth } from './utils/auth.js';
 
 const handler = async (req) => {
+  try {
   if (req.method !== 'POST') return json({ error: 'method_not_allowed' }, 405);
 
   const url = new URL(req.url);
@@ -36,6 +37,7 @@ const handler = async (req) => {
   try {
     form = await req.formData();
   } catch (err) {
+    console.error('[projects-images-upload] formData() failed:', err?.message, err);
     return json({ error: 'bad_multipart', message: err.message }, 400);
   }
   const file = form.get('file');
@@ -93,6 +95,10 @@ const handler = async (req) => {
   await writeProjects(data);
 
   return json(record, 201);
+  } catch (err) {
+    console.error('[projects-images-upload] FATAL:', err?.message, err?.stack);
+    return json({ error: 'internal', message: err?.message || 'Unknown server error' }, 500);
+  }
 };
 
 function guessContentType(name) {

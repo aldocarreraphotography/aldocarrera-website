@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /Admin.html
+Disallow: /api/
+
+Sitemap: https://aldocarrera.com/sitemap.xml
