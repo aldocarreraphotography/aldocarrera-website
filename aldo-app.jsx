@@ -462,27 +462,36 @@ function DeckOverlay({ deck, onClose }) {
   const shellRef = aUseRef(null);
   const [exportStatus, setExportStatus] = aUseState({ state: 'idle', current: 0, total: 0 });
 
-  // Make sure every photo referenced by the deck (inside <img> tags AND inside
-  // CSS background-images on .dk-image-wrap / .dk-slot) is decoded before
-  // html2canvas captures. Without this, the first page would frequently
-  // capture before the background-image fetched, producing the old crop/black
-  // artifacts.
-  const waitForImages = async (root) => {
+  // Fetch all cross-origin images as data URLs before html2canvas runs.
+  // Data URLs are same-origin so html2canvas never hits CORS at render time.
+  const buildDataUrlMap = async (root) => {
     const sources = new Set();
-    root.querySelectorAll('img').forEach(img => {
-      if (img.src) sources.add(img.src);
-    });
+    root.querySelectorAll('img[src]').forEach(img => sources.add(img.src));
     root.querySelectorAll('[style*="background-image"]').forEach(el => {
       const m = (el.style.backgroundImage || '').match(/url\(["']?([^"')]+)["']?\)/);
       if (m && m[1]) sources.add(m[1]);
     });
-    await Promise.all(Array.from(sources).map(src => new Promise(resolve => {
-      const i = new Image();
-      i.crossOrigin = 'anonymous';  // prime CORS-enabled cache for html2canvas
-      i.onload = i.onerror = resolve;
-      setTimeout(resolve, 15000);
-      i.src = src;
-    })));
+    const map = new Map();
+    await Promise.all(Array.from(sources).map(async src => {
+      try {
+        const resp = await fetch(src, { mode: 'cors', cache: 'no-store' });
+        const blob = await resp.blob();
+        const dataUrl = await new Promise(res => {
+          const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(blob);
+        });
+        map.set(src, dataUrl);
+      } catch (_) { /* keep original on failure */ }
+    }));
+    return map;
+  };
+
+  const swapSrcs = (root, map, reverse = false) => {
+    const fwd = (orig) => reverse ? [...map.entries()].find(([,v]) => v === orig)?.[0] ?? orig : (map.get(orig) ?? orig);
+    root.querySelectorAll('img[src]').forEach(img => { img.src = fwd(img.src); });
+    root.querySelectorAll('[style*="background-image"]').forEach(el => {
+      const m = (el.style.backgroundImage || '').match(/url\(["']?([^"')]+)["']?\)/);
+      if (m && m[1]) el.style.backgroundImage = `url("${fwd(m[1])}")`;
+    });
   };
 
   const downloadPDF = async () => {
@@ -494,18 +503,16 @@ function DeckOverlay({ deck, onClose }) {
 
     const pages = Array.from(pagesRef.current.querySelectorAll('.dk-page'));
     setExportStatus({ state: 'preparing', current: 0, total: pages.length });
-    await waitForImages(pagesRef.current);
-    // one more frame to let layout settle after images decode
+
+    // Convert all images to data URLs so html2canvas never hits CORS
+    const dataUrlMap = await buildDataUrlMap(pagesRef.current);
+    swapSrcs(pagesRef.current, dataUrlMap);
     await new Promise(r => requestAnimationFrame(() => r()));
 
     const { jsPDF } = window.jspdf;
-    // Letter portrait, 612 x 792 pt. We render each page (816 x 1056 css px)
-    // at 2x scale via html2canvas, then drop the JPEG full-bleed onto the page.
     const pdf = new jsPDF({ unit: 'pt', format: 'letter', orientation: 'portrait' });
     const PAGE_W = 612, PAGE_H = 792;
 
-    // Flatten radial-gradient backgrounds while capturing — html2canvas
-    // renders them as a banded halo otherwise.
     shellRef.current && shellRef.current.classList.add('dk-exporting');
 
     try {
@@ -514,17 +521,16 @@ function DeckOverlay({ deck, onClose }) {
         const canvas = await window.html2canvas(pages[i], {
           scale: 2,
           backgroundColor: '#ffffff',
-          useCORS: true,
-          allowTaint: false,
+          useCORS: false,
+          allowTaint: true,
           logging: false,
-          imageTimeout: 30000,
+          imageTimeout: 0,
           width: pages[i].offsetWidth,
           height: pages[i].offsetHeight,
         });
         const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
         if (i > 0) pdf.addPage('letter', 'portrait');
         pdf.addImage(dataUrl, 'JPEG', 0, 0, PAGE_W, PAGE_H, undefined, 'FAST');
-        // yield to the browser so the progress UI can repaint
         await new Promise(r => setTimeout(r, 0));
       }
 
@@ -537,6 +543,7 @@ function DeckOverlay({ deck, onClose }) {
       alert('Sorry — PDF export failed. ' + (err && err.message ? err.message : ''));
       setExportStatus({ state: 'idle', current: 0, total: 0 });
     } finally {
+      swapSrcs(pagesRef.current, dataUrlMap, true);
       shellRef.current && shellRef.current.classList.remove('dk-exporting');
     }
   };
