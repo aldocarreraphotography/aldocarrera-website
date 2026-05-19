@@ -725,20 +725,29 @@ function DeckOverlay({ deck, onClose }) {
       ctx.beginPath(); ctx.moveTo(48, capY); ctx.lineTo(768, capY); ctx.stroke();
 
       const colW = (720 - 22 * 2) / 3;
+      // Truncate text to fit column width with ellipsis
+      const ellipsis = (text, maxW) => {
+        if (!text) return '';
+        if (ctx.measureText(text).width <= maxW) return text;
+        let t = text;
+        while (t.length > 1 && ctx.measureText(t + '…').width > maxW) t = t.slice(0, -1);
+        return t + '…';
+      };
       const d = dataUrls[0];
       const capCols = [
-        { label: 'PROJECT', v1: d.client || '—', v1font: '500 17px Inter, sans-serif',   v2: d.project || '' },
+        { label: 'PROJECT', v1: d.client || '—', v1font: '500 17px Inter, sans-serif',      v2: d.project || '' },
         { label: 'FRAME',   v1: d.name   || '—', v1font: '12px "IBM Plex Mono", monospace', v2: [d.dims, d.size].filter(Boolean).join(' · ') },
         { label: 'DATE',    v1: d.date   || '—', v1font: '12px "IBM Plex Mono", monospace', v2: d.type  || '' },
       ];
       capCols.forEach((col, i) => {
         const cx = 48 + i * (colW + 22);
+        const maxW = colW - 4;
         ctx.fillStyle = SOFT; ctx.font = '9.5px "IBM Plex Mono", monospace';
         ctx.fillText(col.label, cx, capY + capPadTop + capLabelH - 4);
         ctx.fillStyle = INK; ctx.font = col.v1font;
-        ctx.fillText(col.v1, cx, capY + capPadTop + capLabelH + capV1H - 4);
+        ctx.fillText(ellipsis(col.v1, maxW), cx, capY + capPadTop + capLabelH + capV1H - 4);
         ctx.fillStyle = SOFT; ctx.font = '11px "IBM Plex Mono", monospace';
-        ctx.fillText(col.v2, cx, capY + capPadTop + capLabelH + capV1H + capV2H - 2);
+        ctx.fillText(ellipsis(col.v2, maxW), cx, capY + capPadTop + capLabelH + capV1H + capV2H - 2);
       });
     }
 
