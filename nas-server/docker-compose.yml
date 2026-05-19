@@ -1,0 +1,24 @@
+version: "3.8"
+
+services:
+  api:
+    build: .
+    image: aldocarrera-api:latest
+    container_name: aldocarrera-api
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    env_file:
+      - .env
+    volumes:
+      # JSON data files (projects, about, clients, services, settings)
+      # Adjust the left-hand path if your shared folder has a different name.
+      - "/volume1/Ingesting 2/aldocarrera/data:/app/data"
+      # Uploaded image bytes
+      - "/volume1/Ingesting 2/aldocarrera/images:/app/images"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3001/api/debug').then(r=>process.exit(r.ok?0:1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s

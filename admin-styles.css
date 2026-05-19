@@ -755,6 +755,7 @@ body {
   transition: border-color 140ms var(--easing), box-shadow 140ms var(--easing);
 }
 .ad-image-card.is-selected { border-color: var(--accent); box-shadow: var(--ad-ring); }
+.ad-image-card.is-cover    { outline: 2px solid #b8860b; outline-offset: -2px; }
 .ad-image-card-top {
   display: flex; justify-content: space-between; align-items: flex-start;
   padding: 10px 12px;
@@ -820,6 +821,7 @@ body {
 .ad-img-act.on.ok     { background: var(--ad-ok); color: var(--paper); }
 .ad-img-act.on.accent { background: var(--accent); color: var(--accent-ink); }
 .ad-img-act.on.mute   { background: var(--ink-muted); color: var(--paper); }
+.ad-img-act.on.cover  { background: #b8860b; color: #fff; }
 
 .ad-thumb { background: var(--paper-soft); overflow: hidden; position: relative; }
 .ad-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -1229,5 +1231,76 @@ body {
 }
 .ad-image-order-num {
   font-variant-numeric: tabular-nums;
+}
+
+/* ============================================================
+   GALLERIES
+   ============================================================ */
+
+/* Filter pills (used in gallery detail) */
+.ad-pill.active {
+  background: var(--ink);
+  color: #fff;
+  border-color: var(--ink);
+}
+.ad-pill-count {
+  margin-left: 4px;
+  opacity: .65;
+  font-size: 9px;
+}
+
+/* Status badges */
+.ad-badge {
+  display: inline-flex; align-items: center;
+  padding: 2px 8px; border-radius: 20px;
+  font-size: 11px; font-weight: 600; letter-spacing: .03em;
+  white-space: nowrap;
+}
+.ad-badge-green { background: rgba(47,125,82,.10); color: #2a7a4f; }
+.ad-badge-blue  { background: rgba(58,112,168,.10); color: #3a70a8; }
+.ad-badge-muted { background: var(--paper-soft); color: var(--ink-muted); }
+
+/* Loading row */
+.ad-loading-row {
+  padding: 32px;
+  text-align: center;
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
+/* Gallery review grid (admin detail view) */
+.ad-gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+  margin-top: 4px;
+}
+.ad-gallery-card {
+  background: var(--card-bg, var(--window, #faf9f7));
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.ad-gallery-card.label-SELECT { border-color: #2a7a4f; }
+.ad-gallery-card.label-ALT    { border-color: #3a70a8; }
+.ad-gallery-card.label-KILL   { border-color: #b84242; opacity: .55; }
+.ad-gallery-thumb-wrap { position: relative; }
+.ad-gallery-thumb {
+  width: 100%; aspect-ratio: 3/4;
+  object-fit: cover; display: block;
+  background: var(--paper-soft);
+}
+.ad-gallery-badge {
+  position: absolute; top: 6px; left: 6px;
+  padding: 2px 7px; border-radius: 3px;
+  font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
+  pointer-events: none;
+}
+.badge-SELECT { background: #2a7a4f; color: #fff; }
+.badge-ALT    { background: #3a70a8; color: #fff; }
+.badge-KILL   { background: #b84242; color: #fff; }
+.ad-gallery-card-body {
+  padding: 8px 10px;
+  display: flex; flex-direction: column; gap: 3px;
 }
 

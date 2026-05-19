@@ -704,6 +704,14 @@ const AdminStore = {
       p.updatedAt = nowISO();
     });
   },
+  setCoverImage(projectId, filename) {
+    patchStore(s => {
+      const p = s.projects.find(x => x.id === projectId);
+      if (!p) return;
+      p.images.forEach(img => { img.cover = img.filename === filename; });
+      p.updatedAt = nowISO();
+    });
+  },
   async deleteImage(projectId, filename) {
     const token  = _getAuthToken();
     const useAPI = _isRealJWT(token);
@@ -818,6 +826,20 @@ const AdminStore = {
   reseed() {
     localStorage.removeItem(STORE_KEY);
     return readStore();
+  },
+
+  // Generic authenticated fetch to the NAS API
+  async apiFetch(path, opts = {}) {
+    const token = _getAuthToken();
+    const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const r = await fetch(getAPI() + path, { ...opts, headers });
+    if (!r.ok) {
+      const body = await r.json().catch(() => ({}));
+      throw Object.assign(new Error(body.message || body.error || r.statusText), { status: r.status, body });
+    }
+    if (r.status === 204) return null;
+    return r.json();
   },
 
   // API sync ------------------------------------------------------------

@@ -1876,17 +1876,32 @@ function LiveDataProvider() {
 
   if (!ready) {
     return (
-      <div style={{
-        position: 'fixed', inset: 0,
-        display: 'grid', placeItems: 'center',
-        background: 'var(--paper, #f1ede5)',
-        color: 'var(--ink-soft, #7a7468)',
-        fontFamily: 'IBM Plex Mono, monospace',
-        fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase',
-      }}>
-        <div style={{ textAlign: 'center', opacity: 0.7 }}>
-          <div style={{ fontSize: 13, marginBottom: 6 }}>Aldo Carrera</div>
-          <div>Loading archive…</div>
+      <div className="sk-shell">
+        <div className="sk-sidebar">
+          <div className="sk-sidebar-logo">
+            <div className="sk-sidebar-logo-mark"/>
+            <div className="sk-bone" style={{ height: 12, width: 100, background: 'rgba(255,255,255,.1)', animation: 'none' }}/>
+          </div>
+          <div className="sk-sidebar-nav">
+            {[80, 60, 75, 55, 65].map((w, i) => (
+              <div key={i} className="sk-sidebar-item" style={{ width: `${w}%` }}/>
+            ))}
+          </div>
+        </div>
+        <div className="sk-main">
+          <div className="sk-heading">
+            <div className="sk-bone" style={{ height: 20, width: 180 }}/>
+            <div className="sk-bone" style={{ height: 12, width: 320 }}/>
+          </div>
+          <div className="sk-grid">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="sk-card">
+                <div className="sk-bone sk-card-photo"/>
+                <div className="sk-bone sk-card-name"/>
+                <div className="sk-bone sk-card-meta"/>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     );

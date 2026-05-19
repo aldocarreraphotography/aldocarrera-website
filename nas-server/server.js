@@ -24,6 +24,12 @@ import {
   readSettings, writeSettings,
   readBytes, writeBytes, deleteImage, deleteProjectImages,
 } from './utils/store.js';
+import {
+  createGallery, readGalleries, findGallery, updateGallery, deleteGallery, isExpired,
+} from './utils/galleries.js';
+import {
+  createDeck, readDecks, findDeck, deleteDeck, incrementViews,
+} from './utils/decks.js';
 
 const app        = express();
 const PORT       = process.env.PORT       || 3001;
@@ -508,7 +514,13 @@ app.get('/api/public/site', async (req, res) => {
   const settings = pick(settingsFile,          DEFAULT_SETTINGS, 'contactEmail');
 
   const cleanedFromStore = (projectsFile?.projects || [])
-    .map(p => ({ ...p, images: (p.images || []).filter(img => !img.rejected) }))
+    .map(p => {
+      const imgs = (p.images || []).filter(img => !img.rejected);
+      // Ensure cover flag is honoured: move cover image to front
+      const coverIdx = imgs.findIndex(i => i.cover);
+      if (coverIdx > 0) { const [c] = imgs.splice(coverIdx, 1); imgs.unshift(c); }
+      return { ...p, images: imgs };
+    })
     .filter(p => p.images.length > 0);
   const projects = pickArr(cleanedFromStore, DEFAULT_PROJECTS);
 
@@ -521,6 +533,230 @@ app.get('/api/public/site', async (req, res) => {
     clients,
     services: services.slice().sort((a, b) => (a.order || 0) - (b.order || 0)),
     settings,
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* Galleries — admin management (auth required)                        */
+/* ------------------------------------------------------------------ */
+
+app.get('/api/galleries', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  const { galleries } = await readGalleries();
+  // Attach image/selection counts without exposing full project data
+  const projects = (await readProjects()).projects;
+  const enriched = galleries.map(g => {
+    const proj   = projects.find(p => p.id === g.projectId);
+    const total  = proj ? proj.images.length : 0;
+    const reviewed = Object.keys(g.selections || {}).length;
+    const selected  = Object.values(g.selections || {}).filter(s => s.label === 'SELECT').length;
+    const alted     = Object.values(g.selections || {}).filter(s => s.label === 'ALT').length;
+    const killed    = Object.values(g.selections || {}).filter(s => s.label === 'KILL').length;
+    return { ...g, password: g.password ? '••••' : null, _counts: { total, reviewed, selected, alted, killed } };
+  });
+  res.json({ galleries: enriched });
+});
+
+app.post('/api/galleries', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  const body = req.body || {};
+  if (!body.projectId) return res.status(422).json({ error: 'validation', message: '`projectId` required' });
+  const data = await readProjects();
+  if (!data.projects.find(p => p.id === body.projectId)) {
+    return res.status(422).json({ error: 'validation', message: 'project not found' });
+  }
+  const gallery = await createGallery({
+    projectId:  body.projectId,
+    clientName: body.clientName || '',
+    title:      body.title || '',
+    expiresAt:  body.expiresAt || null,
+    password:   body.password  || null,
+  });
+  res.status(201).json({ ...gallery, password: gallery.password ? '••••' : null });
+});
+
+app.patch('/api/galleries/:token', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  const allowed = ['clientName', 'title', 'expiresAt', 'password', 'status'];
+  const patch   = {};
+  for (const k of allowed) if (k in (req.body || {})) patch[k] = req.body[k];
+  const updated = await updateGallery(req.params.token, patch);
+  if (!updated) return res.status(404).json({ error: 'not_found' });
+  res.json({ ...updated, password: updated.password ? '••••' : null });
+});
+
+app.delete('/api/galleries/:token', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  const ok = await deleteGallery(req.params.token);
+  if (!ok) return res.status(404).json({ error: 'not_found' });
+  res.status(204).send();
+});
+
+/* ------------------------------------------------------------------ */
+/* Gallery — client-facing (token-gated, no auth)                      */
+/* ------------------------------------------------------------------ */
+
+function galleryTokenCheck(gallery, req) {
+  if (!gallery)                return { err: 'not_found',  status: 404 };
+  if (isExpired(gallery))      return { err: 'expired',    status: 410 };
+  if (gallery.status === 'archived') return { err: 'archived', status: 410 };
+  if (gallery.password) {
+    const supplied = req.headers['x-gallery-password'] || (req.body || {}).password || '';
+    if (supplied !== gallery.password) return { err: 'password_required', status: 401 };
+  }
+  return null;
+}
+
+app.get('/api/gallery/:token', async (req, res) => {
+  const gallery = await findGallery(req.params.token).catch(() => null);
+  const errCheck = galleryTokenCheck(gallery, req);
+  if (errCheck) return res.status(errCheck.status).json({ error: errCheck.err });
+
+  const data    = await readProjects();
+  const project = data.projects.find(p => p.id === gallery.projectId);
+  if (!project) return res.status(404).json({ error: 'project_not_found' });
+
+  const images = project.images
+    .filter(i => !i.rejected)
+    .sort((a, b) => (a.order ?? 9999) - (b.order ?? 9999))
+    .map(i => ({
+      filename: i.filename,
+      url:      i.blobPath,
+      order:    i.order,
+      exif:     i.exif || {},
+      selection: gallery.selections?.[i.filename] || { label: null, stars: 0, note: '', markups: [] },
+    }));
+
+  res.json({
+    token:       gallery.token,
+    title:       gallery.title,
+    clientName:  gallery.clientName,
+    projectId:   gallery.projectId,
+    status:      gallery.status,
+    submittedAt: gallery.submittedAt,
+    expiresAt:   gallery.expiresAt,
+    images,
+  });
+});
+
+app.put('/api/gallery/:token/select', async (req, res) => {
+  const gallery = await findGallery(req.params.token).catch(() => null);
+  const errCheck = galleryTokenCheck(gallery, req);
+  if (errCheck) return res.status(errCheck.status).json({ error: errCheck.err });
+  if (gallery.status === 'submitted') return res.status(409).json({ error: 'already_submitted' });
+
+  const updates = req.body?.updates;
+  if (!Array.isArray(updates) || updates.length === 0) {
+    return res.status(422).json({ error: 'validation', message: '`updates` array required' });
+  }
+
+  const validLabels = new Set(['SELECT', 'ALT', 'KILL', null]);
+  const selections  = { ...(gallery.selections || {}) };
+
+  for (const u of updates) {
+    if (!u.filename) continue;
+    if (!validLabels.has(u.label)) continue;
+    const existing = selections[u.filename] || {};
+    selections[u.filename] = {
+      label:   u.label ?? null,
+      stars:   Math.min(5, Math.max(0, parseInt(u.stars ?? 0, 10))),
+      note:    String(u.note ?? '').slice(0, 500),
+      markups: Array.isArray(u.markups) ? u.markups.slice(0, 100) : (existing.markups || []),
+    };
+  }
+
+  await updateGallery(gallery.token, { selections });
+  res.json({ ok: true });
+});
+
+app.post('/api/gallery/:token/submit', async (req, res) => {
+  const gallery = await findGallery(req.params.token).catch(() => null);
+  const errCheck = galleryTokenCheck(gallery, req);
+  if (errCheck) return res.status(errCheck.status).json({ error: errCheck.err });
+  if (gallery.status === 'submitted') return res.status(409).json({ error: 'already_submitted' });
+
+  await updateGallery(gallery.token, { status: 'submitted', submittedAt: new Date().toISOString() });
+  res.json({ ok: true });
+});
+
+/* ------------------------------------------------------------------ */
+/* Decks — admin management (auth required)                            */
+/* ------------------------------------------------------------------ */
+
+app.get('/api/decks', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  res.json(await readDecks());
+});
+
+app.post('/api/decks', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  const body = req.body || {};
+  if (!body.projectId) return res.status(422).json({ error: 'validation', message: '`projectId` required' });
+  const data = await readProjects();
+  if (!data.projects.find(p => p.id === body.projectId)) {
+    return res.status(422).json({ error: 'validation', message: 'project not found' });
+  }
+  const deck = await createDeck({
+    projectId:    body.projectId,
+    title:        body.title        || '',
+    imagesFilter: body.imagesFilter || 'selected',
+    expiresAt:    body.expiresAt    || null,
+  });
+  res.status(201).json(deck);
+});
+
+app.delete('/api/decks/:token', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  const ok = await deleteDeck(req.params.token);
+  if (!ok) return res.status(404).json({ error: 'not_found' });
+  res.status(204).send();
+});
+
+/* ------------------------------------------------------------------ */
+/* Deck — public viewer (token-gated, no auth)                         */
+/* ------------------------------------------------------------------ */
+
+app.get('/api/deck/:token', async (req, res) => {
+  const deck = await findDeck(req.params.token).catch(() => null);
+  if (!deck) return res.status(404).json({ error: 'not_found' });
+  if (deck.expiresAt && new Date(deck.expiresAt) < new Date()) {
+    return res.status(410).json({ error: 'expired' });
+  }
+
+  const data    = await readProjects();
+  const project = data.projects.find(p => p.id === deck.projectId);
+  if (!project) return res.status(404).json({ error: 'project_not_found' });
+
+  const filter   = deck.imagesFilter || 'selected';
+  const images   = project.images
+    .filter(i => !i.rejected)
+    .filter(i => filter === 'all' ? true : i.selected || i.favorite)
+    .sort((a, b) => (a.order ?? 9999) - (b.order ?? 9999))
+    .map(i => ({
+      filename: i.filename,
+      url:      i.blobPath,
+      order:    i.order,
+      exif:     i.exif || {},
+    }));
+
+  await incrementViews(deck.token).catch(() => {});
+
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({
+    token:     deck.token,
+    title:     deck.title || project.name,
+    project: {
+      id:          project.id,
+      name:        project.name,
+      client:      project.client,
+      year:        project.year,
+      month:       project.month,
+      type:        project.type,
+      description: project.description,
+      location:    project.location,
+    },
+    images,
+    views:     deck.views || 0,
   });
 });
 

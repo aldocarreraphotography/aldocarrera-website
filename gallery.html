@@ -1,0 +1,949 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta name="robots" content="noindex, nofollow"/>
+<title>Gallery — Aldo Carrera</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap"/>
+<link rel="stylesheet" href="gallery-styles.css"/>
+</head>
+<body>
+<div id="app"></div>
+<script>
+(function() {
+'use strict';
+
+/* ------------------------------------------------------------------ */
+/* Config                                                              */
+/* ------------------------------------------------------------------ */
+const API_BASE = window.API_BASE || 'https://api.aldocarrera.com';
+
+/* ------------------------------------------------------------------ */
+/* Utilities                                                           */
+/* ------------------------------------------------------------------ */
+const qs  = (sel, root) => (root || document).querySelector(sel);
+const qsa = (sel, root) => [...(root || document).querySelectorAll(sel)];
+
+function el(tag, attrs, ...children) {
+  const e = document.createElement(tag);
+  if (attrs) {
+    for (const [k, v] of Object.entries(attrs)) {
+      if (k === 'className') e.className = v;
+      else if (k === 'style' && typeof v === 'object') Object.assign(e.style, v);
+      else if (k.startsWith('on')) e[k.toLowerCase()] = v;
+      else if (v != null) e.setAttribute(k, v);
+    }
+  }
+  for (const c of children) {
+    if (c == null) continue;
+    e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+  }
+  return e;
+}
+
+function uid() { return 'mk_' + Math.random().toString(36).slice(2, 10); }
+
+function starSVG() {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('class', 'star-svg');
+  svg.setAttribute('fill', 'currentColor');
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('d', 'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z');
+  svg.appendChild(path);
+  return svg;
+}
+
+/* ------------------------------------------------------------------ */
+/* State                                                               */
+/* ------------------------------------------------------------------ */
+const state = {
+  token: null,
+  gallery: null,
+  images: [],
+  selections: {},   // filename → { label, stars, note, markups: [...] }
+  filter: 'ALL',
+  lightbox: null,   // index | null
+  // Markup drawing state
+  tool: 'freehand', // freehand | ellipse | arrow | rect
+  color: '#4a90e2',
+  drawing: false,
+  drawStart: null,
+  drawCurrent: [],
+  activeMarkup: null,  // id of highlighted markup
+  pendingComment: '',
+  password: null,
+};
+
+const COLORS = ['#4a90e2','#e85d5d','#4fca7e','#f5c842','#ffffff'];
+
+/* ------------------------------------------------------------------ */
+/* API                                                                 */
+/* ------------------------------------------------------------------ */
+async function apiFetch(path, opts = {}) {
+  const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+  if (state.password) headers['x-gallery-password'] = state.password;
+  const r = await fetch(API_BASE + path, { ...opts, headers });
+  if (!r.ok) {
+    const body = await r.json().catch(() => ({}));
+    throw Object.assign(new Error(body.error || r.statusText), { status: r.status, body });
+  }
+  return r.json();
+}
+
+async function loadGallery() {
+  const data = await apiFetch(`/api/gallery/${state.token}`);
+  state.gallery = {
+    token: data.token, title: data.title, clientName: data.clientName,
+    status: data.status, submittedAt: data.submittedAt, expiresAt: data.expiresAt,
+  };
+  state.images = data.images;
+  state.selections = {};
+  for (const img of data.images) {
+    state.selections[img.filename] = img.selection || { label: null, stars: 0, note: '', markups: [] };
+    if (!state.selections[img.filename].markups) state.selections[img.filename].markups = [];
+  }
+}
+
+let saveTimer = null;
+const saveQueue = new Set();
+
+function queueSave(filename) {
+  saveQueue.add(filename);
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(flushSave, 600);
+}
+
+async function flushSave() {
+  if (!saveQueue.size) return;
+  const batch = [...saveQueue];
+  saveQueue.clear();
+  const updates = batch.map(fn => ({ filename: fn, ...state.selections[fn] }));
+  try {
+    await apiFetch(`/api/gallery/${state.token}/select`, {
+      method: 'PUT',
+      body: JSON.stringify({ updates }),
+    });
+  } catch (e) {
+    console.error('[gallery] save failed:', e.message);
+  }
+}
+
+async function submitGallery() {
+  await flushSave();
+  await apiFetch(`/api/gallery/${state.token}/submit`, { method: 'POST', body: '{}' });
+  state.gallery.status = 'submitted';
+  render();
+}
+
+/* ------------------------------------------------------------------ */
+/* Selection helpers                                                   */
+/* ------------------------------------------------------------------ */
+function getOrInit(filename) {
+  if (!state.selections[filename]) state.selections[filename] = { label: null, stars: 0, note: '', markups: [] };
+  if (!state.selections[filename].markups) state.selections[filename].markups = [];
+  return state.selections[filename];
+}
+
+function setLabel(filename, label) {
+  const s = getOrInit(filename);
+  s.label = s.label === label ? null : label;
+  queueSave(filename);
+  rerender(filename);
+  updateSubmitBar();
+}
+
+function setStars(filename, stars) {
+  const s = getOrInit(filename);
+  s.stars = s.stars === stars ? 0 : stars;
+  queueSave(filename);
+  rerender(filename);
+}
+
+function setNote(filename, note) {
+  const s = getOrInit(filename);
+  s.note = note;
+  queueSave(filename);
+}
+
+/* ------------------------------------------------------------------ */
+/* Markup helpers                                                       */
+/* ------------------------------------------------------------------ */
+function addMarkup(filename, shape, comment) {
+  const s = getOrInit(filename);
+  const mk = { id: uid(), color: state.color, tool: state.tool, shape, comment: comment || '', createdAt: new Date().toISOString() };
+  s.markups.push(mk);
+  state.activeMarkup = mk.id;
+  state.pendingComment = '';
+  queueSave(filename);
+  return mk;
+}
+
+function deleteMarkup(filename, id) {
+  const s = getOrInit(filename);
+  s.markups = s.markups.filter(m => m.id !== id);
+  if (state.activeMarkup === id) state.activeMarkup = null;
+  queueSave(filename);
+}
+
+function updateMarkupComment(filename, id, comment) {
+  const s = getOrInit(filename);
+  const mk = s.markups.find(m => m.id === id);
+  if (mk) { mk.comment = comment; queueSave(filename); }
+}
+
+/* ------------------------------------------------------------------ */
+/* Counts                                                              */
+/* ------------------------------------------------------------------ */
+function counts() {
+  const all = state.images.length;
+  let sel = 0, alt = 0, kill = 0, none = 0;
+  for (const img of state.images) {
+    const s = state.selections[img.filename];
+    if (!s || !s.label) none++;
+    else if (s.label === 'SELECT') sel++;
+    else if (s.label === 'ALT')    alt++;
+    else if (s.label === 'KILL')   kill++;
+  }
+  return { all, sel, alt, kill, none };
+}
+
+function filteredImages() {
+  if (state.filter === 'ALL')      return state.images;
+  if (state.filter === 'UNTAGGED') return state.images.filter(i => !state.selections[i.filename]?.label);
+  return state.images.filter(i => state.selections[i.filename]?.label === state.filter);
+}
+
+/* ------------------------------------------------------------------ */
+/* Canvas — image bounds helper                                        */
+/* ------------------------------------------------------------------ */
+function getImgBounds(imgEl) {
+  const { naturalWidth: nw, naturalHeight: nh } = imgEl;
+  const { width: cw, height: ch } = imgEl.getBoundingClientRect();
+  if (!nw || !nh || !cw || !ch) return null;
+
+  const scale = Math.min(cw / nw, ch / nh);
+  const rw = nw * scale;
+  const rh = nh * scale;
+  const ox = (cw - rw) / 2;
+  const oy = (ch - rh) / 2;
+  return { ox, oy, rw, rh };
+}
+
+function clientToNorm(e, canvas, imgEl) {
+  const rect = canvas.getBoundingClientRect();
+  const cx   = (e.clientX ?? e.touches?.[0]?.clientX) - rect.left;
+  const cy   = (e.clientY ?? e.touches?.[0]?.clientY) - rect.top;
+  const b    = getImgBounds(imgEl);
+  if (!b) return null;
+  return {
+    x: (cx - b.ox) / b.rw,
+    y: (cy - b.oy) / b.rh,
+  };
+}
+
+function normToCanvas(nx, ny, b) {
+  return { x: b.ox + nx * b.rw, y: b.oy + ny * b.rh };
+}
+
+/* ------------------------------------------------------------------ */
+/* Canvas — draw all markups                                            */
+/* ------------------------------------------------------------------ */
+function redrawCanvas(canvas, imgEl, markups, activeId, previewShape) {
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  if (canvas.width !== rect.width * dpr || canvas.height !== rect.height * dpr) {
+    canvas.width  = rect.width  * dpr;
+    canvas.height = rect.height * dpr;
+  }
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, rect.width, rect.height);
+
+  const b = getImgBounds(imgEl);
+  if (!b) return;
+
+  const all = [...(markups || [])];
+  if (previewShape) all.push({ id: '__preview__', color: state.color, tool: state.tool, shape: previewShape });
+
+  for (const mk of all) {
+    const isActive = mk.id === activeId || mk.id === '__preview__';
+    drawShape(ctx, b, mk.tool, mk.shape, mk.color, isActive);
+  }
+}
+
+function drawShape(ctx, b, tool, shape, color, highlight) {
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.fillStyle   = color;
+  ctx.lineWidth   = highlight ? 2.5 : 2;
+  ctx.lineCap     = 'round';
+  ctx.lineJoin    = 'round';
+  if (highlight) ctx.shadowBlur = 6, ctx.shadowColor = color;
+
+  if (tool === 'freehand' && shape?.points?.length > 1) {
+    ctx.beginPath();
+    const p0 = normToCanvas(shape.points[0][0], shape.points[0][1], b);
+    ctx.moveTo(p0.x, p0.y);
+    for (let i = 1; i < shape.points.length; i++) {
+      const p = normToCanvas(shape.points[i][0], shape.points[i][1], b);
+      ctx.lineTo(p.x, p.y);
+    }
+    ctx.stroke();
+
+  } else if (tool === 'ellipse' && shape) {
+    const c  = normToCanvas(shape.cx, shape.cy, b);
+    ctx.beginPath();
+    ctx.ellipse(c.x, c.y, shape.rx * b.rw, shape.ry * b.rh, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
+  } else if (tool === 'arrow' && shape) {
+    const s = normToCanvas(shape.x1, shape.y1, b);
+    const e = normToCanvas(shape.x2, shape.y2, b);
+    ctx.beginPath();
+    ctx.moveTo(s.x, s.y);
+    ctx.lineTo(e.x, e.y);
+    ctx.stroke();
+    // Arrowhead
+    const angle = Math.atan2(e.y - s.y, e.x - s.x);
+    const len   = 14;
+    ctx.beginPath();
+    ctx.moveTo(e.x, e.y);
+    ctx.lineTo(e.x - len * Math.cos(angle - 0.4), e.y - len * Math.sin(angle - 0.4));
+    ctx.lineTo(e.x - len * Math.cos(angle + 0.4), e.y - len * Math.sin(angle + 0.4));
+    ctx.closePath();
+    ctx.fill();
+
+  } else if (tool === 'rect' && shape) {
+    const origin = normToCanvas(shape.x, shape.y, b);
+    ctx.beginPath();
+    ctx.rect(origin.x, origin.y, shape.w * b.rw, shape.h * b.rh);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/* ------------------------------------------------------------------ */
+/* Lightbox — build                                                    */
+/* ------------------------------------------------------------------ */
+function buildLightbox() {
+  const visible  = filteredImages();
+  const img      = visible[state.lightbox];
+  if (!img) return null;
+  const sel      = getOrInit(img.filename);
+  const readOnly = state.gallery.status === 'submitted';
+
+  const lb = el('div', { id: 'lightbox', className: 'gl-lightbox' });
+
+  /* ---- top bar ---- */
+  const top = el('div', { className: 'gl-lb-top' },
+    el('div', { className: 'gl-lb-name mono' }, img.filename),
+    el('div', { className: 'gl-lb-counter mono' }, `${state.lightbox + 1} / ${visible.length}`),
+    el('button', { className: 'gl-lb-close', onClick: closeLightbox }, '×'),
+  );
+  lb.appendChild(top);
+
+  /* ---- body ---- */
+  const body = el('div', { className: 'gl-lb-body' });
+
+  /* ---- left: tool palette ---- */
+  if (!readOnly) {
+    const palette = el('div', { className: 'gl-lb-palette' });
+
+    const TOOLS = [
+      { id: 'freehand', label: '✏', title: 'Freehand' },
+      { id: 'ellipse',  label: '⬭', title: 'Circle' },
+      { id: 'arrow',    label: '↗', title: 'Arrow' },
+      { id: 'rect',     label: '▭', title: 'Rectangle' },
+    ];
+    for (const t of TOOLS) {
+      const btn = el('button', {
+        className: `gl-tool-btn ${state.tool === t.id ? 'active' : ''}`,
+        title: t.title,
+        'data-tool': t.id,
+        onClick: () => {
+          state.tool = t.id;
+          qsa('.gl-tool-btn', lb).forEach(b => b.classList.toggle('active', b.dataset.tool === t.id));
+        },
+      }, t.label);
+      palette.appendChild(btn);
+    }
+
+    palette.appendChild(el('div', { className: 'gl-palette-divider' }));
+
+    // Color swatches
+    for (const c of COLORS) {
+      const swatch = el('button', {
+        className: `gl-color-swatch ${state.color === c ? 'active' : ''}`,
+        style: { background: c },
+        'data-color': c,
+        onClick: () => {
+          state.color = c;
+          qsa('.gl-color-swatch', lb).forEach(b => b.classList.toggle('active', b.dataset.color === c));
+        },
+      });
+      palette.appendChild(swatch);
+    }
+    body.appendChild(palette);
+  }
+
+  /* ---- center: image + canvas ---- */
+  const imgWrap = el('div', { className: 'gl-lb-img-wrap' });
+  const imgEl   = el('img', { className: 'gl-lb-img', src: img.url, alt: img.filename, draggable: 'false' });
+  const canvas  = el('canvas', { className: `gl-lb-canvas ${readOnly ? 'read-only' : ''}` });
+
+  imgWrap.appendChild(imgEl);
+  imgWrap.appendChild(canvas);
+  body.appendChild(imgWrap);
+
+  /* ---- right: markup panel ---- */
+  const panel = el('div', { className: 'gl-lb-panel' });
+
+  // Label buttons at top
+  const labelRow = el('div', { className: 'gl-lb-label-row' });
+  for (const lbl of ['SELECT', 'ALT', 'KILL']) {
+    const cls = sel.label === lbl ? 'active-' + lbl : '';
+    const btn = el('button', {
+      className: `gl-lb-label-btn ${cls}`,
+      onClick: () => {
+        if (readOnly) return;
+        setLabel(img.filename, lbl);
+        qsa('.gl-lb-label-btn', panel).forEach(b => {
+          const l = b.textContent.trim();
+          b.className = `gl-lb-label-btn ${state.selections[img.filename]?.label === l ? 'active-' + l : ''}`;
+        });
+      },
+    }, lbl);
+    labelRow.appendChild(btn);
+  }
+  panel.appendChild(labelRow);
+
+  // Stars
+  const starsEl = el('div', { className: 'gl-panel-stars' });
+  const drawStars = () => {
+    starsEl.innerHTML = '';
+    for (let i = 1; i <= 5; i++) {
+      const s = el('span', { className: `gl-star ${i <= (sel.stars || 0) ? 'filled' : ''}` });
+      s.appendChild(starSVG());
+      if (!readOnly) s.addEventListener('click', () => {
+        setStars(img.filename, i);
+        drawStars();
+      });
+      starsEl.appendChild(s);
+    }
+  };
+  drawStars();
+  panel.appendChild(starsEl);
+
+  panel.appendChild(el('div', { className: 'gl-panel-divider' }));
+
+  // Markup list
+  const mkHead = el('div', { className: 'gl-panel-section-head' }, 'Markups');
+  panel.appendChild(mkHead);
+
+  const mkList = el('div', { id: 'markup-list', className: 'gl-markup-list' });
+  const rebuildMarkupList = () => {
+    mkList.innerHTML = '';
+    const markups = getOrInit(img.filename).markups;
+    if (markups.length === 0) {
+      mkList.appendChild(el('div', { className: 'gl-markup-empty' },
+        readOnly ? 'No markups.' : 'Draw on the image to add markup.',
+      ));
+      return;
+    }
+    for (const mk of markups) {
+      const row = el('div', {
+        className: `gl-markup-row ${state.activeMarkup === mk.id ? 'active' : ''}`,
+        'data-mkid': mk.id,
+        onClick: () => {
+          state.activeMarkup = state.activeMarkup === mk.id ? null : mk.id;
+          rebuildMarkupList();
+          redrawCanvas(canvas, imgEl, getOrInit(img.filename).markups, state.activeMarkup, null);
+        },
+      });
+
+      const dot = el('span', { className: 'gl-markup-dot', style: { background: mk.color } });
+      const body2 = el('div', { className: 'gl-markup-body' });
+
+      const toolLabel = el('span', { className: 'gl-markup-tool mono' }, mk.tool);
+      body2.appendChild(toolLabel);
+
+      if (readOnly || mk.comment) {
+        const cmt = el('div', { className: 'gl-markup-comment' }, mk.comment || '');
+        body2.appendChild(cmt);
+      } else {
+        const inp = el('input', {
+          className: 'gl-markup-input',
+          type: 'text',
+          placeholder: 'Add note…',
+          value: mk.comment,
+        });
+        inp.addEventListener('click', e => e.stopPropagation());
+        inp.addEventListener('change', e => {
+          updateMarkupComment(img.filename, mk.id, e.target.value);
+        });
+        body2.appendChild(inp);
+      }
+
+      const time = el('span', { className: 'gl-markup-time muted' }, formatMarkupTime(mk.createdAt));
+      body2.appendChild(time);
+
+      row.appendChild(dot);
+      row.appendChild(body2);
+
+      if (!readOnly) {
+        const del = el('button', {
+          className: 'gl-markup-del',
+          title: 'Delete',
+          onClick: (e) => {
+            e.stopPropagation();
+            deleteMarkup(img.filename, mk.id);
+            rebuildMarkupList();
+            redrawCanvas(canvas, imgEl, getOrInit(img.filename).markups, state.activeMarkup, null);
+          },
+        }, '×');
+        row.appendChild(del);
+      }
+
+      mkList.appendChild(row);
+    }
+  };
+  rebuildMarkupList();
+  panel.appendChild(mkList);
+
+  body.appendChild(panel);
+  lb.appendChild(body);
+
+  /* ---- nav arrows ---- */
+  if (state.lightbox > 0) {
+    lb.appendChild(el('button', { className: 'gl-lb-nav prev', onClick: () => navLightbox(-1) }, '‹'));
+  }
+  if (state.lightbox < visible.length - 1) {
+    lb.appendChild(el('button', { className: 'gl-lb-nav next', onClick: () => navLightbox(1) }, '›'));
+  }
+
+  /* ---- canvas drawing logic ---- */
+  function setupCanvas() {
+    redrawCanvas(canvas, imgEl, sel.markups, state.activeMarkup, null);
+  }
+
+  imgEl.addEventListener('load', setupCanvas);
+  if (imgEl.complete && imgEl.naturalWidth) setupCanvas();
+
+  const ro = new ResizeObserver(() => {
+    redrawCanvas(canvas, imgEl, getOrInit(img.filename).markups, state.activeMarkup, null);
+  });
+  ro.observe(imgWrap);
+
+  if (!readOnly) {
+    const getEvtPt = (e) => {
+      const pt = clientToNorm(e, canvas, imgEl);
+      return pt;
+    };
+
+    canvas.addEventListener('mousedown', (e) => {
+      const pt = getEvtPt(e);
+      if (!pt) return;
+      state.drawing = true;
+      state.drawStart = pt;
+      state.drawCurrent = [pt];
+      canvas.setPointerCapture?.(e.pointerId);
+    });
+
+    canvas.addEventListener('mousemove', (e) => {
+      if (!state.drawing) return;
+      const pt = getEvtPt(e);
+      if (!pt) return;
+      state.drawCurrent.push(pt);
+      const preview = buildPreviewShape(pt);
+      redrawCanvas(canvas, imgEl, getOrInit(img.filename).markups, state.activeMarkup, preview);
+    });
+
+    const finishDraw = (e) => {
+      if (!state.drawing) return;
+      state.drawing = false;
+      const pt = getEvtPt(e) || state.drawCurrent[state.drawCurrent.length - 1];
+      if (!pt) return;
+
+      const shape = finalizeShape(pt);
+      if (!shape) { redrawCanvas(canvas, imgEl, getOrInit(img.filename).markups, state.activeMarkup, null); return; }
+
+      addMarkup(img.filename, shape, '');
+      redrawCanvas(canvas, imgEl, getOrInit(img.filename).markups, state.activeMarkup, null);
+      rebuildMarkupList();
+    };
+
+    canvas.addEventListener('mouseup',    finishDraw);
+    canvas.addEventListener('mouseleave', finishDraw);
+
+    // Touch support
+    canvas.addEventListener('touchstart', (e) => { e.preventDefault(); canvas.dispatchEvent(new MouseEvent('mousedown', { clientX: e.touches[0].clientX, clientY: e.touches[0].clientY })); }, { passive: false });
+    canvas.addEventListener('touchmove',  (e) => { e.preventDefault(); canvas.dispatchEvent(new MouseEvent('mousemove', { clientX: e.touches[0].clientX, clientY: e.touches[0].clientY })); }, { passive: false });
+    canvas.addEventListener('touchend',   (e) => { e.preventDefault(); canvas.dispatchEvent(new MouseEvent('mouseup',   { clientX: e.changedTouches[0].clientX, clientY: e.changedTouches[0].clientY })); }, { passive: false });
+  }
+
+  function buildPreviewShape(pt) {
+    const s = state.drawStart;
+    if (state.tool === 'freehand') return { points: state.drawCurrent.map(p => [p.x, p.y]) };
+    if (state.tool === 'ellipse')  return { cx: (s.x + pt.x) / 2, cy: (s.y + pt.y) / 2, rx: Math.abs(pt.x - s.x) / 2, ry: Math.abs(pt.y - s.y) / 2 };
+    if (state.tool === 'arrow')    return { x1: s.x, y1: s.y, x2: pt.x, y2: pt.y };
+    if (state.tool === 'rect')     return { x: Math.min(s.x, pt.x), y: Math.min(s.y, pt.y), w: Math.abs(pt.x - s.x), h: Math.abs(pt.y - s.y) };
+    return null;
+  }
+
+  function finalizeShape(pt) {
+    const s = state.drawStart;
+    if (!s) return null;
+    if (state.tool === 'freehand') {
+      if (state.drawCurrent.length < 3) return null;
+      return { points: state.drawCurrent.map(p => [p.x, p.y]) };
+    }
+    if (state.tool === 'ellipse') {
+      const rx = Math.abs(pt.x - s.x) / 2, ry = Math.abs(pt.y - s.y) / 2;
+      if (rx < 0.01 && ry < 0.01) return null;
+      return { cx: (s.x + pt.x) / 2, cy: (s.y + pt.y) / 2, rx, ry };
+    }
+    if (state.tool === 'arrow') {
+      const dx = pt.x - s.x, dy = pt.y - s.y;
+      if (Math.sqrt(dx*dx + dy*dy) < 0.02) return null;
+      return { x1: s.x, y1: s.y, x2: pt.x, y2: pt.y };
+    }
+    if (state.tool === 'rect') {
+      const w = Math.abs(pt.x - s.x), h = Math.abs(pt.y - s.y);
+      if (w < 0.02 || h < 0.02) return null;
+      return { x: Math.min(s.x, pt.x), y: Math.min(s.y, pt.y), w, h };
+    }
+    return null;
+  }
+
+  return lb;
+}
+
+function formatMarkupTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
+/* ------------------------------------------------------------------ */
+/* Lightbox — lifecycle                                                */
+/* ------------------------------------------------------------------ */
+function openLightbox(idx) {
+  state.lightbox = idx;
+  state.activeMarkup = null;
+  renderLightboxEl();
+}
+
+function closeLightbox() {
+  state.lightbox = null;
+  const lb = qs('#lightbox');
+  if (lb) lb.remove();
+  document.removeEventListener('keydown', onLbKey);
+}
+
+function navLightbox(delta) {
+  const visible = filteredImages();
+  const next = state.lightbox + delta;
+  if (next < 0 || next >= visible.length) return;
+  state.lightbox = next;
+  state.activeMarkup = null;
+  renderLightboxEl();
+}
+
+function onLbKey(e) {
+  if (e.key === 'Escape')     closeLightbox();
+  if (e.key === 'ArrowRight') navLightbox(1);
+  if (e.key === 'ArrowLeft')  navLightbox(-1);
+}
+
+function renderLightboxEl() {
+  const existing = qs('#lightbox');
+  if (existing) existing.remove();
+  document.removeEventListener('keydown', onLbKey);
+  const lb = buildLightbox();
+  if (!lb) return;
+  document.body.appendChild(lb);
+  document.addEventListener('keydown', onLbKey);
+}
+
+/* ------------------------------------------------------------------ */
+/* Grid card                                                           */
+/* ------------------------------------------------------------------ */
+function buildCard(img, readOnly) {
+  const sel    = getOrInit(img.filename);
+  const lblCls = sel.label ? `labeled-${sel.label}` : '';
+
+  const card = el('article', { className: `gl-card ${lblCls}`, 'data-fn': img.filename });
+
+  const imgWrap = el('div', { className: 'gl-card-img-wrap' });
+  const thumb   = el('img', { className: 'gl-card-thumb', src: img.url, loading: 'lazy', alt: img.filename });
+  imgWrap.appendChild(thumb);
+  if (sel.label) imgWrap.appendChild(el('span', { className: `gl-label-badge ${sel.label}` }, sel.label));
+  if (sel.markups?.length) {
+    imgWrap.appendChild(el('span', { className: 'gl-markup-count', title: `${sel.markups.length} markup${sel.markups.length > 1 ? 's' : ''}` }, `✏ ${sel.markups.length}`));
+  }
+  imgWrap.addEventListener('click', () => {
+    const idx = filteredImages().findIndex(i => i.filename === img.filename);
+    if (idx !== -1) openLightbox(idx);
+  });
+  card.appendChild(imgWrap);
+
+  const body = el('div', { className: 'gl-card-body' });
+  body.appendChild(el('div', { className: 'gl-card-name mono' }, img.filename));
+
+  if (!readOnly) {
+    const row = el('div', { className: 'gl-label-row' });
+    for (const lbl of ['SELECT', 'ALT', 'KILL']) {
+      const btn = el('button', {
+        className: `gl-label-btn ${sel.label === lbl ? 'active-' + lbl : ''}`,
+        onClick: (e) => { e.stopPropagation(); setLabel(img.filename, lbl); },
+      }, lbl);
+      row.appendChild(btn);
+    }
+    body.appendChild(row);
+
+    const stars = el('div', { className: 'gl-stars' });
+    for (let i = 1; i <= 5; i++) {
+      const s = el('span', { className: `gl-star ${i <= (sel.stars || 0) ? 'filled' : ''}` });
+      s.appendChild(starSVG());
+      s.addEventListener('click', (e) => { e.stopPropagation(); setStars(img.filename, i); });
+      stars.appendChild(s);
+    }
+    body.appendChild(stars);
+  } else {
+    if (sel.label) body.appendChild(el('div', { className: `gl-label-btn active-${sel.label}`, style: { pointerEvents: 'none', textAlign: 'center' } }, sel.label));
+    if (sel.stars) {
+      const stars = el('div', { className: 'gl-stars' });
+      for (let i = 1; i <= 5; i++) {
+        const s = el('span', { className: `gl-star ${i <= sel.stars ? 'filled' : ''}` });
+        s.appendChild(starSVG());
+        stars.appendChild(s);
+      }
+      body.appendChild(stars);
+    }
+  }
+  card.appendChild(body);
+  return card;
+}
+
+/* ------------------------------------------------------------------ */
+/* Grid / filter / header / submit                                     */
+/* ------------------------------------------------------------------ */
+function renderHeader() {
+  const g = state.gallery;
+  const sc = g.status === 'submitted' ? 'submitted' : 'open';
+  return el('header', { className: 'gl-header' },
+    el('div', { className: 'gl-header-left' },
+      el('div', { className: 'gl-logo-mark' },
+        el('img', { src: '/aldo-signature.png', style: { width: '20px', height: '20px', objectFit: 'contain', mixBlendMode: 'multiply', opacity: '.85' } }),
+      ),
+      el('div', {},
+        el('div', { className: 'gl-title' }, g.title || 'Gallery'),
+        el('div', { className: 'gl-subtitle mono' }, g.clientName || 'Aldo Carrera'),
+      ),
+    ),
+    el('div', { className: 'gl-header-right' },
+      el('span', { className: `gl-status-pill ${sc}` }, sc === 'submitted' ? 'Submitted' : 'Open'),
+    ),
+  );
+}
+
+function renderFilterBar() {
+  const c = counts();
+  const filters = [
+    { id: 'ALL',      label: 'All',      count: c.all,  cls: '' },
+    { id: 'SELECT',   label: 'Select',   count: c.sel,  cls: 'f-select' },
+    { id: 'ALT',      label: 'Alt',      count: c.alt,  cls: 'f-alt' },
+    { id: 'KILL',     label: 'Kill',     count: c.kill, cls: 'f-kill' },
+    { id: 'UNTAGGED', label: 'Untagged', count: c.none, cls: '' },
+  ];
+  const bar = el('div', { id: 'filter-bar', className: 'gl-filter-bar' });
+  for (const f of filters) {
+    const btn = el('button', {
+      className: `gl-filter-btn ${f.cls} ${state.filter === f.id ? 'active' : ''}`,
+      onClick: () => { state.filter = f.id; rerenderGrid(); rerenderFilterBar(); },
+    }, f.label, el('span', { className: 'gl-filter-count' }, String(f.count)));
+    bar.appendChild(btn);
+  }
+  return bar;
+}
+
+function renderGrid(readOnly) {
+  const visible = filteredImages();
+  const grid = el('div', { id: 'image-grid', className: 'gl-grid' });
+  if (!visible.length) grid.appendChild(el('div', { className: 'gl-empty-grid' }, 'No images match this filter.'));
+  for (const img of visible) grid.appendChild(buildCard(img, readOnly));
+  return grid;
+}
+
+function rerenderGrid() {
+  const old = qs('#image-grid');
+  if (old) old.replaceWith(renderGrid(state.gallery.status === 'submitted'));
+}
+
+function rerenderFilterBar() {
+  const old = qs('#filter-bar');
+  if (old) old.replaceWith(renderFilterBar());
+}
+
+function rerender(filename) {
+  const card = qs(`[data-fn="${CSS.escape(filename)}"]`);
+  if (!card) return;
+  card.replaceWith(buildCard(state.images.find(i => i.filename === filename), state.gallery.status === 'submitted'));
+}
+
+function renderSubmitBar() {
+  if (qs('#submit-bar')) return;
+  const bar = el('div', { id: 'submit-bar', className: 'gl-submit-bar' });
+  document.body.appendChild(bar);
+  requestAnimationFrame(() => requestAnimationFrame(() => bar.classList.add('visible')));
+  updateSubmitBar();
+}
+
+function updateSubmitBar() {
+  rerenderFilterBar();
+  const bar = qs('#submit-bar');
+  if (!bar) return;
+  bar.innerHTML = '';
+  const c   = counts();
+  const sum = el('div', { className: 'gl-submit-summary' });
+  if (c.sel)  sum.appendChild(el('span', { className: 'gl-submit-chip s' }, `${c.sel} SELECT`));
+  if (c.alt)  sum.appendChild(el('span', { className: 'gl-submit-chip a' }, `${c.alt} ALT`));
+  if (c.kill) sum.appendChild(el('span', { className: 'gl-submit-chip k' }, `${c.kill} KILL`));
+  if (!c.sel && !c.alt && !c.kill) sum.appendChild(el('span', { className: 'muted' }, 'Mark images to get started'));
+
+  const btn = el('button', {
+    className: 'gl-submit-btn',
+    disabled: (!c.sel && !c.alt && !c.kill) ? '' : null,
+    onClick: async () => {
+      if (!confirm(`Send your ${c.sel + c.alt} selects to Aldo? This can't be undone.`)) return;
+      btn.setAttribute('disabled', '');
+      btn.textContent = 'Sending…';
+      try { await submitGallery(); }
+      catch { btn.removeAttribute('disabled'); btn.textContent = 'Submit selects'; alert('Error submitting. Please try again.'); }
+    },
+  }, 'Submit selects');
+
+  bar.appendChild(sum);
+  bar.appendChild(btn);
+}
+
+/* ------------------------------------------------------------------ */
+/* Full render                                                         */
+/* ------------------------------------------------------------------ */
+function render() {
+  const app = qs('#app');
+  app.innerHTML = '';
+  if (!state.gallery) { app.appendChild(renderLoading()); return; }
+
+  const readOnly = state.gallery.status === 'submitted';
+  app.appendChild(renderHeader());
+  app.appendChild(renderFilterBar());
+
+  if (readOnly) {
+    app.appendChild(el('div', { className: 'gl-submitted-banner' },
+      el('span', { style: { fontSize: 18 } }, '✓'),
+      el('span', {}, 'Selects submitted — thank you! Aldo has been notified.'),
+    ));
+  }
+
+  const main = el('div', { className: 'gl-main' });
+  main.appendChild(renderGrid(readOnly));
+  app.appendChild(main);
+  if (!readOnly && state.images.length > 0) renderSubmitBar();
+}
+
+function renderLoading() {
+  const wrap = el('div', { style: { padding: '24px', paddingBottom: '80px' } });
+  // Header skeleton
+  const hdr = el('div', { style: { height: 60, display: 'flex', alignItems: 'center', gap: 14, padding: '0 24px', marginBottom: 16, borderBottom: '1px solid var(--rule)' } });
+  hdr.appendChild(el('div', { className: 'gl-sk-bone', style: { width: 32, height: 32, borderRadius: 4 } }));
+  hdr.appendChild(el('div', { style: { display: 'flex', flexDirection: 'column', gap: 6 } },
+    el('div', { className: 'gl-sk-bone', style: { width: 160, height: 14 } }),
+    el('div', { className: 'gl-sk-bone', style: { width: 100, height: 10 } }),
+  ));
+
+  // Grid skeleton
+  const grid = el('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16, marginTop: 24 } });
+  for (let i = 0; i < 9; i++) {
+    const card = el('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } });
+    card.appendChild(el('div', { className: 'gl-sk-bone', style: { aspectRatio: '3/4', borderRadius: 4 } }));
+    card.appendChild(el('div', { className: 'gl-sk-bone', style: { height: 10, width: '70%' } }));
+    card.appendChild(el('div', { className: 'gl-sk-bone', style: { height: 28, borderRadius: 3 } }));
+    grid.appendChild(card);
+  }
+  wrap.appendChild(hdr);
+  wrap.appendChild(grid);
+  return wrap;
+}
+
+function renderError(msg) {
+  qs('#app').innerHTML = '';
+  qs('#app').appendChild(el('div', { className: 'gl-state-screen' },
+    el('div', { className: 'gl-state-icon' }, '✕'),
+    el('div', { className: 'gl-state-title' }, 'Gallery unavailable'),
+    el('div', { className: 'gl-state-sub'   }, msg || 'This link may have expired or been removed.'),
+  ));
+}
+
+function renderPasswordGate(onSubmit) {
+  qs('#app').innerHTML = '';
+  let errEl;
+  const inp = el('input', { className: 'gl-pw-input', type: 'password', placeholder: 'Enter password' });
+  const btn = el('button', { className: 'gl-pw-btn', onClick: () => onSubmit(inp.value) }, 'Continue');
+  inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') onSubmit(inp.value); });
+  errEl = el('div', { className: 'gl-pw-error', style: { display: 'none' } }, 'Incorrect password.');
+  qs('#app').appendChild(el('div', { className: 'gl-pw-wrap' },
+    el('div', { className: 'gl-pw-card' },
+      el('div', { className: 'gl-pw-title' }, 'Protected gallery'),
+      el('div', { className: 'gl-pw-sub'   }, 'Aldo shared this gallery with you. Enter the password to continue.'),
+      inp, btn, errEl,
+    ),
+  ));
+  setTimeout(() => inp.focus(), 100);
+  return { showError: () => { errEl.style.display = 'block'; inp.value = ''; inp.focus(); } };
+}
+
+/* ------------------------------------------------------------------ */
+/* Boot                                                                */
+/* ------------------------------------------------------------------ */
+async function boot() {
+  const params = new URLSearchParams(window.location.search);
+  state.token  = params.get('token') || params.get('t');
+  if (!state.token) { renderError('No gallery token found in the URL.'); return; }
+
+  qs('#app').appendChild(renderLoading());
+
+  try {
+    await loadGallery();
+    render();
+  } catch (e) {
+    if (e.status === 401) {
+      const gate = renderPasswordGate(async (pw) => {
+        state.password = pw;
+        try { await loadGallery(); render(); }
+        catch (e2) {
+          if (e2.status === 401) gate.showError();
+          else renderError(e2.message);
+        }
+      });
+    } else if (e.status === 410) {
+      renderError(e.body?.error === 'expired' ? 'This gallery link has expired.' : 'This gallery is no longer available.');
+    } else if (e.status === 404) {
+      renderError('Gallery not found. Check your link.');
+    } else {
+      renderError('Something went wrong. Please try again later.');
+      console.error('[gallery] boot error:', e);
+    }
+  }
+}
+
+boot();
+})();
+</script>
+</body>
+</html>

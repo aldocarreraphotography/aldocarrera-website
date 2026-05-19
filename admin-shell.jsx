@@ -14,6 +14,8 @@ const { useState: sS, useEffect: sE } = React;
    #/projects/:id/edit
    #/projects/:id/upload
    #/projects/:id/images
+   #/galleries
+   #/galleries/:token
    #/about
    #/services
    #/clients
@@ -33,6 +35,10 @@ function parseRoute(hash) {
     if (parts[2] === 'upload') return { name: 'project-upload', id };
     if (parts[2] === 'images' || !parts[2]) return { name: 'project-images', id };
   }
+  if (parts[0] === 'galleries') {
+    if (!parts[1]) return { name: 'galleries' };
+    return { name: 'gallery-detail', token: decodeURIComponent(parts[1]) };
+  }
   if (parts[0] === 'about')    return { name: 'about' };
   if (parts[0] === 'services') return { name: 'services' };
   if (parts[0] === 'clients')  return { name: 'clients' };
@@ -47,12 +53,13 @@ function navigate(to) {
    SIDEBAR NAV
    ============================================================ */
 const NAV = [
-  { id: 'dashboard', label: 'Dashboard', match: ['dashboard'],                  hash: '#/dashboard' },
-  { id: 'projects',  label: 'Projects',  match: ['projects','project-new','project-edit','project-upload','project-images'], hash: '#/projects' },
-  { id: 'about',     label: 'About',     match: ['about'],                       hash: '#/about' },
-  { id: 'services',  label: 'Services',  match: ['services'],                    hash: '#/services' },
-  { id: 'clients',   label: 'Clients',   match: ['clients'],                     hash: '#/clients' },
-  { id: 'settings',  label: 'Settings',  match: ['settings'],                    hash: '#/settings' },
+  { id: 'dashboard',  label: 'Dashboard', match: ['dashboard'],                  hash: '#/dashboard' },
+  { id: 'projects',   label: 'Projects',  match: ['projects','project-new','project-edit','project-upload','project-images'], hash: '#/projects' },
+  { id: 'galleries',  label: 'Galleries', match: ['galleries','gallery-detail'],  hash: '#/galleries' },
+  { id: 'about',      label: 'About',     match: ['about'],                       hash: '#/about' },
+  { id: 'services',   label: 'Services',  match: ['services'],                    hash: '#/services' },
+  { id: 'clients',    label: 'Clients',   match: ['clients'],                     hash: '#/clients' },
+  { id: 'settings',   label: 'Settings',  match: ['settings'],                    hash: '#/settings' },
 ];
 
 function AdminSidebar({ route, onLogout }) {
@@ -72,15 +79,15 @@ function AdminSidebar({ route, onLogout }) {
 
       <nav className="ad-side-nav">
         <div className="ad-side-section">Workspace</div>
-        {NAV.slice(0, 2).map(item => (
+        {NAV.slice(0, 3).map(item => (
           <SideLink key={item.id} item={item} route={route}/>
         ))}
         <div className="ad-side-section">Content</div>
-        {NAV.slice(2, 5).map(item => (
+        {NAV.slice(3, 6).map(item => (
           <SideLink key={item.id} item={item} route={route}/>
         ))}
         <div className="ad-side-section">System</div>
-        <SideLink item={NAV[5]} route={route}/>
+        <SideLink item={NAV[6]} route={route}/>
       </nav>
 
       <div className="ad-side-foot">
@@ -185,6 +192,8 @@ function AdminApp() {
     case 'project-edit':    view = <ProjectEditorView  projectId={route.id} navigate={navigate}/>; break;
     case 'project-upload':  view = <ProjectUploadView  projectId={route.id} navigate={navigate}/>; break;
     case 'project-images':  view = <ProjectImagesView  projectId={route.id} navigate={navigate}/>; break;
+    case 'galleries':       view = <GalleriesView       navigate={navigate}/>; break;
+    case 'gallery-detail':  view = <GalleryDetailView   token={route.token} navigate={navigate}/>; break;
     case 'about':           view = <AboutEditorView    navigate={navigate}/>; break;
     case 'services':        view = <ServicesEditorView navigate={navigate}/>; break;
     case 'clients':         view = <ClientsEditorView  navigate={navigate}/>; break;

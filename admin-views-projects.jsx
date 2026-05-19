@@ -461,6 +461,7 @@ function ProjectImagesView({ projectId, navigate }) {
   const [viewer, setViewer] = vS(null);
   const [dragFrom, setDragFrom] = vS(null);
   const [dragOver, setDragOver] = vS(null);
+  const [deckModal, setDeckModal] = vS(false);
 
   if (!project) return <Empty title="Project not found" sub={projectId} action={<Btn onClick={() => navigate('#/projects')}>Back to projects</Btn>}/>;
 
@@ -543,11 +544,13 @@ function ProjectImagesView({ projectId, navigate }) {
         ]}
         actions={
           <>
+            <Btn variant="ghost" onClick={() => setDeckModal(true)}>Share deck ↗</Btn>
             <Btn variant="ghost" onClick={() => navigate(`#/projects/${encodeURIComponent(project.id)}/edit`)}>Edit project</Btn>
             <Btn onClick={() => navigate(`#/projects/${encodeURIComponent(project.id)}/upload`)} icon="↑">Upload images</Btn>
           </>
         }
       />
+      <ShareDeckModal project={project} open={deckModal} onClose={() => setDeckModal(false)}/>
 
       <Card padding="md">
         <div className="ad-images-toolbar">
@@ -643,8 +646,10 @@ function ImageCard({ img, project, showMeta, selected, onToggleSelect, onOpen,
                     draggable, isDragging, isDragOver, position,
                     onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd }) {
   const cycle = (k) => window.AdminStore.updateImage(project.id, img.filename, { [k]: !img[k] });
+  const setCover = () => window.AdminStore.setCoverImage(project.id, img.filename);
   const cls = [
     'ad-image-card',
+    img.cover  ? 'is-cover'      : '',
     selected   ? 'is-selected'   : '',
     isDragging ? 'is-dragging'   : '',
     isDragOver ? 'is-drag-over'  : '',
@@ -695,6 +700,7 @@ function ImageCard({ img, project, showMeta, selected, onToggleSelect, onOpen,
         <button className={`ad-img-act ${img.selected ? 'on ok' : ''}`}      onClick={() => cycle('selected')}>SELECT</button>
         <button className={`ad-img-act ${img.favorite ? 'on accent' : ''}`}  onClick={() => cycle('favorite')}>FAV</button>
         <button className={`ad-img-act ${img.rejected ? 'on mute' : ''}`}    onClick={() => cycle('rejected')}>REJECT</button>
+        <button className={`ad-img-act ${img.cover ? 'on cover' : ''}`}      onClick={setCover}>COVER</button>
       </div>
     </div>
   );
@@ -772,6 +778,126 @@ function useMemoGroup(items, keyFn) {
 function useMemoClients() {
   window.useStoreSubscribe();
   return vM(() => window.AdminStore.getClients().map(c => c.name), []);
+}
+
+/* ============================================================
+   SHARE DECK MODAL
+   ============================================================ */
+function ShareDeckModal({ project, open, onClose }) {
+  const [decks, setDecks]     = vS([]);
+  const [creating, setCreating] = vS(false);
+  const [form, setForm]       = vS({ title: '', imagesFilter: 'selected', expiresAt: '' });
+  const [loading, setLoading] = vS(false);
+
+  vE(() => {
+    if (!open) return;
+    // Pre-fill title
+    setForm(f => ({ ...f, title: project.name + ' — To-Go Deck' }));
+    // Load existing deck links for this project
+    setLoading(true);
+    window.AdminStore.apiFetch('/api/decks')
+      .then(d => setDecks((d.decks || []).filter(dk => dk.projectId === project.id)))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [open, project.id]);
+
+  const deckURL = (token) => `${window.location.origin}/deck.html?token=${token}`;
+
+  const copy = (token) => {
+    navigator.clipboard.writeText(deckURL(token))
+      .then(() => toast('Link copied', 'ok'))
+      .catch(() => toast(deckURL(token), 'ok'));
+  };
+
+  const create = async () => {
+    setCreating(true);
+    try {
+      const dk = await window.AdminStore.apiFetch('/api/decks', {
+        method: 'POST',
+        body: JSON.stringify({
+          projectId:    project.id,
+          title:        form.title || project.name,
+          imagesFilter: form.imagesFilter,
+          expiresAt:    form.expiresAt ? new Date(form.expiresAt).toISOString() : null,
+        }),
+      });
+      setDecks(prev => [dk, ...prev]);
+      copy(dk.token);
+      toast('Deck link created — URL copied', 'ok');
+    } catch (e) {
+      toast('Error: ' + (e.message || 'failed'), 'error');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const remove = async (token) => {
+    if (!confirm('Delete this deck link?')) return;
+    try {
+      await window.AdminStore.apiFetch(`/api/decks/${token}`, { method: 'DELETE' });
+      setDecks(prev => prev.filter(d => d.token !== token));
+      toast('Deck link deleted', 'ok');
+    } catch (e) {
+      toast('Error: ' + e.message, 'error');
+    }
+  };
+
+  const selectedCount = project.images.filter(i => i.selected || i.favorite).length;
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      eyebrow="Share"
+      title="To-Go Deck link"
+      width={540}
+      footer={
+        <>
+          <Btn variant="ghost" onClick={onClose}>Close</Btn>
+          <Btn onClick={create} disabled={creating}>{creating ? 'Creating…' : 'Create & copy link'}</Btn>
+        </>
+      }
+    >
+      <Field label="Deck title" wide>
+        <TextInput value={form.title} onChange={v => setForm(f => ({ ...f, title: v }))} placeholder={project.name}/>
+      </Field>
+
+      <Field label="Images" wide hint={`Project has ${selectedCount} selected/favorite images.`}>
+        <select className="ad-select" value={form.imagesFilter} onChange={e => setForm(f => ({ ...f, imagesFilter: e.target.value }))}>
+          <option value="selected">Selected & favorite only ({selectedCount} images)</option>
+          <option value="all">All images ({project.images.filter(i => !i.rejected).length} images)</option>
+        </select>
+      </Field>
+
+      <Field label="Expires" hint="Leave blank for no expiry.">
+        <TextInput type="date" value={form.expiresAt} onChange={v => setForm(f => ({ ...f, expiresAt: v }))}/>
+      </Field>
+
+      {decks.length > 0 && (
+        <>
+          <div style={{ height: 1, background: 'var(--rule)', margin: '8px 0 16px' }}/>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--ink-muted)', marginBottom: 10 }}>Existing links</div>
+          {loading
+            ? <div style={{ color: 'var(--ink-muted)', fontSize: 13 }}>Loading…</div>
+            : decks.map(dk => (
+              <div key={dk.token} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--rule)' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{dk.title || project.name}</div>
+                  <div className="ad-mono ad-muted" style={{ fontSize: 11 }}>
+                    {dk.imagesFilter} · {dk.views || 0} views · {new Date(dk.createdAt).toLocaleDateString()}
+                    {dk.expiresAt && ` · expires ${new Date(dk.expiresAt).toLocaleDateString()}`}
+                  </div>
+                </div>
+                <button className="ad-link" onClick={() => copy(dk.token)}>Copy</button>
+                <a className="ad-link" href={deckURL(dk.token)} target="_blank" rel="noopener">Open ↗</a>
+                <button className="ad-link ad-link-quiet" onClick={() => remove(dk.token)}>Delete</button>
+              </div>
+            ))
+          }
+        </>
+      )}
+    </Modal>
+  );
 }
 
 Object.assign(window, {

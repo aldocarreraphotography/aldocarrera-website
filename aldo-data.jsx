@@ -348,7 +348,7 @@ function _aldoSortImgs(imgs) {
    portfolio expects. Drops rejected frames. */
 function _aldoToPublicProject(p) {
   const sorted = _aldoSortImgs(p.images).filter(img => !img.rejected);
-  const cover = sorted[0];
+  const cover = sorted.find(img => img.cover) || sorted[0];
   return {
     id: p.id,
     name: p.name,
