@@ -548,14 +548,43 @@ function DeckOverlay({ deck, onClose }) {
     return cv;
   };
 
+  // Render cover or closing page directly — no html2canvas.
+  const renderTextPage = (type) => {
+    const PW = 816, PH = 1056, SC = 2;
+    const cv = document.createElement('canvas');
+    cv.width = PW * SC; cv.height = PH * SC;
+    const ctx = cv.getContext('2d');
+    ctx.scale(SC, SC);
+    const PAPER = '#f6f4ef', INK = '#1a1a1a', SOFT = '#7a7468', RULE = '#c8c2b3';
+    ctx.fillStyle = PAPER; ctx.fillRect(0, 0, PW, PH);
+    ctx.strokeStyle = RULE; ctx.lineWidth = 0.5;
+    if (type === 'cover') {
+      ctx.beginPath(); ctx.moveTo(26, PH / 2 + 60); ctx.lineTo(PW - 26, PH / 2 + 60); ctx.stroke();
+      ctx.fillStyle = INK; ctx.font = 'bold 36px Inter, sans-serif';
+      ctx.fillText('Aldo Carrera', 26, PH / 2 - 10);
+      ctx.font = '13px "IBM Plex Mono", monospace'; ctx.fillStyle = SOFT;
+      ctx.fillText('PHOTOGRAPHER  ·  LOS ANGELES', 26, PH / 2 + 22);
+      ctx.font = '11px "IBM Plex Mono", monospace'; ctx.fillStyle = INK;
+      ctx.fillText(meta.title || 'Selected Work', 26, PH / 2 + 90);
+      ctx.fillStyle = SOFT;
+      ctx.fillText(new Date().toISOString().slice(0, 10), PW - 26 - ctx.measureText(new Date().toISOString().slice(0,10)).width, PH / 2 + 90);
+    } else {
+      ctx.beginPath(); ctx.moveTo(26, PH / 2 - 20); ctx.lineTo(PW - 26, PH / 2 - 20); ctx.stroke();
+      ctx.fillStyle = INK; ctx.font = '11px "IBM Plex Mono", monospace';
+      ctx.fillText('aldo@aldocarrera.com  ·  +1 (619) 971-7182  ·  @aldocarrera', 26, PH / 2 + 10);
+      ctx.fillStyle = SOFT;
+      ctx.fillText('aldocarrera.com', 26, PH / 2 + 30);
+    }
+    return cv;
+  };
+
   const downloadPDF = async () => {
-    if (!pagesRef.current) return;
     if (!window.jspdf) { alert('PDF engine still loading — please try again in a moment.'); return; }
 
     const totalPgs = totalPages;
     setExportStatus({ state: 'preparing', current: 0, total: totalPgs });
 
-    // Pre-fetch all item images as data URLs (parallel, bypasses CORS in canvas)
+    // Pre-fetch all images as data URLs in parallel — zero CORS in canvas ops
     const itemDataUrls = await Promise.all(items.map(async it => ({
       url:    await toDataUrl(it.photo),
       name:   it.name,
@@ -565,25 +594,14 @@ function DeckOverlay({ deck, onClose }) {
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF({ unit: 'pt', format: 'letter', orientation: 'portrait' });
     const PAGE_W = 612, PAGE_H = 792;
-    shellRef.current && shellRef.current.classList.add('dk-exporting');
 
     try {
-      // Page 1: cover — html2canvas (no photos, just text/styling)
+      // Cover page
       setExportStatus({ state: 'rendering', current: 1, total: totalPgs });
-      if (typeof window.html2canvas === 'function') {
-        const coverEl = pagesRef.current.querySelector('.dk-page');
-        if (coverEl) {
-          const cv = await window.html2canvas(coverEl, {
-            scale: 2, backgroundColor: '#f6f4ef',
-            useCORS: false, allowTaint: true, logging: false, imageTimeout: 0,
-            width: coverEl.offsetWidth, height: coverEl.offsetHeight,
-          });
-          pdf.addImage(cv.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, PAGE_W, PAGE_H, undefined, 'FAST');
-        }
-      }
+      pdf.addImage(renderTextPage('cover').toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, PAGE_W, PAGE_H, undefined, 'FAST');
       await new Promise(r => setTimeout(r, 0));
 
-      // Image pages: drawn directly, no html2canvas
+      // Image pages — direct canvas, no html2canvas
       if (meta.layout === 'duo') {
         for (let i = 0; i < itemDataUrls.length; i += 2) {
           const pgNum = 2 + Math.floor(i / 2);
@@ -604,19 +622,9 @@ function DeckOverlay({ deck, onClose }) {
         }
       }
 
-      // Last page: closing — html2canvas (no photos)
-      const allPages = Array.from(pagesRef.current.querySelectorAll('.dk-page'));
-      const lastEl = allPages[allPages.length - 1];
-      if (lastEl && typeof window.html2canvas === 'function') {
-        setExportStatus({ state: 'rendering', current: totalPgs, total: totalPgs });
-        const cv = await window.html2canvas(lastEl, {
-          scale: 2, backgroundColor: '#f6f4ef',
-          useCORS: false, allowTaint: true, logging: false, imageTimeout: 0,
-          width: lastEl.offsetWidth, height: lastEl.offsetHeight,
-        });
-        pdf.addPage('letter', 'portrait');
-        pdf.addImage(cv.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, PAGE_W, PAGE_H, undefined, 'FAST');
-      }
+      // Closing page
+      pdf.addPage('letter', 'portrait');
+      pdf.addImage(renderTextPage('closing').toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, PAGE_W, PAGE_H, undefined, 'FAST');
 
       const today = new Date().toISOString().slice(0, 10);
       pdf.save(`Aldo_Carrera_SelectedWork_${today}.pdf`);
@@ -626,8 +634,6 @@ function DeckOverlay({ deck, onClose }) {
       console.error('PDF export failed', err);
       alert('Sorry — PDF export failed. ' + (err?.message || ''));
       setExportStatus({ state: 'idle', current: 0, total: 0 });
-    } finally {
-      shellRef.current && shellRef.current.classList.remove('dk-exporting');
     }
   };
 
