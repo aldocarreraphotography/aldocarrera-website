@@ -1,0 +1,26 @@
+{
+  "name": "aldocarrera-website",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Aldo Carrera — photography portfolio and studio admin",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "clean": "rimraf dist",
+    "dev": "netlify dev",
+    "start": "npm run build && npx serve dist -l 5173",
+    "preview": "npx serve dist -l 5173"
+  },
+  "dependencies": {
+    "@netlify/blobs": "^8.1.0",
+    "exifr": "^7.1.3",
+    "jsonwebtoken": "^9.0.2"
+  },
+  "devDependencies": {
+    "netlify-cli": "^17.36.0",
+    "serve": "^14.2.4"
+  }
+}
