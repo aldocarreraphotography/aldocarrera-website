@@ -364,6 +364,7 @@ function _aldoToPublicProject(p) {
     note: p.description || '',
     crew: p.crew || '',
     location: p.location || '',
+    images: sorted,
   };
 }
 
