@@ -43,6 +43,16 @@
   to     = "/Admin.html"
   status = 200
 
+# Clean URLs for client-facing pages
+[[redirects]]
+  from   = "/gallery"
+  to     = "/gallery.html"
+  status = 200
+[[redirects]]
+  from   = "/deck"
+  to     = "/deck.html"
+  status = 200
+
 ################################################################
 # Headers
 ################################################################

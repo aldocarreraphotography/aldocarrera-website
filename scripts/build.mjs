@@ -55,6 +55,18 @@ const FILES = [
   'admin-views-auth.jsx',
   'admin-views-projects.jsx',
   'admin-views-content.jsx',
+  'admin-views-galleries.jsx',
+
+  // Client gallery (token-gated)
+  'gallery.html',
+  'gallery-styles.css',
+
+  // To-go deck (public slideshow)
+  'deck.html',
+  'deck-styles.css',
+
+  // Favicon
+  'favicon.svg',
 ];
 
 const DIRS = [
