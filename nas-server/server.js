@@ -711,6 +711,33 @@ app.post('/api/galleries', async (req, res) => {
   res.status(201).json({ ...gallery, password: gallery.password ? '••••' : null });
 });
 
+app.get('/api/galleries/:token', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  const gallery = await findGallery(req.params.token).catch(() => null);
+  if (!gallery) return res.status(404).json({ error: 'not_found' });
+
+  const data    = await readProjects();
+  const project = data.projects.find(p => p.id === gallery.projectId);
+  const images  = project
+    ? project.images
+        .filter(i => !i.rejected)
+        .sort((a, b) => (a.order ?? 9999) - (b.order ?? 9999))
+        .map(i => ({
+          filename: i.filename,
+          blobPath: i.blobPath,
+          order:    i.order,
+          exif:     i.exif || {},
+        }))
+    : [];
+
+  res.json({
+    ...gallery,
+    password: gallery.password ? '••••' : null,
+    projectName: project?.name || null,
+    images,
+  });
+});
+
 app.patch('/api/galleries/:token', async (req, res) => {
   if (!requireAuth(req, res)) return;
   const allowed = ['clientName', 'title', 'expiresAt', 'password', 'status'];

@@ -262,10 +262,7 @@ function GalleryDetailView({ token, navigate }) {
     (async () => {
       try {
         const data = await window.AdminStore.apiFetch(`/api/galleries/${token}`);
-        // Re-fetch the full project images from admin store
-        const store = window.AdminStore.getProjects();
-        const proj  = store.find(p => p.id === data.projectId);
-        setGallery({ ...data, _project: proj });
+        setGallery(data);
       } catch (e) {
         toast('Failed to load: ' + e.message, 'error');
       } finally {
@@ -277,11 +274,8 @@ function GalleryDetailView({ token, navigate }) {
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--ink-muted)' }}>Loading…</div>;
   if (!gallery) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--ink-muted)' }}>Not found.</div>;
 
-  const sels = gallery.selections || {};
-  const proj = gallery._project;
-  const images = proj
-    ? proj.images.filter(i => !i.rejected).sort((a, b) => (a.order ?? 9999) - (b.order ?? 9999))
-    : [];
+  const sels   = gallery.selections || {};
+  const images = gallery.images || [];
 
   const counts = { ALL: images.length, SELECT: 0, ALT: 0, KILL: 0, UNTAGGED: 0 };
   for (const img of images) {
@@ -354,6 +348,9 @@ function GalleryDetailView({ token, navigate }) {
               <div className="ad-gallery-card-body">
                 <div className="ad-mono ad-muted" style={{ fontSize: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{img.filename}</div>
                 {s.stars > 0 && <div style={{ color: '#c89b3c', fontSize: 12 }}>{'★'.repeat(s.stars)}</div>}
+                {Array.isArray(s.markups) && s.markups.length > 0 && (
+                  <div style={{ fontSize: 11, color: '#5a6fa8', marginTop: 2 }}>✎ {s.markups.length} markup{s.markups.length === 1 ? '' : 's'}</div>
+                )}
                 {s.note && <div style={{ fontSize: 11, color: 'var(--ink-muted)', marginTop: 2 }}>{s.note}</div>}
               </div>
             </div>
