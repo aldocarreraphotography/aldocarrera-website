@@ -767,6 +767,12 @@ body {
 }
 .ad-image-card.is-selected { border-color: var(--accent); box-shadow: var(--ad-ring); }
 .ad-image-card.is-cover    { outline: 2px solid #b8860b; outline-offset: -2px; }
+
+/* Sort control on Projects list */
+.ad-sort-control { display: flex; align-items: center; gap: 8px; }
+.ad-sort-label   { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink-muted); letter-spacing: .04em; }
+.ad-sort-select  { min-width: 180px; }
+.ad-sort-hint    { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink-muted); padding: 8px 4px 12px; }
 .ad-image-card-top {
   display: flex; justify-content: space-between; align-items: flex-start;
   padding: 10px 12px;

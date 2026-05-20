@@ -480,6 +480,8 @@ const AdminStore = {
     return { ...p, images: sortImagesByOrder(p.images) };
   },
   async createProject(input) {
+    const existing = readStore().projects || [];
+    const maxOrder = existing.reduce((m, p) => Math.max(m, p.order ?? 0), 0);
     const project = {
       id: input.id || nextId('PRJ'),
       name: input.name || 'Untitled project',
@@ -489,6 +491,8 @@ const AdminStore = {
       month: input.month || '',
       description: input.description || '',
       location: input.location || '',
+      public: input.public ?? false,  // default private — flip to public when ready
+      order: maxOrder + 1,
       createdAt: nowISO(),
       updatedAt: nowISO(),
       folderPath: `archive/${input.year || new Date().getFullYear()}/${input.id || 'NEW'}`,
@@ -529,6 +533,15 @@ const AdminStore = {
   },
   deleteProject(id) {
     patchStore(s => { s.projects = s.projects.filter(p => p.id !== id); });
+  },
+  /* Set explicit display order from an array of project IDs (first → order 0). */
+  reorderProjects(orderedIds) {
+    patchStore(s => {
+      const map = new Map(orderedIds.map((id, i) => [id, i]));
+      s.projects.forEach(p => {
+        if (map.has(p.id)) p.order = map.get(p.id);
+      });
+    });
   },
 
   // Images --------------------------------------------------------------

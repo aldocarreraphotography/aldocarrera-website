@@ -514,6 +514,7 @@ app.get('/api/public/site', async (req, res) => {
   const services = pickArr(servicesFile?.services, DEFAULT_SERVICES);
   const settings = pick(settingsFile,          DEFAULT_SETTINGS, 'contactEmail');
 
+  const sortMode = settings.projectSort || 'year';
   const cleanedFromStore = (projectsFile?.projects || [])
     .filter(p => p.public !== false)
     .map(p => {
@@ -522,7 +523,12 @@ app.get('/api/public/site', async (req, res) => {
       if (coverIdx > 0) { const [c] = imgs.splice(coverIdx, 1); imgs.unshift(c); }
       return { ...p, images: imgs };
     })
-    .filter(p => p.images.length > 0);
+    .filter(p => p.images.length > 0)
+    .sort((a, b) => {
+      if (sortMode === 'manual') return (a.order ?? 9999) - (b.order ?? 9999);
+      if (sortMode === 'client') return (a.client || '').localeCompare(b.client || '');
+      return Number(b.year || 0) - Number(a.year || 0);
+    });
   const projects = pickArr(cleanedFromStore, DEFAULT_PROJECTS);
 
   const videos = (videosFile?.videos || [])

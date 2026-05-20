@@ -436,6 +436,12 @@ function _aldoReplaceObject(target, src) {
 function _aldoApplyData(data) {
   if (!data) return false;
   const publicProjects = (data.projects || []).filter(p => p.public !== false);
+  const sortMode = (data.settings && data.settings.projectSort) || 'year';
+  publicProjects.sort((a, b) => {
+    if (sortMode === 'manual') return (a.order ?? 9999) - (b.order ?? 9999);
+    if (sortMode === 'client') return (a.client || '').localeCompare(b.client || '');
+    return Number(b.year || 0) - Number(a.year || 0);
+  });
   const newProjects = publicProjects.map(_aldoToPublicProject);
   const newArchive  = _aldoToPublicArchive(publicProjects);
   const newVideos   = (data.videos   || []).filter(v => v.public !== false).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));

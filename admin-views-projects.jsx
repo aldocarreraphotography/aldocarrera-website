@@ -169,16 +169,63 @@ function ProjectRow({ project, navigate }) {
    ============================================================ */
 function ProjectsListView({ navigate }) {
   window.useStoreSubscribe();
+  const settings  = window.AdminStore.getSettings();
+  const sortMode  = settings.projectSort || 'year';
   const [q, setQ] = vS('');
-  const projects = window.AdminStore.getProjects()
-    .filter(p => {
-      if (!q) return true;
-      const s = q.toLowerCase();
-      return p.name.toLowerCase().includes(s)
-          || p.client.toLowerCase().includes(s)
-          || p.id.toLowerCase().includes(s);
-    });
-  const years = useMemoGroup(projects, p => p.year);
+  const [dragFrom, setDragFrom] = vS(null);
+  const [dragOver, setDragOver] = vS(null);
+
+  const setSortMode = (mode) => {
+    window.AdminStore.setSettings({ projectSort: mode });
+  };
+
+  const all = window.AdminStore.getProjects();
+  const filtered = all.filter(p => {
+    if (!q) return true;
+    const s = q.toLowerCase();
+    return p.name.toLowerCase().includes(s)
+        || p.client.toLowerCase().includes(s)
+        || p.id.toLowerCase().includes(s);
+  });
+
+  const sorted = [...filtered].sort((a, b) => {
+    if (sortMode === 'manual') return (a.order ?? 9999) - (b.order ?? 9999);
+    if (sortMode === 'client') return (a.client || '').localeCompare(b.client || '');
+    return Number(b.year || 0) - Number(a.year || 0);
+  });
+
+  const onDragStart = (id) => (e) => {
+    if (sortMode !== 'manual') return;
+    setDragFrom(id);
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', id); } catch (_) {}
+  };
+  const onDragOver = (id) => (e) => {
+    if (sortMode !== 'manual' || !dragFrom) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOver !== id) setDragOver(id);
+  };
+  const onDragLeave = () => setDragOver(null);
+  const onDrop = (id) => (e) => {
+    if (sortMode !== 'manual' || !dragFrom) return;
+    e.preventDefault();
+    if (dragFrom === id) { setDragFrom(null); setDragOver(null); return; }
+    const ids = sorted.map(p => p.id);
+    const from = ids.indexOf(dragFrom);
+    const to   = ids.indexOf(id);
+    if (from === -1 || to === -1) return;
+    ids.splice(from, 1);
+    ids.splice(to, 0, dragFrom);
+    window.AdminStore.reorderProjects(ids);
+    setDragFrom(null);
+    setDragOver(null);
+    toast('Order saved', 'ok');
+  };
+
+  const years = useMemoGroup(sorted, p => p.year);
+  const showAsGroups = sortMode === 'year';
+
   return (
     <>
       <PageHeader
@@ -188,19 +235,49 @@ function ProjectsListView({ navigate }) {
         actions={<Btn onClick={() => navigate('#/projects/new')} icon="+">New project</Btn>}
       />
       <Card padding="md">
-        <div className="ad-search-row">
+        <div className="ad-search-row" style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
           <input
             className="ad-input ad-search"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search projects, clients, or IDs…"
+            style={{ flex: 1 }}
           />
+          <div className="ad-sort-control">
+            <label className="ad-sort-label">Sort:</label>
+            <select className="ad-select ad-sort-select" value={sortMode} onChange={(e) => setSortMode(e.target.value)}>
+              <option value="year">By year (newest)</option>
+              <option value="client">By client (A–Z)</option>
+              <option value="manual">Manual order</option>
+            </select>
+          </div>
         </div>
-        {projects.length === 0
+        {sortMode === 'manual' && (
+          <div className="ad-sort-hint">Drag any row to reorder. New projects appear at the bottom.</div>
+        )}
+        {sorted.length === 0
           ? <Empty title="No projects match" sub="Try a different search."/>
-          : Object.keys(years).sort((a,b) => b - a).map(y => (
-              <YearGroup key={y} year={y} projects={years[y]} navigate={navigate}/>
-            ))
+          : showAsGroups
+            ? Object.keys(years).sort((a,b) => b - a).map(y => (
+                <YearGroup key={y} year={y} projects={years[y]} navigate={navigate}/>
+              ))
+            : (
+              <div className="ad-project-list">
+                {sorted.map(p => (
+                  <div
+                    key={p.id}
+                    draggable={sortMode === 'manual'}
+                    onDragStart={onDragStart(p.id)}
+                    onDragOver={onDragOver(p.id)}
+                    onDragLeave={onDragLeave}
+                    onDrop={onDrop(p.id)}
+                    className={`${sortMode === 'manual' ? 'is-draggable' : ''} ${dragOver === p.id ? 'is-drag-over' : ''} ${dragFrom === p.id ? 'is-dragging' : ''}`}
+                  >
+                    <ProjectRow project={p} navigate={navigate}/>
+                  </div>
+                ))}
+              </div>
+            )
         }
       </Card>
     </>
