@@ -457,8 +457,14 @@ const AdminStore = {
     if (!token) return false;
     try {
       const parts = token.split('.');
-      const payload = JSON.parse(atob(parts[1]));
-      return payload.exp > Date.now();
+      // base64url → base64 (handle both formats)
+      const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      const payload = JSON.parse(atob(b64));
+      if (!payload.exp) return true;
+      // JWT exp is seconds; legacy prototype tokens used ms. Normalise: any
+      // exp under 10^12 is treated as seconds, above as ms.
+      const expMs = payload.exp < 1e12 ? payload.exp * 1000 : payload.exp;
+      return expMs > Date.now();
     } catch (_) { return false; }
   },
 
