@@ -129,24 +129,140 @@ function AnFunnelRow({ label, value, total, color }) {
 /* ============================================================
    ANALYTICS VIEW
    ============================================================ */
+/* ── Client-side analytics computation ─────────────────────────────
+   Permanent fix: do not depend on a /api/analytics endpoint. Compute
+   everything from data we already have access to:
+     • projects   — from AdminStore (in-memory, always available)
+     • galleries  — from /api/galleries (existing endpoint)
+     • videos     — from /api/videos    (existing endpoint)
+   If galleries or videos fail to fetch, we still show the projects
+   sections so the page is never blank.
+─────────────────────────────────────────────────────────────────── */
+function _computeAnalytics(projects, galleries, videos) {
+  let totalImages = 0, totalStorage = 0, totalSelected = 0;
+  let totalFavorite = 0, totalRejected = 0, totalCover = 0;
+  const byYear = {}, byType = {}, projectsByClient = {}, byMonth = {};
+
+  for (const p of (projects || [])) {
+    const imgs = p.images || [];
+    totalImages += imgs.length;
+    projectsByClient[p.client || 'Unknown'] = (projectsByClient[p.client || 'Unknown'] || 0) + 1;
+    byYear[String(p.year || 'Unknown')]       = (byYear[String(p.year || 'Unknown')] || 0) + imgs.length;
+    byType[(p.type || 'Other').toUpperCase()] = (byType[(p.type || 'Other').toUpperCase()] || 0) + imgs.length;
+
+    for (const img of imgs) {
+      totalStorage += img.exif?.fileSize || 0;
+      if (img.selected) totalSelected++;
+      if (img.favorite) totalFavorite++;
+      if (img.rejected) totalRejected++;
+      if (img.cover)    totalCover++;
+      const dt = img.exif?.dateTaken || img.createdAt;
+      if (dt) {
+        const m = dt.slice(0, 7);
+        byMonth[m] = (byMonth[m] || 0) + 1;
+      }
+    }
+  }
+
+  let totalViews = 0, neverOpened = 0, galSubmitted = 0, galArchived = 0;
+  let totalSelects = 0, totalAlts = 0, totalKills = 0, totalReviewed = 0;
+  let totalTurnaroundDays = 0, turnaroundCount = 0;
+
+  const galleryRows = (galleries || []).map(g => {
+    const sels = g.selections || {};
+    const vals = Object.values(sels);
+    const sel  = vals.filter(s => s.label === 'SELECT').length;
+    const alt  = vals.filter(s => s.label === 'ALT').length;
+    const kill = vals.filter(s => s.label === 'KILL').length;
+    const rev  = vals.filter(s => s.label).length;
+    totalViews    += (g.viewCount || 0);
+    totalSelects  += sel;
+    totalAlts     += alt;
+    totalKills    += kill;
+    totalReviewed += rev;
+    if (!g.viewCount) neverOpened++;
+    if (g.status === 'submitted') {
+      galSubmitted++;
+      if (g.createdAt && g.submittedAt) {
+        const days = (new Date(g.submittedAt) - new Date(g.createdAt)) / 86400000;
+        if (days >= 0 && days < 365) { totalTurnaroundDays += days; turnaroundCount++; }
+      }
+    }
+    if (g.status === 'archived') galArchived++;
+    return {
+      token: g.token, title: g.title, clientName: g.clientName,
+      status: g.status || 'open',
+      viewCount: g.viewCount || 0, lastViewedAt: g.lastViewedAt || null,
+      selects: sel, alts: alt, kills: kill, reviewed: rev,
+      createdAt: g.createdAt || null, submittedAt: g.submittedAt || null,
+    };
+  });
+
+  const topByViews = galleryRows.slice().sort((a, b) => b.viewCount - a.viewCount).slice(0, 5);
+  const avgTurnaround = turnaroundCount > 0 ? Math.round(totalTurnaroundDays / turnaroundCount) : null;
+
+  const now = new Date();
+  const months = Array.from({ length: 12 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1);
+    return d.toISOString().slice(0, 7);
+  });
+  const uploadsByMonth = months.map(m => ({ month: m, count: byMonth[m] || 0 }));
+
+  return {
+    generatedAt: new Date().toISOString(),
+    overview: {
+      totalProjects:  (projects || []).length,
+      publicProjects: (projects || []).filter(p => p.public !== false).length,
+      totalImages, totalStorage, totalSelected, totalFavorite,
+      totalRejected, totalCover,
+      totalVideos:  (videos || []).length,
+      publicVideos: (videos || []).filter(v => v.public !== false).length,
+    },
+    projects: {
+      byYear:   Object.entries(byYear).sort((a,b) => b[0].localeCompare(a[0])).map(([year, count]) => ({ year, count })),
+      byType:   Object.entries(byType).sort((a,b) => b[1] - a[1]).map(([type, count]) => ({ type, count })),
+      byClient: Object.entries(projectsByClient).sort((a,b) => b[1] - a[1]).slice(0, 12).map(([client, count]) => ({ client, count })),
+    },
+    galleries: {
+      total:        (galleries || []).length,
+      open:         (galleries || []).length - galSubmitted - galArchived,
+      submitted:    galSubmitted,
+      archived:     galArchived,
+      totalViews, neverOpened, totalSelects, totalAlts, totalKills, totalReviewed,
+      avgTurnaroundDays: avgTurnaround,
+      topByViews,
+    },
+    activity: { uploadsByMonth },
+  };
+}
+
 function AnalyticsView({ navigate }) {
+  window.useStoreSubscribe();
   const [data,    setData]    = anS(null);
   const [loading, setLoading] = anS(true);
-  const [error,   setError]   = anS(null);
+  const [warning, setWarning] = anS(null);
   const [refreshed, setRefreshed] = anS(null);
 
   const load = async () => {
     setLoading(true);
-    setError(null);
-    try {
-      const d = await window.AdminStore.apiFetch('/api/analytics');
-      setData(d);
-      setRefreshed(new Date());
-    } catch (e) {
-      setError(e.message || 'Failed to load analytics');
-    } finally {
-      setLoading(false);
-    }
+    setWarning(null);
+
+    // Projects come from the in-memory store — always available.
+    const projects = window.AdminStore.getProjects() || [];
+
+    // Galleries + videos come from the API. Tolerate failure for each.
+    const fails = [];
+    const [galRes, vidRes] = await Promise.all([
+      window.AdminStore.apiFetch('/api/galleries').then(d => d.galleries || d || [])
+        .catch(e => { fails.push('galleries'); console.warn('[analytics] galleries fetch failed:', e?.message); return []; }),
+      window.AdminStore.apiFetch('/api/videos').then(d => d.videos || d || [])
+        .catch(e => { fails.push('videos'); console.warn('[analytics] videos fetch failed:', e?.message); return []; }),
+    ]);
+
+    setData(_computeAnalytics(projects, galRes, vidRes));
+    if (fails.length) setWarning(`Could not reach ${fails.join(' + ')} API — showing project data only.`);
+    setRefreshed(new Date());
+    setLoading(false);
   };
 
   anE(() => { load(); }, []);
@@ -155,12 +271,6 @@ function AnalyticsView({ navigate }) {
     <div style={{ padding: 60, textAlign: 'center', color: 'var(--ink-muted)' }}>
       <div style={{ fontSize: 28, marginBottom: 12 }}>◌</div>
       Computing analytics…
-    </div>
-  );
-  if (error) return (
-    <div style={{ padding: 40 }}>
-      <div className="ad-muted" style={{ marginBottom: 16 }}>Error: {error}</div>
-      <Btn onClick={load}>Retry</Btn>
     </div>
   );
   if (!data) return null;
@@ -193,6 +303,14 @@ function AnalyticsView({ navigate }) {
           </>
         }
       />
+
+      {warning && (
+        <div style={{
+          padding: '10px 14px', marginBottom: 16,
+          background: '#fff4d6', border: '1px solid #e6c46a', borderRadius: 8,
+          fontSize: 12, color: '#6a5310',
+        }}>⚠ {warning}</div>
+      )}
 
       {/* ── Overview strip ─────────────────────────────────────────── */}
       <div className="an-overview-grid">

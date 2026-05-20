@@ -1040,6 +1040,136 @@ function buildDefaultProjects() {
 }
 
 /* ------------------------------------------------------------------ */
+/* Analytics                                                           */
+/* ------------------------------------------------------------------ */
+
+app.get('/api/analytics', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+
+  const [projectsData, galleriesData, videosData] = await Promise.all([
+    readProjects().catch(() => ({ projects: [] })),
+    readGalleries().catch(() => ({ galleries: [] })),
+    readVideos().catch(()    => ({ videos: [] })),
+  ]);
+
+  const projects  = projectsData.projects   || [];
+  const galleries = galleriesData.galleries || [];
+  const videos    = videosData.videos       || [];
+
+  // ── Images aggregation ──────────────────────────────────────────────
+  let totalImages = 0, totalStorage = 0, totalSelected = 0;
+  let totalFavorite = 0, totalRejected = 0, totalCover = 0;
+  const byYear = {}, byType = {}, projectsByClient = {}, byMonth = {};
+
+  for (const p of projects) {
+    const imgs = p.images || [];
+    totalImages   += imgs.length;
+    projectsByClient[p.client || 'Unknown'] = (projectsByClient[p.client || 'Unknown'] || 0) + 1;
+    byYear[String(p.year || 'Unknown')]     = (byYear[String(p.year || 'Unknown')] || 0) + imgs.length;
+    byType[(p.type || 'Other').toUpperCase()] = (byType[(p.type || 'Other').toUpperCase()] || 0) + imgs.length;
+
+    for (const img of imgs) {
+      totalStorage  += img.exif?.fileSize || 0;
+      if (img.selected)  totalSelected++;
+      if (img.favorite)  totalFavorite++;
+      if (img.rejected)  totalRejected++;
+      if (img.cover)     totalCover++;
+      const dt = img.exif?.dateTaken;
+      if (dt) {
+        const m = dt.slice(0, 7);
+        byMonth[m] = (byMonth[m] || 0) + 1;
+      }
+    }
+  }
+
+  // ── Gallery aggregation ─────────────────────────────────────────────
+  let totalViews = 0, neverOpened = 0, galSubmitted = 0, galArchived = 0;
+  let totalSelects = 0, totalAlts = 0, totalKills = 0, totalReviewed = 0;
+  let totalTurnaroundDays = 0, turnaroundCount = 0;
+
+  const galleryRows = galleries.map(g => {
+    const sels   = g.selections || {};
+    const vals   = Object.values(sels);
+    const sel    = vals.filter(s => s.label === 'SELECT').length;
+    const alt    = vals.filter(s => s.label === 'ALT').length;
+    const kill   = vals.filter(s => s.label === 'KILL').length;
+    const rev    = vals.filter(s => s.label).length;
+    totalViews   += (g.viewCount || 0);
+    totalSelects += sel;
+    totalAlts    += alt;
+    totalKills   += kill;
+    totalReviewed += rev;
+    if (!g.viewCount) neverOpened++;
+    if (g.status === 'submitted') {
+      galSubmitted++;
+      if (g.createdAt && g.submittedAt) {
+        const days = (new Date(g.submittedAt) - new Date(g.createdAt)) / 86400000;
+        if (days >= 0 && days < 365) { totalTurnaroundDays += days; turnaroundCount++; }
+      }
+    }
+    if (g.status === 'archived') galArchived++;
+    return {
+      token:       g.token,
+      title:       g.title,
+      clientName:  g.clientName,
+      status:      g.status || 'open',
+      viewCount:   g.viewCount   || 0,
+      lastViewedAt: g.lastViewedAt || null,
+      selects: sel, alts: alt, kills: kill, reviewed: rev,
+      createdAt:   g.createdAt   || null,
+      submittedAt: g.submittedAt || null,
+    };
+  });
+
+  const topByViews = galleryRows.slice().sort((a, b) => b.viewCount - a.viewCount).slice(0, 5);
+  const avgTurnaround = turnaroundCount > 0 ? Math.round(totalTurnaroundDays / turnaroundCount) : null;
+
+  // ── Upload activity — last 12 months ───────────────────────────────
+  const now = new Date();
+  const months = Array.from({ length: 12 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1);
+    return d.toISOString().slice(0, 7);
+  });
+  const uploadsByMonth = months.map(m => ({ month: m, count: byMonth[m] || 0 }));
+
+  res.json({
+    generatedAt: new Date().toISOString(),
+    overview: {
+      totalProjects:  projects.length,
+      publicProjects: projects.filter(p => p.public !== false).length,
+      totalImages,
+      totalStorage,
+      totalSelected,
+      totalFavorite,
+      totalRejected,
+      totalCover,
+      totalVideos:    videos.length,
+      publicVideos:   videos.filter(v => v.public !== false).length,
+    },
+    projects: {
+      byYear:    Object.entries(byYear).sort((a,b) => b[0].localeCompare(a[0])).map(([year, count]) => ({ year, count })),
+      byType:    Object.entries(byType).sort((a,b) => b[1] - a[1]).map(([type, count]) => ({ type, count })),
+      byClient:  Object.entries(projectsByClient).sort((a,b) => b[1] - a[1]).slice(0, 12).map(([client, count]) => ({ client, count })),
+    },
+    galleries: {
+      total:        galleries.length,
+      open:         galleries.length - galSubmitted - galArchived,
+      submitted:    galSubmitted,
+      archived:     galArchived,
+      totalViews,
+      neverOpened,
+      totalSelects,
+      totalAlts,
+      totalKills,
+      totalReviewed,
+      avgTurnaroundDays: avgTurnaround,
+      topByViews,
+    },
+    activity: { uploadsByMonth },
+  });
+});
+
+/* ------------------------------------------------------------------ */
 /* Start                                                               */
 /* ------------------------------------------------------------------ */
 

@@ -2587,3 +2587,50 @@ input, textarea, select {
 .video-player-iframe, .video-player-el { flex: 1; width: 100%; min-height: 0; border: none; display: block; background: #0e0d0c; }
 .video-player-desc { padding: 10px 16px; font-size: 12px; color: rgba(255,255,255,.5); font-style: italic; flex-shrink: 0; }
 .video-player-empty { flex: 1; display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,.3); font-size: 13px; }
+
+/* ============================================================
+   ALDO LOGO — visibility boost + occasional RGB-split glitch
+   ============================================================ */
+.aldo-logo-mark {
+  overflow: visible;
+  filter: drop-shadow(0 1px 0 rgba(214, 62, 90, 0.35))
+          drop-shadow(0 0 4px rgba(214, 62, 90, 0.25));
+}
+.aldo-logo-mark .aldo-logo-ghost {
+  opacity: 0;
+  mix-blend-mode: screen;
+  transform-origin: center;
+  animation: aldo-glitch-ghost 7s steps(1, end) infinite;
+}
+.aldo-logo-mark .aldo-logo-ghost-cyan    { animation-delay: 0s;   }
+.aldo-logo-mark .aldo-logo-ghost-magenta { animation-delay: 0.05s; }
+.aldo-logo-mark .aldo-logo-main {
+  animation: aldo-glitch-main 7s steps(1, end) infinite;
+}
+.aldo-logo-mark:hover .aldo-logo-ghost,
+.aldo-logo-mark:hover .aldo-logo-main {
+  animation-duration: 0.9s;
+}
+@keyframes aldo-glitch-ghost {
+  0%, 92%, 100%       { opacity: 0; transform: translate(0, 0); }
+  93%                 { opacity: 0.9; transform: translate(-3px, 1px); }
+  94%                 { opacity: 0.7; transform: translate(2px, -1px); }
+  95%                 { opacity: 0.9; transform: translate(-1px, 2px); }
+  96%                 { opacity: 0; transform: translate(0, 0); }
+  98%                 { opacity: 0.5; transform: translate(2px, 0); }
+  99%                 { opacity: 0; transform: translate(0, 0); }
+}
+@keyframes aldo-glitch-main {
+  0%, 92%, 100%       { transform: translate(0, 0); }
+  93%                 { transform: translate(1px, 0); }
+  94%                 { transform: translate(-1px, 0); }
+  95%                 { transform: translate(0, 1px); }
+  96%                 { transform: translate(0, 0); }
+  98%                 { transform: translate(-1px, 0); }
+  99%                 { transform: translate(0, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .aldo-logo-mark .aldo-logo-ghost,
+  .aldo-logo-mark .aldo-logo-main { animation: none; }
+  .aldo-logo-mark .aldo-logo-ghost { opacity: 0; }
+}

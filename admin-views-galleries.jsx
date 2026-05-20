@@ -485,15 +485,34 @@ function GalleryCreateModal({ open, onClose, onCreated, prefill }) {
 
 /* ============================================================
    PDF EXPORT — gallery selects
+   options: {
+     includeSelect:  bool (default true)
+     includeAlt:     bool (default true)
+     includeKill:    bool (default false)
+     includeMarkups: bool (default true)
+     includeNotes:   bool (default true)
+     includeStars:   bool (default true)
+   }
    ============================================================ */
-async function exportGallerySelectsPDF(gallery, images, sels) {
+async function exportGallerySelectsPDF(gallery, images, sels, options = {}) {
   if (!window.jspdf) { toast('PDF engine still loading — try again in a moment.', 'warn'); return; }
 
-  const selImages = images.filter(img => {
-    const label = sels[img.filename]?.label;
-    return label === 'SELECT' || label === 'ALT';
-  });
-  if (selImages.length === 0) { toast('No selects or alts to export.', 'warn'); return; }
+  const opts = {
+    includeSelect:  options.includeSelect  !== false,
+    includeAlt:     options.includeAlt     !== false,
+    includeKill:    options.includeKill    === true,
+    includeMarkups: options.includeMarkups !== false,
+    includeNotes:   options.includeNotes   !== false,
+    includeStars:   options.includeStars   !== false,
+  };
+
+  const wanted = new Set();
+  if (opts.includeSelect) wanted.add('SELECT');
+  if (opts.includeAlt)    wanted.add('ALT');
+  if (opts.includeKill)   wanted.add('KILL');
+
+  const selImages = images.filter(img => wanted.has(sels[img.filename]?.label));
+  if (selImages.length === 0) { toast('Nothing to export with current filters.', 'warn'); return; }
 
   toast(`Generating PDF for ${selImages.length} images…`, 'ok');
 
@@ -518,13 +537,14 @@ async function exportGallerySelectsPDF(gallery, images, sels) {
 
   const drawContain = (ctx, img, x, y, w, h) => {
     ctx.fillStyle = PAPER; ctx.fillRect(x, y, w, h);
-    if (!img) return;
+    if (!img) return null;
     const ia = img.naturalWidth / img.naturalHeight;
     const sa = w / h;
     let dw, dh, dx, dy;
     if (ia > sa) { dw = w; dh = w / ia; dx = x; dy = y + (h - dh) / 2; }
     else         { dh = h; dw = h * ia; dy = y; dx = x + (w - dw) / 2; }
     ctx.drawImage(img, dx, dy, dw, dh);
+    return { x: dx, y: dy, w: dw, h: dh };
   };
 
   await document.fonts.ready;
@@ -548,28 +568,58 @@ async function exportGallerySelectsPDF(gallery, images, sels) {
     const dataUrl = await toDataUrl(imgObj.blobPath);
     const img     = await loadImg(dataUrl);
     const imgArea = { x: PL, y: PT + 22, w: PW - PL * 2, h: 820 };
-    drawContain(ctx, img, imgArea.x, imgArea.y, imgArea.w, imgArea.h);
+    const drawn   = drawContain(ctx, img, imgArea.x, imgArea.y, imgArea.w, imgArea.h);
+
+    // Markups (if requested + present)
+    const markups = selObj.markups || [];
+    if (opts.includeMarkups && drawn && markups.length) {
+      const b = { ox: drawn.x, oy: drawn.y, rw: drawn.w, rh: drawn.h };
+      for (const mk of markups) {
+        _drawShape(ctx, b, mk.tool, mk.shape, mk.color || '#d63e5a', 2.2);
+      }
+    }
 
     // Caption strip
     const capY = imgArea.y + imgArea.h + 14;
     ctx.strokeStyle = RULE; ctx.lineWidth = 0.75;
     ctx.beginPath(); ctx.moveTo(PL, capY); ctx.lineTo(PW - PL, capY); ctx.stroke();
 
-    const labelColor = selObj.label === 'SELECT' ? '#2a7a4f' : '#2a5a8a';
+    const labelColor =
+      selObj.label === 'SELECT' ? '#2a7a4f' :
+      selObj.label === 'ALT'    ? '#2a5a8a' :
+      selObj.label === 'KILL'   ? '#b84242' : INK;
     ctx.fillStyle = labelColor; ctx.font = '500 11px "IBM Plex Mono", monospace';
     ctx.fillText(selObj.label || '', PL, capY + 20);
 
     ctx.fillStyle = INK; ctx.font = '10px "IBM Plex Mono", monospace';
     ctx.fillText(imgObj.filename, PL + 70, capY + 20);
 
-    if (selObj.stars > 0) {
+    if (opts.includeStars && selObj.stars > 0) {
       ctx.fillStyle = '#c89b3c'; ctx.font = '12px serif';
       ctx.fillText('★'.repeat(selObj.stars), PW - PL - selObj.stars * 14, capY + 20);
     }
 
-    if (selObj.note) {
+    let nextY = capY + 36;
+    if (opts.includeNotes && selObj.note) {
       ctx.fillStyle = SOFT; ctx.font = '10px Inter, sans-serif';
-      ctx.fillText(selObj.note.slice(0, 120), PL, capY + 36);
+      ctx.fillText(selObj.note.slice(0, 120), PL, nextY);
+      nextY += 14;
+    }
+
+    // Markup comment list (only if markups included + have comments)
+    if (opts.includeMarkups && markups.length) {
+      const withComments = markups.filter(m => m.comment);
+      if (withComments.length) {
+        ctx.fillStyle = SOFT; ctx.font = '9px "IBM Plex Mono", monospace';
+        ctx.fillText(`MARKUPS (${markups.length})`, PL, nextY);
+        nextY += 12;
+        ctx.fillStyle = INK; ctx.font = '9px Inter, sans-serif';
+        for (let i = 0; i < Math.min(withComments.length, 4); i++) {
+          const c = withComments[i].comment.slice(0, 110);
+          ctx.fillText(`• ${c}`, PL, nextY);
+          nextY += 11;
+        }
+      }
     }
 
     return cv;
@@ -609,6 +659,15 @@ function GalleryDetailView({ token, navigate }) {
   const [lightbox, setLightbox] = gS(null); // img object | null
   const [exporting, setExporting] = gS(false);
   const [showRound, setShowRound] = gS(false);
+  const [showPDFOpts, setShowPDFOpts] = gS(false);
+  const [pdfOpts, setPdfOpts] = gS({
+    includeSelect:  true,
+    includeAlt:     true,
+    includeKill:    false,
+    includeMarkups: true,
+    includeNotes:   true,
+    includeStars:   true,
+  });
 
   gE(() => {
     (async () => {
@@ -660,13 +719,23 @@ function GalleryDetailView({ token, navigate }) {
   };
 
   const doExportPDF = async () => {
+    setShowPDFOpts(false);
     setExporting(true);
     try {
-      await exportGallerySelectsPDF(gallery, images, sels);
+      await exportGallerySelectsPDF(gallery, images, sels, pdfOpts);
     } finally {
       setExporting(false);
     }
   };
+
+  // Count how many images match the current option filters (live preview)
+  const pdfMatchCount = (() => {
+    const wanted = new Set();
+    if (pdfOpts.includeSelect) wanted.add('SELECT');
+    if (pdfOpts.includeAlt)    wanted.add('ALT');
+    if (pdfOpts.includeKill)   wanted.add('KILL');
+    return images.filter(img => wanted.has(sels[img.filename]?.label)).length;
+  })();
 
   return (
     <>
@@ -676,8 +745,8 @@ function GalleryDetailView({ token, navigate }) {
         crumbs={[{ label: 'Admin', href: '#/dashboard' }, { label: 'Galleries', href: '#/galleries' }, { label: gallery.clientName || gallery.token }]}
         actions={
           <>
-            <Btn variant="ghost" onClick={doExportPDF} disabled={exporting || counts.SELECT + counts.ALT === 0}>
-              {exporting ? 'Exporting…' : `Export PDF (${counts.SELECT + counts.ALT})`}
+            <Btn variant="ghost" onClick={() => setShowPDFOpts(true)} disabled={exporting || counts.SELECT + counts.ALT + counts.KILL === 0}>
+              {exporting ? 'Exporting…' : 'Export PDF…'}
             </Btn>
             <Btn variant="ghost" onClick={copyLink}>Copy client link</Btn>
             <Btn variant="ghost" onClick={() => setShowRound(true)} title="Create a new gallery for a retouching round">+ New round</Btn>
@@ -739,6 +808,67 @@ function GalleryDetailView({ token, navigate }) {
             navigate(`#/galleries/${g.token}`);
           }}
         />
+      )}
+
+      {showPDFOpts && (
+        <Modal
+          open={showPDFOpts}
+          onClose={() => setShowPDFOpts(false)}
+          eyebrow="Export"
+          title="PDF export options"
+          width={480}
+          footer={
+            <>
+              <Btn variant="ghost" onClick={() => setShowPDFOpts(false)}>Cancel</Btn>
+              <Btn onClick={doExportPDF} disabled={pdfMatchCount === 0}>
+                Export {pdfMatchCount} {pdfMatchCount === 1 ? 'image' : 'images'}
+              </Btn>
+            </>
+          }
+        >
+          <div className="ad-pdf-opts">
+            <div className="ad-pdf-section">
+              <div className="ad-pdf-section-label">Include labels</div>
+              <label className="ad-pdf-row">
+                <input type="checkbox" checked={pdfOpts.includeSelect} onChange={e => setPdfOpts(o => ({ ...o, includeSelect: e.target.checked }))}/>
+                <span style={{ color: '#2a7a4f', fontWeight: 600 }}>SELECT</span>
+                <span className="ad-pdf-count">{counts.SELECT}</span>
+              </label>
+              <label className="ad-pdf-row">
+                <input type="checkbox" checked={pdfOpts.includeAlt} onChange={e => setPdfOpts(o => ({ ...o, includeAlt: e.target.checked }))}/>
+                <span style={{ color: '#2a5a8a', fontWeight: 600 }}>ALT</span>
+                <span className="ad-pdf-count">{counts.ALT}</span>
+              </label>
+              <label className="ad-pdf-row">
+                <input type="checkbox" checked={pdfOpts.includeKill} onChange={e => setPdfOpts(o => ({ ...o, includeKill: e.target.checked }))}/>
+                <span style={{ color: '#b84242', fontWeight: 600 }}>KILL</span>
+                <span className="ad-pdf-count">{counts.KILL}</span>
+              </label>
+            </div>
+
+            <div className="ad-pdf-section">
+              <div className="ad-pdf-section-label">Annotations</div>
+              <label className="ad-pdf-row">
+                <input type="checkbox" checked={pdfOpts.includeMarkups} onChange={e => setPdfOpts(o => ({ ...o, includeMarkups: e.target.checked }))}/>
+                <span>Markups (drawings + comments)</span>
+              </label>
+              <label className="ad-pdf-row">
+                <input type="checkbox" checked={pdfOpts.includeNotes} onChange={e => setPdfOpts(o => ({ ...o, includeNotes: e.target.checked }))}/>
+                <span>Client notes</span>
+              </label>
+              <label className="ad-pdf-row">
+                <input type="checkbox" checked={pdfOpts.includeStars} onChange={e => setPdfOpts(o => ({ ...o, includeStars: e.target.checked }))}/>
+                <span>Star ratings</span>
+              </label>
+            </div>
+
+            <div className="ad-pdf-preset-row">
+              <button className="ad-pdf-preset" onClick={() => setPdfOpts({ includeSelect: true, includeAlt: false, includeKill: false, includeMarkups: false, includeNotes: false, includeStars: false })}>Selects only</button>
+              <button className="ad-pdf-preset" onClick={() => setPdfOpts({ includeSelect: true, includeAlt: true, includeKill: false, includeMarkups: true, includeNotes: true, includeStars: true })}>Selects + markups</button>
+              <button className="ad-pdf-preset" onClick={() => setPdfOpts({ includeSelect: true, includeAlt: true, includeKill: true, includeMarkups: true, includeNotes: true, includeStars: true })}>Everything</button>
+            </div>
+          </div>
+        </Modal>
       )}
     </>
   );
