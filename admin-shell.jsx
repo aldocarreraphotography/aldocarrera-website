@@ -43,7 +43,8 @@ function parseRoute(hash) {
   if (parts[0] === 'about')    return { name: 'about' };
   if (parts[0] === 'services') return { name: 'services' };
   if (parts[0] === 'clients')  return { name: 'clients' };
-  if (parts[0] === 'settings') return { name: 'settings' };
+  if (parts[0] === 'settings')  return { name: 'settings' };
+  if (parts[0] === 'analytics') return { name: 'analytics' };
   return { name: 'dashboard' };
 }
 function navigate(to) {
@@ -62,6 +63,7 @@ const NAV = [
   { id: 'services',   label: 'Services',  match: ['services'],                    hash: '#/services' },
   { id: 'clients',    label: 'Clients',   match: ['clients'],                     hash: '#/clients' },
   { id: 'settings',   label: 'Settings',  match: ['settings'],                    hash: '#/settings' },
+  { id: 'analytics',  label: 'Analytics', match: ['analytics'],                    hash: '#/analytics' },
 ];
 
 function AdminSidebar({ route, onLogout }) {
@@ -90,6 +92,8 @@ function AdminSidebar({ route, onLogout }) {
         ))}
         <div className="ad-side-section">System</div>
         <SideLink item={NAV[6]} route={route}/>
+        <SideLink item={NAV[7]} route={route}/>
+        <SideLink item={NAV[8]} route={route}/>
       </nav>
 
       <div className="ad-side-foot">
@@ -201,6 +205,7 @@ function AdminApp() {
     case 'services':        view = <ServicesEditorView navigate={navigate}/>; break;
     case 'clients':         view = <ClientsEditorView  navigate={navigate}/>; break;
     case 'settings':        view = <SettingsEditorView navigate={navigate}/>; break;
+    case 'analytics':       view = <AnalyticsView      navigate={navigate}/>; break;
     default:                view = <DashboardView      navigate={navigate}/>;
   }
 

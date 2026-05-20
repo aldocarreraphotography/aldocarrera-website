@@ -57,6 +57,7 @@ const FILES = [
   'admin-views-content.jsx',
   'admin-views-galleries.jsx',
   'admin-views-videos.jsx',
+  'admin-views-analytics.jsx',
 
   // Client gallery (token-gated)
   'gallery.html',
