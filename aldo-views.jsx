@@ -647,7 +647,9 @@ function ReelCard({ video, onOpen }) {
   const [hover, setHover] = vsUseState(false);
   const videoRef = vsUseRef(null);
   const posterSrc = video.poster
-    ? (video.poster.startsWith('__vidposters') ? `${API_BASE_V}/api/projects/__vidposters${video.poster.slice(video.poster.indexOf('/'))}` : video.poster)
+    ? (video.poster.startsWith('__vidposters/')
+        ? `${API_BASE_V}/api/videoposters/${video.poster.slice('__vidposters/'.length)}`
+        : video.poster)
     : null;
   const fileSrc = videoSrc(video);
   const embed   = getEmbedSrc(video.embedUrl);

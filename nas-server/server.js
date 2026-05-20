@@ -638,6 +638,14 @@ app.post('/api/videos/:id/poster', upload.single('file'), async (req, res) => {
   res.json({ poster: video.poster });
 });
 
+app.get('/api/videoposters/:videoId/:filename', async (req, res) => {
+  const bytes = await readBytes('__vidposters/' + req.params.videoId, req.params.filename).catch(() => null);
+  if (!bytes) return res.status(404).send('Not found');
+  res.setHeader('Content-Type',  contentTypeFor(req.params.filename));
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  res.send(bytes);
+});
+
 app.get('/api/videos/:id/file/:filename', async (req, res) => {
   const bytes = await readVideoBytes(req.params.id, req.params.filename).catch(() => null);
   if (!bytes) return res.status(404).send('Not found');
