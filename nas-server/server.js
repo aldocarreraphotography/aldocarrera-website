@@ -23,6 +23,7 @@ import {
   readServices, writeServices,
   readSettings, writeSettings,
   readBytes, writeBytes, deleteImage, deleteProjectImages,
+  readVideos, writeVideos, readVideoBytes, writeVideoBytes, deleteVideoFile,
 } from './utils/store.js';
 import {
   createGallery, readGalleries, findGallery, updateGallery, deleteGallery, isExpired,
@@ -504,8 +505,8 @@ const DEFAULT_SETTINGS = {
 app.get('/api/public/site', async (req, res) => {
   const safe = async (fn) => { try { return await fn(); } catch (_) { return null; } };
 
-  const [projectsFile, aboutFile, clientsFile, servicesFile, settingsFile] = await Promise.all([
-    safe(readProjects), safe(readAbout), safe(readClients), safe(readServices), safe(readSettings),
+  const [projectsFile, aboutFile, clientsFile, servicesFile, settingsFile, videosFile] = await Promise.all([
+    safe(readProjects), safe(readAbout), safe(readClients), safe(readServices), safe(readSettings), safe(readVideos),
   ]);
 
   const about    = pick(aboutFile,             DEFAULT_ABOUT,    'bio');
@@ -514,9 +515,9 @@ app.get('/api/public/site', async (req, res) => {
   const settings = pick(settingsFile,          DEFAULT_SETTINGS, 'contactEmail');
 
   const cleanedFromStore = (projectsFile?.projects || [])
+    .filter(p => p.public !== false)
     .map(p => {
       const imgs = (p.images || []).filter(img => !img.rejected);
-      // Ensure cover flag is honoured: move cover image to front
       const coverIdx = imgs.findIndex(i => i.cover);
       if (coverIdx > 0) { const [c] = imgs.splice(coverIdx, 1); imgs.unshift(c); }
       return { ...p, images: imgs };
@@ -524,16 +525,137 @@ app.get('/api/public/site', async (req, res) => {
     .filter(p => p.images.length > 0);
   const projects = pickArr(cleanedFromStore, DEFAULT_PROJECTS);
 
+  const videos = (videosFile?.videos || [])
+    .filter(v => v.public !== false)
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
   res.setHeader('x-aldo-served', new Date().toISOString());
   res.json({
     projects,
+    videos,
     about,
     clients,
     services: services.slice().sort((a, b) => (a.order || 0) - (b.order || 0)),
     settings,
   });
+});
+
+/* ------------------------------------------------------------------ */
+/* Videos — admin CRUD + upload + public serve                         */
+/* ------------------------------------------------------------------ */
+
+const videoUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 500 * 1024 * 1024 } });
+
+function nextVideoId() { return 'VID_' + Date.now(); }
+
+app.get('/api/videos', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  res.json(await readVideos());
+});
+
+app.post('/api/videos', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  const body = req.body || {};
+  if (!body.title) return res.status(422).json({ error: 'validation', message: '`title` required' });
+  const data  = await readVideos();
+  const video = {
+    id:          (body.id || nextVideoId()).toUpperCase().replace(/[^A-Z0-9_]+/g, '_'),
+    title:       body.title,
+    client:      body.client      || '',
+    year:        body.year        || new Date().getFullYear(),
+    category:    body.category    || 'Reel',
+    description: body.description || '',
+    embedUrl:    body.embedUrl    || '',
+    blobPath:    '',
+    poster:      body.poster      || '',
+    public:      body.public !== false,
+    order:       body.order       ?? data.videos.length,
+    createdAt:   new Date().toISOString(),
+    updatedAt:   new Date().toISOString(),
+  };
+  data.videos.unshift(video);
+  await writeVideos(data);
+  res.status(201).json(video);
+});
+
+app.put('/api/videos/:id', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  const data  = await readVideos();
+  const idx   = data.videos.findIndex(v => v.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'not_found' });
+  data.videos[idx] = { ...data.videos[idx], ...req.body, id: data.videos[idx].id, updatedAt: new Date().toISOString() };
+  await writeVideos(data);
+  res.json(data.videos[idx]);
+});
+
+app.delete('/api/videos/:id', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  const data   = await readVideos();
+  const video  = data.videos.find(v => v.id === req.params.id);
+  if (!video) return res.status(404).json({ error: 'not_found' });
+  if (video.blobPath) {
+    const [, vidId, filename] = video.blobPath.split('/');
+    await deleteVideoFile(vidId, filename).catch(() => {});
+  }
+  data.videos = data.videos.filter(v => v.id !== req.params.id);
+  await writeVideos(data);
+  res.status(204).send();
+});
+
+app.post('/api/videos/:id/upload', videoUpload.single('file'), async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  const data  = await readVideos();
+  const video = data.videos.find(v => v.id === req.params.id);
+  if (!video) return res.status(404).json({ error: 'not_found' });
+  if (!req.file) return res.status(400).json({ error: 'missing_file' });
+  const safeName = (req.file.originalname || `video_${Date.now()}.mp4`).replace(/[^A-Za-z0-9._-]+/g, '_');
+  await writeVideoBytes(video.id, safeName, req.file.buffer);
+  video.blobPath = `__videos/${video.id}/${safeName}`;
+  video.updatedAt = new Date().toISOString();
+  await writeVideos(data);
+  res.json({ blobPath: video.blobPath });
+});
+
+app.post('/api/videos/:id/poster', upload.single('file'), async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  const data  = await readVideos();
+  const video = data.videos.find(v => v.id === req.params.id);
+  if (!video) return res.status(404).json({ error: 'not_found' });
+  if (!req.file) return res.status(400).json({ error: 'missing_file' });
+  const safeName = `poster_${Date.now()}_${(req.file.originalname || 'poster.jpg').replace(/[^A-Za-z0-9._-]+/g, '_')}`;
+  await writeBytes(`__vidposters/${video.id}`, safeName, req.file.buffer);
+  video.poster = `__vidposters/${video.id}/${safeName}`;
+  video.updatedAt = new Date().toISOString();
+  await writeVideos(data);
+  res.json({ poster: video.poster });
+});
+
+app.get('/api/videos/:id/file/:filename', async (req, res) => {
+  const bytes = await readVideoBytes(req.params.id, req.params.filename).catch(() => null);
+  if (!bytes) return res.status(404).send('Not found');
+  const ext  = req.params.filename.split('.').pop().toLowerCase();
+  const mime = ext === 'webm' ? 'video/webm' : ext === 'mov' ? 'video/quicktime' : ext === 'ogg' ? 'video/ogg' : 'video/mp4';
+  const total = bytes.length;
+  const range = req.headers.range;
+  if (range) {
+    const [startStr, endStr] = range.replace(/bytes=/, '').split('-');
+    const start = parseInt(startStr, 10);
+    const end   = endStr ? parseInt(endStr, 10) : total - 1;
+    res.status(206);
+    res.setHeader('Content-Range',  `bytes ${start}-${end}/${total}`);
+    res.setHeader('Accept-Ranges',  'bytes');
+    res.setHeader('Content-Length', end - start + 1);
+    res.setHeader('Content-Type',   mime);
+    res.send(bytes.slice(start, end + 1));
+  } else {
+    res.setHeader('Content-Type',   mime);
+    res.setHeader('Content-Length', total);
+    res.setHeader('Accept-Ranges',  'bytes');
+    res.setHeader('Cache-Control',  'public, max-age=3600');
+    res.send(bytes);
+  }
 });
 
 /* ------------------------------------------------------------------ */

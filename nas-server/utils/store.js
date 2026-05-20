@@ -86,6 +86,22 @@ function defaultSettings() {
 export const readProjects  = () => readJson('projects.json').then(d => d || { projects: [] });
 export const writeProjects = (d) => writeJson('projects.json', d);
 
+export const readVideos  = () => readJson('videos.json').then(d => d || { videos: [] });
+export const writeVideos = (d) => writeJson('videos.json', d);
+
+export async function readVideoBytes(videoId, filename) {
+  try { return await fs.readFile(path.join(IMAGES_DIR, '__videos', videoId, filename)); }
+  catch (e) { if (e.code === 'ENOENT') return null; throw e; }
+}
+export async function writeVideoBytes(videoId, filename, buffer) {
+  const dir = path.join(IMAGES_DIR, '__videos', videoId);
+  await fs.mkdir(dir, { recursive: true });
+  await fs.writeFile(path.join(dir, filename), buffer);
+}
+export async function deleteVideoFile(videoId, filename) {
+  try { await fs.unlink(path.join(IMAGES_DIR, '__videos', videoId, filename)); } catch (_) {}
+}
+
 export const readAbout    = () => readJson('about.json').then(d => d || defaultAbout());
 export const writeAbout   = (d) => writeJson('about.json', d);
 

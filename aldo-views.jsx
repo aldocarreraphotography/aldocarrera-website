@@ -612,6 +612,102 @@ function Services() {
   );
 }
 
+/* ============================================================
+   REELS — video grid
+   ============================================================ */
+const API_BASE_V = window.API_BASE || '';
+
+function getEmbedSrc(url) {
+  if (!url) return '';
+  const vimeo = url.match(/vimeo\.com\/(\d+)/);
+  if (vimeo) return `https://player.vimeo.com/video/${vimeo[1]}?autoplay=1&muted=1&loop=1&background=1&title=0&byline=0&portrait=0`;
+  const yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]+)/);
+  if (yt) return `https://www.youtube.com/embed/${yt[1]}?autoplay=1&mute=1&loop=1&playlist=${yt[1]}&rel=0&controls=0`;
+  return url;
+}
+
+function getFullEmbedSrc(url) {
+  if (!url) return '';
+  const vimeo = url.match(/vimeo\.com\/(\d+)/);
+  if (vimeo) return `https://player.vimeo.com/video/${vimeo[1]}?autoplay=1&title=0&byline=0&portrait=0`;
+  const yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]+)/);
+  if (yt) return `https://www.youtube.com/embed/${yt[1]}?autoplay=1&rel=0`;
+  return url;
+}
+
+function videoSrc(v) {
+  if (!v.blobPath) return '';
+  const parts = v.blobPath.replace(/^__videos\//, '').split('/');
+  return `${API_BASE_V}/api/videos/${parts[0]}/file/${parts.slice(1).join('/')}`;
+}
+
+function ReelsView({ onOpenVideo }) {
+  const { VIDEOS } = window.ALDO;
+  if (!VIDEOS || VIDEOS.length === 0) {
+    return (
+      <div className="reels-empty">
+        <div className="reels-empty-icon">▶</div>
+        <div className="reels-empty-text">No reels yet.</div>
+      </div>
+    );
+  }
+  return (
+    <div className="reels-grid">
+      {VIDEOS.map(v => (
+        <article key={v.id} className="reel-card" onClick={() => onOpenVideo(v)}>
+          <div className="reel-thumb">
+            {v.poster
+              ? <img src={v.poster.startsWith('__vidposters') ? `${API_BASE_V}/api/projects/__vidposters${v.poster.slice(v.poster.indexOf('/'))}` : v.poster} alt={v.title}/>
+              : <div className="reel-thumb-placeholder">▶</div>
+            }
+            <div className="reel-play-overlay"><span>▶</span></div>
+          </div>
+          <div className="reel-info">
+            <div className="reel-title">{v.title}</div>
+            <div className="reel-meta">
+              <span className="reel-cat">{v.category}</span>
+              {v.client && <><span className="dot">·</span><span>{v.client.toUpperCase()}</span></>}
+              <span className="dot">·</span><span>{v.year}</span>
+            </div>
+          </div>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function VideoPlayer({ video }) {
+  const src = videoSrc(video);
+  const embed = getFullEmbedSrc(video.embedUrl);
+  return (
+    <div className="video-player-wrap">
+      {embed ? (
+        <iframe
+          className="video-player-iframe"
+          src={embed}
+          frameBorder="0"
+          allow="autoplay; fullscreen; picture-in-picture"
+          allowFullScreen
+        />
+      ) : src ? (
+        <video
+          className="video-player-el"
+          src={src}
+          autoPlay
+          controls
+          playsInline
+          loop
+        />
+      ) : (
+        <div className="video-player-empty">No video source.</div>
+      )}
+      {video.description && (
+        <div className="video-player-desc">{video.description}</div>
+      )}
+    </div>
+  );
+}
+
 window.Services = Services;
 window.ProjectDetail = ProjectDetail;
 window.Archive = Archive;
@@ -619,3 +715,5 @@ window.PhotoViewer = PhotoViewer;
 window.Clients = Clients;
 window.About = About;
 window.Contact = Contact;
+window.ReelsView = ReelsView;
+window.VideoPlayer = VideoPlayer;

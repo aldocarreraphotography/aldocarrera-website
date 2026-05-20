@@ -2521,3 +2521,59 @@ input, textarea, select {
   .sk-main { padding: 24px 18px; }
   .sk-grid { grid-template-columns: repeat(2, 1fr); gap: 20px 14px; }
 }
+
+/* ============================================================
+   REELS WINDOW
+   ============================================================ */
+.reels-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+  padding: 18px;
+  overflow-y: auto;
+  height: 100%;
+}
+.reel-card {
+  cursor: pointer;
+  border: 1px solid var(--rule-soft);
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--paper);
+  transition: border-color .15s, box-shadow .15s;
+}
+.reel-card:hover { border-color: var(--ink-soft); box-shadow: 0 4px 16px rgba(0,0,0,.08); }
+.reel-thumb {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background: var(--ink);
+  overflow: hidden;
+}
+.reel-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.reel-thumb-placeholder {
+  width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 28px; color: rgba(255,255,255,.2);
+}
+.reel-play-overlay {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,.35);
+  opacity: 0; transition: opacity .15s;
+}
+.reel-card:hover .reel-play-overlay { opacity: 1; }
+.reel-play-overlay span { font-size: 22px; color: #fff; }
+.reel-info { padding: 10px 12px 12px; }
+.reel-title { font-size: 13px; font-weight: 500; color: var(--ink); margin-bottom: 5px; }
+.reel-meta  { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--ink-soft); display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.reel-cat   { text-transform: uppercase; letter-spacing: .06em; }
+.reels-empty { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; }
+.reels-empty-icon { font-size: 36px; color: var(--rule); }
+.reels-empty-text { font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--ink-muted); }
+
+/* ============================================================
+   VIDEO PLAYER WINDOW
+   ============================================================ */
+.video-player-wrap { width: 100%; height: 100%; display: flex; flex-direction: column; background: #0e0d0c; overflow: hidden; }
+.video-player-iframe, .video-player-el { flex: 1; width: 100%; min-height: 0; border: none; display: block; background: #0e0d0c; }
+.video-player-desc { padding: 10px 16px; font-size: 12px; color: rgba(255,255,255,.5); font-style: italic; flex-shrink: 0; }
+.video-player-empty { flex: 1; display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,.3); font-size: 13px; }

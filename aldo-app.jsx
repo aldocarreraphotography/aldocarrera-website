@@ -89,6 +89,13 @@ const DockGlyph = ({ kind, accent }) => {
           <circle cx="15" cy="15" r="3" stroke={stroke} strokeWidth="1.2"/>
         </svg>
       );
+    case 'reels':
+      return (
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+          <rect x="2.5" y="3.5" width="17" height="15" rx="1.5" stroke={stroke} strokeWidth="1.2"/>
+          <polygon points="9,8 9,14 15,11" fill={stroke}/>
+        </svg>
+      );
     default: return null;
   }
 };
@@ -1368,6 +1375,8 @@ function ArchiveApp() {
       clients:   { title:'Clients.txt',          path: '~/about/clients',                   w: 400, h: 540 },
       about:     { title:'about_me.txt',         path: '~/info',                            w: 460, h: 620 },
       contact:   { title:'Inquiry · contact.html', path:'~/contact',                        w: 480, h: 540 },
+      reels:     { title:'Reels',                path: '~/reels',                           w: 680, h: 520 },
+      video:     { title: opts.video ? opts.video.title : 'Video', path: opts.video ? `~/reels/${opts.video.id}` : '~/reels', w: 840, h: 560 },
       project:   { title: opts.project ? opts.project.name : 'Project', path: opts.project ? `~/portfolio/${opts.project.id}` : '~/portfolio', w: 760, h: 600 },
     };
     const p = presets[kind] || { title: kind, w: 500, h: 400 };
@@ -1380,6 +1389,7 @@ function ArchiveApp() {
         w: p.w, h: p.h, z: 10,
         title: p.title, path: p.path,
         project: opts.project || null,
+        video:   opts.video   || null,
       },
     }));
     setOrder(o => [...o, id]);
@@ -1464,6 +1474,7 @@ function ArchiveApp() {
             onClose={close} onMinimize={minimize} onMaximize={maximize}
             onOpenPhoto={openPhotoViewer}
             onOpenProject={(p) => openWindow('project', { project: p })}
+            onOpenVideo={(v) => openWindow('video', { video: v })}
             view={view} setView={setView}
             archiveFilter={archiveFilter}
             setArchiveFilter={setArchiveFilter}
@@ -1518,6 +1529,7 @@ function ArchiveApp() {
           {[
             { k: 'portfolio', g: 'portfolio', l: 'Portfolio' },
             { k: 'archive',   g: 'archive',   l: 'Archive'   },
+            { k: 'reels',     g: 'reels',     l: 'Reels'     },
             { k: 'services',  g: 'services',  l: 'Services'  },
             { k: 'clients',   g: 'clients',   l: 'Clients'   },
             { k: 'about',     g: 'about',     l: 'About'     },
@@ -1598,7 +1610,7 @@ function ArchiveApp() {
 /* ============================================================
    WINDOW HOST — content router
    ============================================================ */
-function WindowHost({ win, z, focused, minimized, onMove, onResize, onFocus, onClose, onMinimize, onMaximize, onOpenPhoto, onOpenProject, view, setView, archiveFilter, setArchiveFilter, selectionMode, setSelectionMode, selectedIds, toggleSelection }) {
+function WindowHost({ win, z, focused, minimized, onMove, onResize, onFocus, onClose, onMinimize, onMaximize, onOpenPhoto, onOpenProject, onOpenVideo, view, setView, archiveFilter, setArchiveFilter, selectionMode, setSelectionMode, selectedIds, toggleSelection }) {
   let content, toolbar, statusbar;
   const baseCrumb = (parts) => (
     <div className="crumbs">
@@ -1686,6 +1698,31 @@ function WindowHost({ win, z, focused, minimized, onMove, onResize, onFocus, onC
         <span>{win.project.month}</span>
       </div>
     );
+  } else if (win.kind === 'reels') {
+    toolbar = <div className="window-toolbar">{baseCrumb(['~', 'reels'])}</div>;
+    content = <ReelsView onOpenVideo={onOpenVideo}/>;
+    statusbar = (
+      <div className="window-statusbar">
+        <span className="col"><b>{VIDEOS.length}</b> {VIDEOS.length === 1 ? 'reel' : 'reels'}</span>
+        <span className="spacer"/>
+        <span>photography · direction · production</span>
+      </div>
+    );
+  } else if (win.kind === 'video') {
+    toolbar = (
+      <div className="window-toolbar">
+        {baseCrumb(['~', 'reels', win.video ? win.video.id : ''])}
+      </div>
+    );
+    content = win.video ? <VideoPlayer video={win.video}/> : null;
+    statusbar = win.video ? (
+      <div className="window-statusbar">
+        <span className="col"><b>{win.video.client || 'Self-directed'}</b></span>
+        <span className="col">{win.video.category}</span>
+        <span className="spacer"/>
+        <span>{win.video.year}</span>
+      </div>
+    ) : null;
   } else {
     content = <div style={{padding: 24}} className="mono">empty.</div>;
   }

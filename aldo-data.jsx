@@ -236,7 +236,9 @@ const SETTINGS = {
   accentColor:  '#d63e5a',
 };
 
-window.ALDO = { PROJECTS, ARCHIVE, CLIENTS, PHOTOS, SERVICES, ABOUT, SETTINGS };
+const VIDEOS = [];
+
+window.ALDO = { PROJECTS, ARCHIVE, CLIENTS, PHOTOS, SERVICES, ABOUT, SETTINGS, VIDEOS };
 
 /* ============================================================================
    LIVE DATA SYNC — admin ↔ public site
@@ -436,6 +438,7 @@ function _aldoApplyData(data) {
   const publicProjects = (data.projects || []).filter(p => p.public !== false);
   const newProjects = publicProjects.map(_aldoToPublicProject);
   const newArchive  = _aldoToPublicArchive(publicProjects);
+  const newVideos   = (data.videos   || []).filter(v => v.public !== false).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   const newClients  = _aldoToPublicClients(data.clients || []);
   const newServices = _aldoToPublicServices(data.services || []);
 
@@ -443,6 +446,7 @@ function _aldoApplyData(data) {
   ARCHIVE.length  = 0; ARCHIVE.push(...newArchive);
   CLIENTS.length  = 0; CLIENTS.push(...newClients);
   SERVICES.length = 0; SERVICES.push(...newServices);
+  VIDEOS.length   = 0; VIDEOS.push(...newVideos);
 
   if (data.about    && Object.keys(data.about).length    > 0) _aldoReplaceObject(ABOUT,    data.about);
   if (data.settings && Object.keys(data.settings).length > 0) _aldoReplaceObject(SETTINGS, data.settings);
