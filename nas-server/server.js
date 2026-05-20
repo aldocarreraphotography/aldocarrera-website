@@ -57,7 +57,7 @@ app.use(cors({
     cb(new Error(`CORS: ${origin} not allowed`));
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control', 'Pragma'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control', 'Pragma', 'x-gallery-password'],
   credentials: true,
 }));
 

@@ -842,6 +842,21 @@ const AdminStore = {
     return r.json();
   },
 
+  /* Multipart upload — does NOT set Content-Type (browser sets the boundary).
+     Authenticated via Bearer token like apiFetch. */
+  async apiUpload(path, formData) {
+    const token = _getAuthToken();
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const r = await fetch(getAPI() + path, { method: 'POST', body: formData, headers });
+    if (!r.ok) {
+      const body = await r.json().catch(() => ({}));
+      throw Object.assign(new Error(body.message || body.error || r.statusText), { status: r.status, body });
+    }
+    if (r.status === 204) return null;
+    return r.json();
+  },
+
   // API sync ------------------------------------------------------------
   /* Force a sync attempt now (bypasses debounce). Returns true on success. */
   async forceSync()    { return pushToAPI(); },

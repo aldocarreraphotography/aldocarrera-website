@@ -305,22 +305,14 @@ function VideoCreateModal({ open, onClose, onCreated }) {
       if (sourceType === 'file' && form.videoFile) {
         const fd = new FormData();
         fd.append('file', form.videoFile);
-        await fetch(`/api/videos/${created.id}/upload`, {
-          method: 'POST',
-          body: fd,
-          credentials: 'include',
-        });
+        await window.AdminStore.apiUpload(`/api/videos/${created.id}/upload`, fd);
       }
 
       // Upload poster if provided
       if (form.posterFile) {
         const fd = new FormData();
         fd.append('file', form.posterFile);
-        await fetch(`/api/videos/${created.id}/poster`, {
-          method: 'POST',
-          body: fd,
-          credentials: 'include',
-        });
+        await window.AdminStore.apiUpload(`/api/videos/${created.id}/poster`, fd);
       }
 
       toast('Video created', 'ok');
@@ -413,22 +405,14 @@ function VideoEditModal({ open, video, onClose, onSaved }) {
       if (sourceType === 'file' && form.videoFile) {
         const fd = new FormData();
         fd.append('file', form.videoFile);
-        await fetch(`/api/videos/${video.id}/upload`, {
-          method: 'POST',
-          body: fd,
-          credentials: 'include',
-        });
+        await window.AdminStore.apiUpload(`/api/videos/${video.id}/upload`, fd);
       }
 
       // Upload new poster if provided
       if (form.posterFile) {
         const fd = new FormData();
         fd.append('file', form.posterFile);
-        await fetch(`/api/videos/${video.id}/poster`, {
-          method: 'POST',
-          body: fd,
-          credentials: 'include',
-        });
+        await window.AdminStore.apiUpload(`/api/videos/${video.id}/poster`, fd);
       }
 
       toast('Video saved', 'ok');
