@@ -14,6 +14,7 @@ import express  from 'express';
 import cors     from 'cors';
 import multer   from 'multer';
 import path     from 'node:path';
+import sharp    from 'sharp';
 
 import { issueToken, verifyToken, authMiddleware, requireAuth } from './utils/auth.js';
 import {
@@ -244,10 +245,38 @@ app.post('/api/projects/:id/images/upload', upload.single('file'), async (req, r
 /* Image serve / patch / delete                                        */
 /* ------------------------------------------------------------------ */
 
+// Simple LRU-style resize cache — keyed by "id/filename?w=N", capped at 200 entries.
+const _resizeCache = new Map();
+const _RESIZE_CAP  = 200;
+async function _resized(bytes, w) {
+  try {
+    return await sharp(bytes)
+      .rotate()                          // auto-orient via EXIF
+      .resize({ width: w, withoutEnlargement: true })
+      .jpeg({ quality: 82, mozjpeg: true })
+      .toBuffer();
+  } catch (_) { return bytes; }         // fall back to original on error
+}
+
 app.get('/api/projects/:id/images/:filename', async (req, res) => {
   const { id, filename } = req.params;
   const bytes = await readBytes(id, filename).catch(() => null);
   if (!bytes) return res.status(404).send('Not found');
+
+  const w = parseInt(req.query.w, 10);
+  if (w > 0 && w < 4000) {
+    const cacheKey = `${id}/${filename}?w=${w}`;
+    let resized = _resizeCache.get(cacheKey);
+    if (!resized) {
+      resized = await _resized(bytes, w);
+      if (_resizeCache.size >= _RESIZE_CAP) _resizeCache.delete(_resizeCache.keys().next().value);
+      _resizeCache.set(cacheKey, resized);
+    }
+    res.setHeader('Content-Type', 'image/jpeg');
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    return res.send(resized);
+  }
+
   res.setHeader('Content-Type', contentTypeFor(filename));
   res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
   res.send(bytes);

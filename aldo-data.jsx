@@ -348,9 +348,24 @@ function _aldoSortImgs(imgs) {
 
 /* Transform an admin-shape project record into the PROJECTS row the public
    portfolio expects. Drops rejected frames. */
+function _aldoThumbUrl(blobPath, w) {
+  if (!blobPath || !blobPath.startsWith('http')) return blobPath;
+  try {
+    const url = new URL(blobPath);
+    url.searchParams.set('w', String(w));
+    return url.toString();
+  } catch (_) { return blobPath; }
+}
+
 function _aldoToPublicProject(p) {
   const sorted = _aldoSortImgs(p.images).filter(img => !img.rejected);
   const cover = sorted.find(img => img.cover) || sorted[0];
+  // Web-optimised copies: 800px for the portfolio grid cover, 1400px for
+  // the project detail window (still sharp on retina, ~150KB vs ~15MB).
+  const imagesWeb = sorted.map(img => ({
+    ...img,
+    blobPath: _aldoThumbUrl(img.blobPath, 1400),
+  }));
   return {
     id: p.id,
     name: p.name,
@@ -359,12 +374,12 @@ function _aldoToPublicProject(p) {
     month: p.month ? `${p.month} ${p.year || ''}`.trim() : String(p.year || ''),
     type: (p.type || 'EDITORIAL').toUpperCase(),
     format: p.format || 'Digital',
-    photo: cover ? cover.blobPath : PHOTOS[0],
+    photo: cover ? _aldoThumbUrl(cover.blobPath, 800) : PHOTOS[0],
     count: sorted.length,
     note: p.description || '',
     crew: p.crew || '',
     location: p.location || '',
-    images: sorted,
+    images: imagesWeb,
   };
 }
 
@@ -386,7 +401,7 @@ function _aldoToPublicArchive(projects) {
         date: dt && !isNaN(dt) ? dt.toISOString().slice(0, 10) : '',
         size: _aldoFmtBytes(img.exif?.fileSize || 0),
         dims: img.exif?.dimensions || '',
-        photo: img.blobPath,
+        photo: _aldoThumbUrl(img.blobPath, 1400),
         note: img.favorite ? 'favorite' : (img.selected ? 'select' : ''),
         order: img.order ?? 9999,
       });
