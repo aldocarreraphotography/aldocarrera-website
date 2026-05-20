@@ -1,5 +1,8 @@
 version: "3.8"
 
+# Host paths and the Cloudflare tunnel token are read from .env so this file
+# never changes between hosts. See .env.example for the variables.
+
 services:
   api:
     build: .
@@ -11,14 +14,19 @@ services:
     env_file:
       - .env
     volumes:
-      # JSON data files (projects, about, clients, services, settings)
-      # Adjust the left-hand path if your shared folder has a different name.
-      - "/volume1/Ingesting 2/aldocarrera/data:/app/data"
-      # Uploaded image bytes
-      - "/volume1/Ingesting 2/aldocarrera/images:/app/images"
+      - "${DATA_HOST_PATH}:/app/data"
+      - "${IMAGES_HOST_PATH}:/app/images"
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:3001/api/debug').then(r=>process.exit(r.ok?0:1))"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 10s
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARED_TOKEN}
+    depends_on:
+      - api
