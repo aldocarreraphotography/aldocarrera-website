@@ -391,10 +391,10 @@ function GalleriesView({ navigate }) {
 /* ============================================================
    CREATE MODAL
    ============================================================ */
-function GalleryCreateModal({ open, onClose, onCreated }) {
+function GalleryCreateModal({ open, onClose, onCreated, prefill }) {
   window.useStoreSubscribe();
   const projects = window.AdminStore.getProjects();
-  const [form, setForm] = gS({ projectId: '', clientName: '', title: '', expiresAt: '', password: '' });
+  const [form, setForm] = gS({ projectId: prefill?.projectId || '', clientName: prefill?.clientName || '', title: prefill?.title || '', expiresAt: '', password: '' });
   const [saving, setSaving] = gS(false);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -608,6 +608,7 @@ function GalleryDetailView({ token, navigate }) {
   const [filter, setFilter]     = gS('ALL');
   const [lightbox, setLightbox] = gS(null); // img object | null
   const [exporting, setExporting] = gS(false);
+  const [showRound, setShowRound] = gS(false);
 
   gE(() => {
     (async () => {
@@ -652,6 +653,12 @@ function GalleryDetailView({ token, navigate }) {
     navigator.clipboard.writeText(url).then(() => toast('Link copied', 'ok')).catch(() => toast(url, 'ok'));
   };
 
+  const nextRoundTitle = () => {
+    const m = gallery.title.match(/\(Round (\d+)\)$/);
+    const n = m ? parseInt(m[1], 10) + 1 : 2;
+    return m ? gallery.title.replace(/\(Round \d+\)$/, `(Round ${n})`) : `${gallery.title} (Round 2)`;
+  };
+
   const doExportPDF = async () => {
     setExporting(true);
     try {
@@ -673,6 +680,7 @@ function GalleryDetailView({ token, navigate }) {
               {exporting ? 'Exporting…' : `Export PDF (${counts.SELECT + counts.ALT})`}
             </Btn>
             <Btn variant="ghost" onClick={copyLink}>Copy client link</Btn>
+            <Btn variant="ghost" onClick={() => setShowRound(true)} title="Create a new gallery for a retouching round">+ New round</Btn>
             <Btn variant="ghost" onClick={() => navigate('#/galleries')}>← Back</Btn>
           </>
         }
@@ -717,6 +725,19 @@ function GalleryDetailView({ token, navigate }) {
           allImages={visible}
           allSels={sels}
           onClose={() => setLightbox(null)}
+        />
+      )}
+
+      {showRound && (
+        <GalleryCreateModal
+          open={showRound}
+          prefill={{ projectId: gallery.projectId, clientName: gallery.clientName || '', title: nextRoundTitle() }}
+          onClose={() => setShowRound(false)}
+          onCreated={(g) => {
+            setShowRound(false);
+            toast(`Round created — ${g.token}`, 'ok');
+            navigate(`#/galleries/${g.token}`);
+          }}
         />
       )}
     </>

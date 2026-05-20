@@ -70,7 +70,7 @@ const state = {
   lightbox: null,   // index | null
   // Markup drawing state
   tool: 'freehand', // freehand | ellipse | arrow | rect
-  color: '#4a90e2',
+  color: '#d63e5a',
   drawing: false,
   drawStart: null,
   drawCurrent: [],
@@ -79,7 +79,7 @@ const state = {
   password: null,
 };
 
-const COLORS = ['#4a90e2','#e85d5d','#4fca7e','#f5c842','#ffffff'];
+const COLORS = ['#d63e5a','#e85d5d','#4fca7e','#f5c842','#ffffff'];
 
 /* ------------------------------------------------------------------ */
 /* API                                                                 */
@@ -335,7 +335,7 @@ function buildLightbox() {
   const img      = visible[state.lightbox];
   if (!img) return null;
   const sel      = getOrInit(img.filename);
-  const readOnly = state.gallery.status === 'submitted';
+  const readOnly = false;
 
   const lb = el('div', { id: 'lightbox', className: 'gl-lightbox' });
 
@@ -793,7 +793,7 @@ function rerenderFilterBar() {
 function rerender(filename) {
   const card = qs(`[data-fn="${CSS.escape(filename)}"]`);
   if (!card) return;
-  card.replaceWith(buildCard(state.images.find(i => i.filename === filename), state.gallery.status === 'submitted'));
+  card.replaceWith(buildCard(state.images.find(i => i.filename === filename), false));
 }
 
 function renderSubmitBar() {
@@ -816,17 +816,22 @@ function updateSubmitBar() {
   if (c.kill) sum.appendChild(el('span', { className: 'gl-submit-chip k' }, `${c.kill} KILL`));
   if (!c.sel && !c.alt && !c.kill) sum.appendChild(el('span', { className: 'muted' }, 'Mark images to get started'));
 
+  const alreadySubmitted = state.gallery.status === 'submitted';
+  const btnLabel = alreadySubmitted ? 'Re-submit selects' : 'Submit selects';
   const btn = el('button', {
     className: 'gl-submit-btn',
     disabled: (!c.sel && !c.alt && !c.kill) ? '' : null,
     onClick: async () => {
-      if (!confirm(`Send your ${c.sel + c.alt} selects to Aldo? This can't be undone.`)) return;
+      const msg = alreadySubmitted
+        ? `Update your selects and re-notify Aldo? (${c.sel + c.alt} selected)`
+        : `Send your ${c.sel + c.alt} selects to Aldo?`;
+      if (!confirm(msg)) return;
       btn.setAttribute('disabled', '');
       btn.textContent = 'Sending…';
       try { await submitGallery(); }
-      catch { btn.removeAttribute('disabled'); btn.textContent = 'Submit selects'; alert('Error submitting. Please try again.'); }
+      catch { btn.removeAttribute('disabled'); btn.textContent = btnLabel; alert('Error submitting. Please try again.'); }
     },
-  }, 'Submit selects');
+  }, btnLabel);
 
   bar.appendChild(sum);
   bar.appendChild(btn);
@@ -840,21 +845,21 @@ function render() {
   app.innerHTML = '';
   if (!state.gallery) { app.appendChild(renderLoading()); return; }
 
-  const readOnly = state.gallery.status === 'submitted';
+  const wasSubmitted = state.gallery.status === 'submitted';
   app.appendChild(renderHeader());
   app.appendChild(renderFilterBar());
 
-  if (readOnly) {
+  if (wasSubmitted) {
     app.appendChild(el('div', { className: 'gl-submitted-banner' },
       el('span', { style: { fontSize: 18 } }, '✓'),
-      el('span', {}, 'Selects submitted — thank you! Aldo has been notified.'),
+      el('span', {}, 'Selects submitted — you can still edit and re-submit below.'),
     ));
   }
 
   const main = el('div', { className: 'gl-main' });
-  main.appendChild(renderGrid(readOnly));
+  main.appendChild(renderGrid(false));
   app.appendChild(main);
-  if (!readOnly && state.images.length > 0) renderSubmitBar();
+  if (state.images.length > 0) renderSubmitBar();
 }
 
 function renderLoading() {

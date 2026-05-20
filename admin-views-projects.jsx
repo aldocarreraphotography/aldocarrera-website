@@ -304,6 +304,7 @@ function ProjectEditorView({ projectId, navigate }) {
     month: '',
     description: '',
     location: '',
+    public: true,
   });
   const [err, setErr] = vS({});
 
@@ -380,6 +381,17 @@ function ProjectEditorView({ projectId, navigate }) {
           </Field>
           <Field label="Location" wide>
             <TextInput value={draft.location} onChange={(v) => set('location', v)} placeholder="Hong Kong — Sheung Wan"/>
+          </Field>
+          <Field label="Visibility" hint={draft.public !== false ? 'Visible on the public archive.' : 'Hidden from the public archive.'}>
+            <div className="ad-toggle-row">
+              <button
+                type="button"
+                className={`ad-visibility-btn ${draft.public !== false ? 'pub' : 'priv'}`}
+                onClick={() => set('public', draft.public === false ? true : false)}
+              >
+                {draft.public !== false ? '● Public' : '○ Private'}
+              </button>
+            </div>
           </Field>
           <Field label="Description" wide hint="Internal notes + the blurb that appears on the project page.">
             <TextArea value={draft.description} onChange={(v) => set('description', v)} rows={4}/>
