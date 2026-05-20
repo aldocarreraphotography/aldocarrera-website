@@ -433,8 +433,9 @@ function _aldoReplaceObject(target, src) {
    never been written to — once we get content from it, we trust it. */
 function _aldoApplyData(data) {
   if (!data) return false;
-  const newProjects = (data.projects || []).map(_aldoToPublicProject);
-  const newArchive  = _aldoToPublicArchive(data.projects || []);
+  const publicProjects = (data.projects || []).filter(p => p.public !== false);
+  const newProjects = publicProjects.map(_aldoToPublicProject);
+  const newArchive  = _aldoToPublicArchive(publicProjects);
   const newClients  = _aldoToPublicClients(data.clients || []);
   const newServices = _aldoToPublicServices(data.services || []);
 

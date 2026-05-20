@@ -607,7 +607,18 @@ body {
 .ad-project-meta { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--ink-muted); letter-spacing: 0.02em; display: flex; align-items: center; gap: 6px; }
 .ad-project-meta .dot { color: var(--rule); }
 .ad-project-counts { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
-.ad-project-actions { display: flex; gap: 6px; }
+.ad-project-actions { display: flex; gap: 6px; align-items: center; }
+.ad-project-row.is-private { opacity: .55; }
+.ad-project-row.is-private .ad-project-name { text-decoration: line-through; }
+.ad-visibility-btn {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px; font-weight: 600; letter-spacing: .06em;
+  padding: 4px 10px; border-radius: 20px; border: 1px solid;
+  cursor: pointer; white-space: nowrap; transition: opacity .15s;
+}
+.ad-visibility-btn.pub  { background: #e8f5ee; border-color: #2a7a4f; color: #2a7a4f; }
+.ad-visibility-btn.priv { background: var(--paper-soft); border-color: var(--rule); color: var(--ink-muted); }
+.ad-visibility-btn:hover { opacity: .75; }
 
 /* ============================================================
    PROJECT LIST / SEARCH

@@ -124,11 +124,16 @@ function YearGroup({ year, projects, navigate }) {
   );
 }
 function ProjectRow({ project, navigate }) {
-  const sel  = project.images.filter(i => i.selected).length;
-  const fav  = project.images.filter(i => i.favorite).length;
-  const rej  = project.images.filter(i => i.rejected).length;
+  const sel     = project.images.filter(i => i.selected).length;
+  const fav     = project.images.filter(i => i.favorite).length;
+  const rej     = project.images.filter(i => i.rejected).length;
+  const isPublic = project.public !== false;
+  const togglePublic = (e) => {
+    e.stopPropagation();
+    window.AdminStore.updateProject(project.id, { public: !isPublic });
+  };
   return (
-    <div className="ad-project-row">
+    <div className={`ad-project-row ${isPublic ? '' : 'is-private'}`}>
       <div className="ad-project-mark"><Thumb blobPath={project.images[0]?.blobPath} aspect="1/1" placeholder={project.id.slice(0,2)}/></div>
       <div className="ad-project-mid">
         <div className="ad-project-id">{project.id}</div>
@@ -148,6 +153,9 @@ function ProjectRow({ project, navigate }) {
         {rej > 0 && <Pill tone="muted">{rej} rejected</Pill>}
       </div>
       <div className="ad-project-actions">
+        <button className={`ad-visibility-btn ${isPublic ? 'pub' : 'priv'}`} onClick={togglePublic} title={isPublic ? 'Public — click to make private' : 'Private — click to make public'}>
+          {isPublic ? '● Public' : '○ Private'}
+        </button>
         <Btn variant="ghost" size="sm" onClick={() => navigate(`#/projects/${encodeURIComponent(project.id)}/images`)}>View</Btn>
         <Btn variant="ghost" size="sm" onClick={() => navigate(`#/projects/${encodeURIComponent(project.id)}/edit`)}>Edit</Btn>
         <Btn variant="ghost" size="sm" onClick={() => navigate(`#/projects/${encodeURIComponent(project.id)}/upload`)}>Upload</Btn>
