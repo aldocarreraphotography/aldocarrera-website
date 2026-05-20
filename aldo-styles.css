@@ -2426,16 +2426,53 @@ input, textarea, select {
   .m-folder .fbody .thumb .name { font-size: 10px; }
   .m-folder.collapsed .fbody { display: none; }
 
-  /* mobile reels */
+  /* mobile reels — uses padding-top trick (not aspect-ratio) so the
+     box collapses to its proper height before the image loads, avoiding
+     a giant-image flash on first paint. */
   .mobile-page.reels { padding: 24px 20px 40px; }
-  .m-reel { margin-bottom: 22px; cursor: pointer; }
-  .m-reel-thumb { position: relative; aspect-ratio: 16/9; background: #14110d; border: 1px solid var(--rule); overflow: hidden; }
-  .m-reel-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .m-reel-placeholder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: var(--rule); font-size: 32px; }
+  .m-reel {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    margin-bottom: 22px;
+    cursor: pointer;
+  }
+  .m-reel-thumb {
+    position: relative;
+    display: block;
+    width: 100%;
+    height: 0;
+    padding-top: 56.25%; /* 16:9 */
+    background: #14110d;
+    border: 1px solid var(--rule);
+    overflow: hidden;
+  }
+  .m-reel-thumb img {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    max-width: 100%;
+  }
+  .m-reel-placeholder {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--rule);
+    font-size: 32px;
+  }
   .m-reel-play {
-    position: absolute; inset: 0;
-    display: flex; align-items: center; justify-content: center;
-    color: #fff; font-size: 38px;
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 38px;
     text-shadow: 0 2px 8px rgba(0,0,0,0.6);
     pointer-events: none;
     opacity: 0.85;

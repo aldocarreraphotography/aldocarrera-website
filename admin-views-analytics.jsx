@@ -2,6 +2,141 @@
 
 const { useState: anS, useEffect: anE, useMemo: anM } = React;
 
+/* ── Google Analytics 4 config ──────────────────────────────────
+   Measurement ID is hard-coded to match what's installed in
+   index.html, gallery.html, deck.html, and 404.html. */
+const GA_MEASUREMENT_ID = 'G-EJNJGESZT6';
+const GA_PROPERTY_NAME  = 'aldocarrera.com';
+const GA_HOME           = 'https://analytics.google.com/';
+const GA_REALTIME       = 'https://analytics.google.com/analytics/web/#/realtime/overview';
+const GA_REPORTS        = 'https://analytics.google.com/analytics/web/#/reports/reportinghub';
+
+/* ── Public Site Traffic section ────────────────────────────────
+   Verifies the GA install is reachable, shows tracking metadata,
+   and provides quick-links into the GA dashboard for each report
+   category. Full inline metrics (visitors, page views, top pages)
+   require setting up the GA4 Data API with a service account on
+   the NAS — link & instructions provided at the bottom. */
+function GAPublicTrafficCard() {
+  const [installStatus, setInstallStatus] = anS('checking');
+  const [installDetail, setInstallDetail] = anS('');
+
+  anE(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        // Fetch the live homepage and check for the gtag snippet.
+        const r = await fetch('/', { cache: 'no-store', credentials: 'omit' });
+        const html = await r.text();
+        const hasScript = html.includes('googletagmanager.com/gtag/js?id=' + GA_MEASUREMENT_ID);
+        const hasConfig = html.includes(`gtag('config', '${GA_MEASUREMENT_ID}'`);
+        if (cancelled) return;
+        if (hasScript && hasConfig) {
+          setInstallStatus('ok');
+          setInstallDetail('gtag.js loaded with measurement ID — sending hits to GA4.');
+        } else if (hasScript) {
+          setInstallStatus('partial');
+          setInstallDetail('Script loaded but config call not found.');
+        } else {
+          setInstallStatus('missing');
+          setInstallDetail('No gtag script found in the live HTML. Run a deploy.');
+        }
+      } catch (e) {
+        if (cancelled) return;
+        setInstallStatus('unknown');
+        setInstallDetail('Could not fetch homepage from this origin (CORS or offline).');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const dotColor =
+    installStatus === 'ok'      ? '#2a7a4f' :
+    installStatus === 'partial' ? '#c89b3c' :
+    installStatus === 'missing' ? '#b84242' :
+    installStatus === 'unknown' ? '#7a7675' : '#7a7675';
+  const dotLabel =
+    installStatus === 'ok'       ? 'TRACKING ACTIVE' :
+    installStatus === 'partial'  ? 'PARTIAL INSTALL' :
+    installStatus === 'missing'  ? 'NOT INSTALLED'   :
+    installStatus === 'unknown'  ? 'STATUS UNKNOWN'  : 'CHECKING…';
+
+  const reports = [
+    { label: 'Realtime',          desc: 'Who is on the site right now',                  href: GA_REALTIME,                                                             accent: true },
+    { label: 'Reports overview',  desc: 'High-level snapshot of the last 28 days',       href: GA_REPORTS },
+    { label: 'Acquisition',       desc: 'Where visitors came from (search, social, …)',  href: 'https://analytics.google.com/analytics/web/#/reports/acquisition-traffic-acquisition' },
+    { label: 'Pages & screens',   desc: 'Which pages get the most attention',            href: 'https://analytics.google.com/analytics/web/#/reports/engagement-pages-and-screens' },
+    { label: 'Demographics',      desc: 'Country, language, device, browser',            href: 'https://analytics.google.com/analytics/web/#/reports/demographics-details' },
+    { label: 'Events',            desc: 'Page views, scrolls, outbound clicks, video',   href: 'https://analytics.google.com/analytics/web/#/reports/engagement-events' },
+    { label: 'Tech',              desc: 'Mobile vs desktop, screen size, OS',            href: 'https://analytics.google.com/analytics/web/#/reports/tech-details' },
+    { label: 'Conversions',       desc: 'Goal completions (lead-gen objective)',         href: 'https://analytics.google.com/analytics/web/#/reports/key-events' },
+  ];
+
+  return (
+    <Card padding="lg" className="an-span-2">
+      <SectionHead
+        eyebrow="Public site"
+        title="Google Analytics 4"
+        sub={`Traffic for ${GA_PROPERTY_NAME} — full reports live in your GA dashboard`}
+      />
+
+      {/* Install status + tracking ID */}
+      <div className="ga-status-row">
+        <div className="ga-status-pill">
+          <span className="ga-status-dot" style={{ background: dotColor }}/>
+          <span className="ga-status-label">{dotLabel}</span>
+        </div>
+        <div className="ga-status-meta">
+          <div className="ga-meta-row">
+            <span className="ga-meta-k">Measurement ID</span>
+            <span className="ga-meta-v mono">{GA_MEASUREMENT_ID}</span>
+          </div>
+          <div className="ga-meta-row">
+            <span className="ga-meta-k">Property</span>
+            <span className="ga-meta-v">{GA_PROPERTY_NAME}</span>
+          </div>
+          <div className="ga-meta-row">
+            <span className="ga-meta-k">Tracking on</span>
+            <span className="ga-meta-v">Public site · Client galleries · To-go deck</span>
+          </div>
+          {installDetail && <div className="ga-meta-detail">{installDetail}</div>}
+        </div>
+      </div>
+
+      {/* Report quick-links grid */}
+      <div className="ga-report-grid">
+        {reports.map(r => (
+          <a
+            key={r.label}
+            href={r.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`ga-report-tile ${r.accent ? 'is-accent' : ''}`}
+          >
+            <div className="ga-report-label">{r.label}</div>
+            <div className="ga-report-desc">{r.desc}</div>
+            <div className="ga-report-arrow">↗</div>
+          </a>
+        ))}
+      </div>
+
+      {/* Footer note */}
+      <div className="ga-footer-note">
+        <div className="ga-footer-line">
+          <strong>Data lag:</strong> GA4 standard reports refresh every ~24 hours. Realtime is instant.
+        </div>
+        <div className="ga-footer-line">
+          <strong>Want inline metrics?</strong> Wiring the GA4 Data API into the NAS would let visitor counts,
+          top pages, and traffic sources render directly in this dashboard. Requires creating a Google Cloud
+          service account, granting it Viewer access to property <code className="mono">{GA_PROPERTY_NAME}</code>,
+          and setting <code className="mono">GA_PROPERTY_ID</code> + <code className="mono">GA_CREDENTIALS_JSON</code> env
+          vars on the NAS. Ask Claude to set this up when you're ready.
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 /* ── Formatters ─────────────────────────────────────────────────── */
 function anFmtBytes(n) {
   if (!n) return '0 B';
@@ -377,6 +512,9 @@ function AnalyticsView({ navigate }) {
       </div>
 
       <div className="an-grid-2">
+
+        {/* ── Public site traffic (Google Analytics 4) ──────────────── */}
+        <GAPublicTrafficCard/>
 
         {/* ── Upload activity ─────────────────────────────────────── */}
         <Card padding="lg" className="an-span-2">
