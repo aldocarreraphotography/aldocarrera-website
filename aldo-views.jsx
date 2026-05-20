@@ -628,6 +628,8 @@ function getEmbedSrc(url) {
 
 function getFullEmbedSrc(url) {
   if (!url) return '';
+  // Browsers block autoplay-with-sound, but the user just clicked the card so
+  // we have a transient autoplay-with-sound permission. Don't force mute=1 here.
   const vimeo = url.match(/vimeo\.com\/(\d+)/);
   if (vimeo) return `https://player.vimeo.com/video/${vimeo[1]}?autoplay=1&title=0&byline=0&portrait=0`;
   const yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]+)/);
@@ -639,6 +641,65 @@ function videoSrc(v) {
   if (!v.blobPath) return '';
   const parts = v.blobPath.replace(/^__videos\//, '').split('/');
   return `${API_BASE_V}/api/videos/${parts[0]}/file/${parts.slice(1).join('/')}`;
+}
+
+function ReelCard({ video, onOpen }) {
+  const [hover, setHover] = vsUseState(false);
+  const videoRef = vsUseRef(null);
+  const posterSrc = video.poster
+    ? (video.poster.startsWith('__vidposters') ? `${API_BASE_V}/api/projects/__vidposters${video.poster.slice(video.poster.indexOf('/'))}` : video.poster)
+    : null;
+  const fileSrc = videoSrc(video);
+  const embed   = getEmbedSrc(video.embedUrl);
+  const canHoverPreview = !!(fileSrc || embed);
+
+  vsUseEffect(() => {
+    const el = videoRef.current;
+    if (!el) return;
+    if (hover) { el.play().catch(() => {}); }
+    else { el.pause(); try { el.currentTime = 0; } catch (_) {} }
+  }, [hover]);
+
+  return (
+    <article
+      className="reel-card"
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      onClick={() => onOpen(video)}
+    >
+      <div className="reel-thumb">
+        {/* Layer 1: poster (always rendered, hidden when previewing) */}
+        {posterSrc
+          ? <img src={posterSrc} alt={video.title} className={`reel-poster ${hover && canHoverPreview ? 'is-hidden' : ''}`}/>
+          : <div className={`reel-thumb-placeholder ${hover && canHoverPreview ? 'is-hidden' : ''}`}>▶</div>
+        }
+        {/* Layer 2: hover preview — self-hosted gets a muted <video>, embed gets an iframe with background=1 */}
+        {hover && fileSrc && (
+          <video
+            ref={videoRef}
+            className="reel-preview"
+            src={fileSrc}
+            muted
+            playsInline
+            loop
+            preload="metadata"
+          />
+        )}
+        {hover && !fileSrc && embed && (
+          <iframe className="reel-preview" src={embed} frameBorder="0" allow="autoplay"/>
+        )}
+        <div className="reel-play-overlay"><span>▶</span></div>
+      </div>
+      <div className="reel-info">
+        <div className="reel-title">{video.title}</div>
+        <div className="reel-meta">
+          <span className="reel-cat">{video.category}</span>
+          {video.client && <><span className="dot">·</span><span>{video.client.toUpperCase()}</span></>}
+          <span className="dot">·</span><span>{video.year}</span>
+        </div>
+      </div>
+    </article>
+  );
 }
 
 function ReelsView({ onOpenVideo }) {
@@ -653,25 +714,7 @@ function ReelsView({ onOpenVideo }) {
   }
   return (
     <div className="reels-grid">
-      {VIDEOS.map(v => (
-        <article key={v.id} className="reel-card" onClick={() => onOpenVideo(v)}>
-          <div className="reel-thumb">
-            {v.poster
-              ? <img src={v.poster.startsWith('__vidposters') ? `${API_BASE_V}/api/projects/__vidposters${v.poster.slice(v.poster.indexOf('/'))}` : v.poster} alt={v.title}/>
-              : <div className="reel-thumb-placeholder">▶</div>
-            }
-            <div className="reel-play-overlay"><span>▶</span></div>
-          </div>
-          <div className="reel-info">
-            <div className="reel-title">{v.title}</div>
-            <div className="reel-meta">
-              <span className="reel-cat">{v.category}</span>
-              {v.client && <><span className="dot">·</span><span>{v.client.toUpperCase()}</span></>}
-              <span className="dot">·</span><span>{v.year}</span>
-            </div>
-          </div>
-        </article>
-      ))}
+      {VIDEOS.map(v => <ReelCard key={v.id} video={v} onOpen={onOpenVideo}/>)}
     </div>
   );
 }

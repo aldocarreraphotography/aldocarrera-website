@@ -477,6 +477,7 @@ async function _aldoFetchFromApi() {
     // `services` and `clients` come as raw arrays in the Blobs shape.
     const normalized = {
       projects: data.projects || [],
+      videos:   data.videos   || [],
       clients:  Array.isArray(data.clients)  ? data.clients  : (data.clients?.clients  || []),
       services: Array.isArray(data.services) ? data.services : (data.services?.services || []),
       about:    data.about    || {},
@@ -503,6 +504,7 @@ async function _aldoApplyFromLocalAdmin(source) {
   const projects = JSON.parse(JSON.stringify(store.projects || []));
   const applied = _aldoApplyData({
     projects,
+    videos:   store.videos   || [],
     clients:  store.clients  || [],
     services: store.services || [],
     about:    store.about    || {},
@@ -515,6 +517,7 @@ async function _aldoApplyFromLocalAdmin(source) {
     const resolved = await _aldoResolveIdbPaths(projects);
     _aldoApplyData({
       projects: resolved,
+      videos:   store.videos   || [],
       clients:  store.clients  || [],
       services: store.services || [],
       about:    store.about    || {},
