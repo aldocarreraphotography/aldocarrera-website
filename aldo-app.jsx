@@ -1750,9 +1750,12 @@ function WindowHost({ win, z, focused, minimized, onMove, onResize, onFocus, onC
    MOBILE SHELL
    ============================================================ */
 function MobileShell({ active, setActive, project, setProject, folders, setFolders, openPhoto, setOpenPhoto }) {
+  const [mobileVideo, setMobileVideo] = aUseState(null);
+  const VIDEOS = (window.ALDO && window.ALDO.VIDEOS) || [];
   const tabs = [
     { k: 'portfolio', l: 'Portfolio' },
     { k: 'archive',   l: 'Archive'   },
+    { k: 'reels',     l: 'Reels'     },
     { k: 'services',  l: 'Services'  },
     { k: 'clients',   l: 'Clients'   },
     { k: 'about',     l: 'About'     },
@@ -1833,6 +1836,47 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
         </div>
       </div>
     );
+  } else if (active === 'reels') {
+    const apiBase = window.API_BASE || '';
+    const posterFor = (v) => {
+      if (!v.poster) return null;
+      return v.poster.startsWith('__vidposters/')
+        ? `${apiBase}/api/videoposters/${v.poster.slice('__vidposters/'.length)}`
+        : v.poster;
+    };
+    body = (
+      <div className="mobile-page reels">
+        {VIDEOS.length === 0 ? (
+          <div style={{ padding: 40, textAlign: 'center', color: 'var(--ink-muted)' }}>
+            <div style={{ fontSize: 36, color: 'var(--rule)' }}>▶</div>
+            <div style={{ fontFamily: '"IBM Plex Mono", monospace', fontSize: 12, marginTop: 8 }}>No reels yet.</div>
+          </div>
+        ) : (
+          VIDEOS.map(v => {
+            const p = posterFor(v);
+            return (
+              <div key={v.id} className="m-reel" onClick={() => setMobileVideo(v)}>
+                <div className="m-reel-thumb">
+                  {p
+                    ? <img src={p} alt={v.title}/>
+                    : <div className="m-reel-placeholder">▶</div>
+                  }
+                  <div className="m-reel-play">▶</div>
+                </div>
+                <div className="m-reel-info">
+                  <div className="m-reel-title">{v.title}</div>
+                  <div className="m-reel-meta">
+                    <span>{v.category}</span>
+                    {v.client && <><span> · </span><span>{v.client.toUpperCase()}</span></>}
+                    <span> · </span><span>{v.year}</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+    );
   } else if (active === 'services') {
     body = <div className="mobile-page services"><Services/></div>;
   } else if (active === 'about') {
@@ -1872,6 +1916,24 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
             <b>{openPhoto.photo.client}</b> · {openPhoto.photo.type || ''}<br/>
             {openPhoto.photo.date} · {openPhoto.photo.dims} · {openPhoto.photo.size}
             {openPhoto.photo.note && <><br/><span style={{color:'var(--ink-muted)'}}>"{openPhoto.photo.note}"</span></>}
+          </div>
+        </div>
+      )}
+      {mobileVideo && (
+        <div className="m-viewer">
+          <div className="topbar">
+            <span>{mobileVideo.title}</span>
+            <span onClick={() => setMobileVideo(null)} style={{cursor:'pointer'}}>CLOSE ×</span>
+          </div>
+          <div className="stage" style={{ background: '#0e0d0c' }}>
+            <VideoPlayer video={mobileVideo}/>
+          </div>
+          <div className="info">
+            <h3>{mobileVideo.title}</h3>
+            <b>{mobileVideo.category}</b>
+            {mobileVideo.client && <> · {mobileVideo.client.toUpperCase()}</>}
+            {mobileVideo.year && <> · {mobileVideo.year}</>}
+            {mobileVideo.description && <><br/><span style={{color:'var(--ink-muted)'}}>"{mobileVideo.description}"</span></>}
           </div>
         </div>
       )}

@@ -121,6 +121,13 @@ const NOT_FOUND = `<!doctype html>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>Not found — Aldo Carrera</title>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-EJNJGESZT6"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-EJNJGESZT6', { send_page_view: true, page_path: '404' });
+</script>
 <link rel="stylesheet" href="/aldo-styles.css"/>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap"/>
 <style>

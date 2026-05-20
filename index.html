@@ -5,6 +5,25 @@
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>Aldo Carrera — Photography</title>
 
+<!-- Google Analytics 4 — aldocarrera.com (G-EJNJGESZT6) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-EJNJGESZT6"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-EJNJGESZT6', { send_page_view: true });
+</script>
+
+<!-- Image protection: block right-click + drag on photographs -->
+<script>
+  document.addEventListener('contextmenu', function (e) {
+    if (e.target && e.target.tagName === 'IMG') e.preventDefault();
+  }, { capture: true });
+  document.addEventListener('dragstart', function (e) {
+    if (e.target && e.target.tagName === 'IMG') e.preventDefault();
+  }, { capture: true });
+</script>
+
 <!-- SEO -->
 <meta name="description" content="Aldo Carrera — fashion and campaign photographer based in Los Angeles. High-end fashion, editorial, lookbook, casting, and creative direction."/>
 <meta name="author" content="Aldo Carrera"/>

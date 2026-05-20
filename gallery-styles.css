@@ -2,6 +2,15 @@
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* Image protection — soft deterrent against save/drag */
+img {
+  -webkit-user-drag: none;
+  user-drag: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
 :root {
   --paper:      #f5f2ee;
   --paper-soft: #ece8e3;

@@ -6,6 +6,25 @@
 <meta name="robots" content="noindex, nofollow"/>
 <title>Gallery — Aldo Carrera</title>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml"/>
+
+<!-- Google Analytics 4 — aldocarrera.com (G-EJNJGESZT6) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-EJNJGESZT6"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-EJNJGESZT6', { send_page_view: true, page_path: 'client-gallery' });
+</script>
+
+<!-- Image protection: block right-click + drag on photographs -->
+<script>
+  document.addEventListener('contextmenu', function (e) {
+    if (e.target && e.target.tagName === 'IMG') e.preventDefault();
+  }, { capture: true });
+  document.addEventListener('dragstart', function (e) {
+    if (e.target && e.target.tagName === 'IMG') e.preventDefault();
+  }, { capture: true });
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap"/>
