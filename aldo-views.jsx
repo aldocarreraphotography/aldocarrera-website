@@ -60,16 +60,39 @@ function Portfolio({ view, onSetView, onOpenProject, onSetCrumb }) {
 }
 
 /* ============================================================
-   PROJECT WINDOW (single project archive)
+   PROJECT WINDOW (single project — real images from NAS)
    ============================================================ */
+function _fmtBytes(n) {
+  if (!n) return '';
+  if (n >= 1024 * 1024) return (n / 1024 / 1024).toFixed(1) + ' MB';
+  if (n >= 1024) return (n / 1024).toFixed(0) + ' KB';
+  return n + ' B';
+}
+
 function ProjectDetail({ project, onOpenPhoto }) {
-  const [dataTick, setDataTick] = vsUseState(0);
-  vsUseEffect(() => {
-    const onUpdate = () => setDataTick(t => t + 1);
-    window.addEventListener('aldo-data-updated', onUpdate);
-    return () => window.removeEventListener('aldo-data-updated', onUpdate);
-  }, []);
-  const items = vsUseMemo(() => ARCHIVE.filter(a => a.project === project.id), [project.id, dataTick]);
+  const images = vsUseMemo(() =>
+    (project.images || [])
+      .filter(i => !i.rejected)
+      .sort((a, b) => (a.order ?? 9999) - (b.order ?? 9999)),
+    [project.id, project.images]
+  );
+
+  const toViewerItem = (img) => ({
+    id:      img.filename,
+    photo:   img.blobPath,
+    name:    img.filename,
+    client:  project.client || '',
+    project: project.id,
+    date:    img.exif?.dateTaken || project.month || '',
+    dims:    img.exif?.dimensions || '',
+    size:    _fmtBytes(img.exif?.fileSize),
+    type:    project.type || '',
+    year:    String(project.year || ''),
+    note:    img.notes || '',
+  });
+
+  const viewerList = vsUseMemo(() => images.map(toViewerItem), [images, project.id]);
+
   return (
     <div>
       <div style={{padding: '24px 26px 18px', borderBottom: '1px solid var(--rule)', background: 'var(--window)'}}>
@@ -83,31 +106,23 @@ function ProjectDetail({ project, onOpenPhoto }) {
           {project.note && <div style={{gridColumn:'1 / -1', fontStyle:'italic', color:'var(--ink)', fontFamily:'Neue Haas Grotesk Display Pro, Inter, sans-serif', fontSize: 14, lineHeight: 1.5, paddingTop: 10, borderTop:'1px solid var(--rule-soft)'}}>"{project.note}"</div>}
         </div>
       </div>
-      {items.length > 0 ? (
+      {images.length > 0 ? (
         <div className="thumb-grid">
-          {items.map(it => (
-            <div key={it.id} className="thumb" onClick={() => onOpenPhoto(it)}>
-              <div className="pic"><img src={it.photo} alt={it.name} loading="lazy"/></div>
-              <span className="name">{it.name}</span>
-              <span className="sub">{it.size} · {it.note || 'archive'}</span>
-            </div>
-          ))}
+          {images.map(img => {
+            const it = toViewerItem(img);
+            return (
+              <div key={img.filename} className="thumb" onClick={() => onOpenPhoto(it, viewerList)}>
+                <div className="pic"><img src={img.blobPath} alt={img.filename} loading="lazy"/></div>
+                <span className="name">{img.filename}</span>
+                <span className="sub">{[it.dims, it.size].filter(Boolean).join(' · ') || 'archive'}</span>
+              </div>
+            );
+          })}
         </div>
       ) : (
-        <div className="thumb-grid">
-          {Array.from({length: project.count}).map((_, i) => (
-            <div key={i} className="thumb" onClick={() => onOpenPhoto({ photo: project.photo, name: `${project.id}_F${(i+1).toString().padStart(2,'0')}.jpg`, size: "—", date: project.month, client: project.client, dims: "—" })}>
-              <div className="pic">
-                {i < project.count - 2 ? (
-                  <img src={project.photo} alt="" loading="lazy"/>
-                ) : (
-                  <div className="placeholder">reserved<br/>frame {i+1}</div>
-                )}
-              </div>
-              <span className="name">{project.id}_F{(i+1).toString().padStart(2,'0')}.jpg</span>
-              <span className="sub">7.{i+1} MB · select</span>
-            </div>
-          ))}
+        <div style={{padding:'60px 24px', textAlign:'center', color:'var(--ink-soft)'}}>
+          <div style={{fontSize:32, marginBottom:12}}>∅</div>
+          <div>No images in this project yet.</div>
         </div>
       )}
     </div>

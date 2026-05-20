@@ -732,8 +732,10 @@ app.get('/api/galleries/:token', async (req, res) => {
 
   res.json({
     ...gallery,
-    password: gallery.password ? '••••' : null,
-    projectName: project?.name || null,
+    password:     gallery.password ? '••••' : null,
+    projectName:  project?.name || null,
+    viewCount:    gallery.viewCount    || 0,
+    lastViewedAt: gallery.lastViewedAt || null,
     images,
   });
 });
@@ -774,6 +776,12 @@ app.get('/api/gallery/:token', async (req, res) => {
   const gallery = await findGallery(req.params.token).catch(() => null);
   const errCheck = galleryTokenCheck(gallery, req);
   if (errCheck) return res.status(errCheck.status).json({ error: errCheck.err });
+
+  // Fire-and-forget view tracking
+  updateGallery(gallery.token, {
+    viewCount:    (gallery.viewCount || 0) + 1,
+    lastViewedAt: new Date().toISOString(),
+  }).catch(() => {});
 
   const data    = await readProjects();
   const project = data.projects.find(p => p.id === gallery.projectId);

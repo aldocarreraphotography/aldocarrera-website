@@ -1,6 +1,233 @@
 /* admin-views-galleries.jsx — Gallery link management */
 
-const { useState: gS, useEffect: gE, useMemo: gM } = React;
+const { useState: gS, useEffect: gE, useMemo: gM, useRef: gRef, useCallback: gCB } = React;
+
+/* ============================================================
+   MARKUP DRAWING — ported from gallery.html
+   ============================================================ */
+function _normToCanvas(nx, ny, b) {
+  return { x: b.ox + nx * b.rw, y: b.oy + ny * b.rh };
+}
+
+function _getImgBounds(imgEl) {
+  const { naturalWidth: nw, naturalHeight: nh } = imgEl;
+  const { width: cw, height: ch } = imgEl.getBoundingClientRect();
+  if (!nw || !nh || !cw || !ch) return null;
+  const scale = Math.min(cw / nw, ch / nh);
+  const rw = nw * scale, rh = nh * scale;
+  return { ox: (cw - rw) / 2, oy: (ch - rh) / 2, rw, rh };
+}
+
+function _drawShape(ctx, b, tool, shape, color, lw) {
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.fillStyle   = color;
+  ctx.lineWidth   = lw || 2;
+  ctx.lineCap     = 'round';
+  ctx.lineJoin    = 'round';
+
+  if (tool === 'freehand' && shape?.points?.length > 1) {
+    ctx.beginPath();
+    const p0 = _normToCanvas(shape.points[0][0], shape.points[0][1], b);
+    ctx.moveTo(p0.x, p0.y);
+    for (let i = 1; i < shape.points.length; i++) {
+      const p = _normToCanvas(shape.points[i][0], shape.points[i][1], b);
+      ctx.lineTo(p.x, p.y);
+    }
+    ctx.stroke();
+  } else if (tool === 'ellipse' && shape) {
+    const c = _normToCanvas(shape.cx, shape.cy, b);
+    ctx.beginPath();
+    ctx.ellipse(c.x, c.y, shape.rx * b.rw, shape.ry * b.rh, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  } else if (tool === 'arrow' && shape) {
+    const s = _normToCanvas(shape.x1, shape.y1, b);
+    const e = _normToCanvas(shape.x2, shape.y2, b);
+    ctx.beginPath();
+    ctx.moveTo(s.x, s.y);
+    ctx.lineTo(e.x, e.y);
+    ctx.stroke();
+    const angle = Math.atan2(e.y - s.y, e.x - s.x);
+    const len   = 12;
+    ctx.beginPath();
+    ctx.moveTo(e.x, e.y);
+    ctx.lineTo(e.x - len * Math.cos(angle - 0.4), e.y - len * Math.sin(angle - 0.4));
+    ctx.lineTo(e.x - len * Math.cos(angle + 0.4), e.y - len * Math.sin(angle + 0.4));
+    ctx.closePath();
+    ctx.fill();
+  } else if (tool === 'rect' && shape) {
+    const origin = _normToCanvas(shape.x, shape.y, b);
+    ctx.beginPath();
+    ctx.rect(origin.x, origin.y, shape.w * b.rw, shape.h * b.rh);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/* Small thumbnail markup overlay (inside gallery grid cards) */
+function MarkupOverlay({ markups, imgRef, canvasRef }) {
+  gE(() => {
+    const canvas = canvasRef.current;
+    const img    = imgRef.current;
+    if (!canvas || !img || !markups?.length) return;
+
+    function draw() {
+      const dpr  = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      canvas.width  = rect.width  * dpr;
+      canvas.height = rect.height * dpr;
+      const ctx = canvas.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, rect.width, rect.height);
+      const b = _getImgBounds(img);
+      if (!b) return;
+      for (const mk of markups) _drawShape(ctx, b, mk.tool, mk.shape, mk.color, 1.5);
+    }
+
+    if (img.complete && img.naturalWidth) draw();
+    else img.addEventListener('load', draw, { once: true });
+    const ro = new ResizeObserver(draw);
+    ro.observe(img);
+    return () => ro.disconnect();
+  }, [markups]);
+
+  if (!markups?.length) return null;
+  return (
+    <canvas
+      ref={canvasRef}
+      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
+    />
+  );
+}
+
+/* Full-size image lightbox with markup canvas */
+function GalleryLightbox({ img, sel, allImages, allSels, onClose }) {
+  const [current, setCurrent] = gS(img);
+  const imgRef    = gRef(null);
+  const canvasRef = gRef(null);
+
+  const idx = allImages.findIndex(i => i.filename === current.filename);
+  const curSel = allSels[current.filename] || {};
+  const markups = curSel.markups || [];
+
+  gE(() => {
+    const onKey = (e) => {
+      if (e.key === 'Escape')      onClose();
+      if (e.key === 'ArrowRight' && idx < allImages.length - 1) setCurrent(allImages[idx + 1]);
+      if (e.key === 'ArrowLeft'  && idx > 0)                   setCurrent(allImages[idx - 1]);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [idx, allImages, onClose]);
+
+  gE(() => {
+    const canvas = canvasRef.current;
+    const image  = imgRef.current;
+    if (!canvas || !image) return;
+
+    function draw() {
+      const dpr  = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      canvas.width  = rect.width  * dpr;
+      canvas.height = rect.height * dpr;
+      const ctx = canvas.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, rect.width, rect.height);
+      const b = _getImgBounds(image);
+      if (!b) return;
+      for (const mk of markups) _drawShape(ctx, b, mk.tool, mk.shape, mk.color, 2);
+    }
+
+    if (image.complete && image.naturalWidth) draw();
+    else image.addEventListener('load', draw, { once: true });
+    const ro = new ResizeObserver(draw);
+    ro.observe(image);
+    return () => ro.disconnect();
+  }, [current.filename, markups]);
+
+  return (
+    <div className="gl-lightbox-admin" onClick={onClose}>
+      <div className="gl-lb-admin-inner" onClick={e => e.stopPropagation()}>
+        <div className="gl-lb-admin-top">
+          <div>
+            <span className="ad-mono" style={{ fontSize: 12 }}>{current.filename}</span>
+            {curSel.label && <span className={`ad-badge ad-badge-${curSel.label === 'SELECT' ? 'green' : curSel.label === 'ALT' ? 'blue' : 'muted'}`} style={{ marginLeft: 8 }}>{curSel.label}</span>}
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {curSel.stars > 0 && <span style={{ color: '#c89b3c' }}>{'★'.repeat(curSel.stars)}</span>}
+            <span className="ad-muted" style={{ fontSize: 12 }}>{idx + 1} / {allImages.length}</span>
+            <button className="ad-btn-icon" onClick={onClose} style={{ fontSize: 18, lineHeight: 1 }}>×</button>
+          </div>
+        </div>
+
+        <div style={{ position: 'relative', flex: 1, minHeight: 0, background: '#0e0d0c', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <img
+            ref={imgRef}
+            src={current.blobPath}
+            alt={current.filename}
+            style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', display: 'block' }}
+          />
+          <canvas
+            ref={canvasRef}
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
+          />
+          {idx > 0 && (
+            <button className="gl-lb-admin-nav gl-lb-admin-prev" onClick={() => setCurrent(allImages[idx - 1])}>‹</button>
+          )}
+          {idx < allImages.length - 1 && (
+            <button className="gl-lb-admin-nav gl-lb-admin-next" onClick={() => setCurrent(allImages[idx + 1])}>›</button>
+          )}
+        </div>
+
+        {curSel.note && (
+          <div style={{ padding: '10px 16px', borderTop: '1px solid var(--ad-rule)', fontSize: 13, color: 'var(--ink-muted)' }}>
+            <span className="ad-eyebrow" style={{ marginRight: 8 }}>Note:</span>{curSel.note}
+          </div>
+        )}
+        {markups.length > 0 && (
+          <div style={{ padding: '8px 16px', borderTop: '1px solid var(--ad-rule)', display: 'flex', gap: 8, flexWrap: 'wrap', fontSize: 12 }}>
+            {markups.map(mk => (
+              <span key={mk.id} style={{ background: mk.color + '22', border: `1px solid ${mk.color}`, borderRadius: 4, padding: '2px 6px', color: mk.color, fontFamily: 'monospace' }}>
+                {mk.tool}{mk.comment ? ` — ${mk.comment}` : ''}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* Single gallery image card with markup overlay */
+function GalleryImageCard({ img, sel, onClick }) {
+  const imgRef    = gRef(null);
+  const canvasRef = gRef(null);
+  const markups   = sel?.markups || [];
+
+  return (
+    <div
+      className={`ad-gallery-card ${sel?.label ? 'has-label label-' + sel.label : ''}`}
+      onClick={onClick}
+      style={{ cursor: 'pointer' }}
+    >
+      <div className="ad-gallery-thumb-wrap" style={{ position: 'relative' }}>
+        <img ref={imgRef} src={img.blobPath} alt={img.filename} className="ad-gallery-thumb" loading="lazy"/>
+        {sel?.label && <span className={`ad-gallery-badge badge-${sel.label}`}>{sel.label}</span>}
+        <MarkupOverlay markups={markups} imgRef={imgRef} canvasRef={canvasRef}/>
+      </div>
+      <div className="ad-gallery-card-body">
+        <div className="ad-mono ad-muted" style={{ fontSize: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{img.filename}</div>
+        {sel?.stars > 0 && <div style={{ color: '#c89b3c', fontSize: 12 }}>{'★'.repeat(sel.stars)}</div>}
+        {markups.length > 0 && (
+          <div style={{ fontSize: 11, color: '#5a6fa8', marginTop: 2 }}>✎ {markups.length} markup{markups.length === 1 ? '' : 's'}</div>
+        )}
+        {sel?.note && <div style={{ fontSize: 11, color: 'var(--ink-muted)', marginTop: 2 }}>{sel.note}</div>}
+      </div>
+    </div>
+  );
+}
 
 /* ============================================================
    GALLERIES LIST VIEW
@@ -102,6 +329,7 @@ function GalleriesView({ navigate }) {
                 <th>Status</th>
                 <th>Progress</th>
                 <th>Selects</th>
+                <th>Views</th>
                 <th>Created</th>
                 <th style={{ width: 1 }}></th>
               </tr>
@@ -122,6 +350,12 @@ function GalleriesView({ navigate }) {
                       : <span className="ad-muted">—</span>
                     }
                     {g._counts?.alted > 0 && <span className="ad-muted" style={{ marginLeft: 6, fontSize: 12 }}>{g._counts.alted} ALT</span>}
+                  </td>
+                  <td className="ad-muted" style={{ fontSize: 12 }}>
+                    {g.viewCount > 0
+                      ? <span title={g.lastViewedAt ? `Last: ${new Date(g.lastViewedAt).toLocaleString()}` : ''}>{g.viewCount} view{g.viewCount === 1 ? '' : 's'}</span>
+                      : '—'
+                    }
                   </td>
                   <td className="ad-mono ad-muted" style={{ fontSize: 12 }}>{g.createdAt ? new Date(g.createdAt).toLocaleDateString() : '—'}</td>
                   <td>
@@ -165,7 +399,6 @@ function GalleryCreateModal({ open, onClose, onCreated }) {
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
-  // Auto-fill title when project changes
   const onProjectChange = (id) => {
     const p = projects.find(x => x.id === id);
     set('projectId', id);
@@ -251,12 +484,130 @@ function GalleryCreateModal({ open, onClose, onCreated }) {
 }
 
 /* ============================================================
+   PDF EXPORT — gallery selects
+   ============================================================ */
+async function exportGallerySelectsPDF(gallery, images, sels) {
+  if (!window.jspdf) { toast('PDF engine still loading — try again in a moment.', 'warn'); return; }
+
+  const selImages = images.filter(img => {
+    const label = sels[img.filename]?.label;
+    return label === 'SELECT' || label === 'ALT';
+  });
+  if (selImages.length === 0) { toast('No selects or alts to export.', 'warn'); return; }
+
+  toast(`Generating PDF for ${selImages.length} images…`, 'ok');
+
+  const PW = 816, PH = 1056, SC = 2;
+  const PAPER = '#f5f2ee', INK = '#1a1714', SOFT = '#7a7675', RULE = '#cdc8c2';
+  const PL = 48, PT = 52;
+
+  const toDataUrl = async (src) => {
+    try {
+      const r = await fetch(src, { mode: 'cors', cache: 'no-store' });
+      const blob = await r.blob();
+      return await new Promise(res => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.readAsDataURL(blob); });
+    } catch (_) { return src; }
+  };
+
+  const loadImg = (src) => new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+
+  const drawContain = (ctx, img, x, y, w, h) => {
+    ctx.fillStyle = PAPER; ctx.fillRect(x, y, w, h);
+    if (!img) return;
+    const ia = img.naturalWidth / img.naturalHeight;
+    const sa = w / h;
+    let dw, dh, dx, dy;
+    if (ia > sa) { dw = w; dh = w / ia; dx = x; dy = y + (h - dh) / 2; }
+    else         { dh = h; dw = h * ia; dy = y; dx = x + (w - dw) / 2; }
+    ctx.drawImage(img, dx, dy, dw, dh);
+  };
+
+  await document.fonts.ready;
+
+  const makePage = async (imgObj, selObj, pageNum, total) => {
+    const cv = document.createElement('canvas');
+    cv.width = PW * SC; cv.height = PH * SC;
+    const ctx = cv.getContext('2d');
+    ctx.scale(SC, SC);
+    ctx.fillStyle = PAPER; ctx.fillRect(0, 0, PW, PH);
+
+    // Header
+    ctx.fillStyle = SOFT; ctx.font = '9px "IBM Plex Mono", monospace';
+    ctx.fillText(`${gallery.title || 'Gallery'} — ${gallery.clientName || ''}`.toUpperCase(), PL, PT);
+    const pgLabel = `${pageNum} / ${total}`;
+    ctx.fillText(pgLabel, PW - PL - ctx.measureText(pgLabel).width, PT);
+    ctx.strokeStyle = RULE; ctx.lineWidth = 0.75;
+    ctx.beginPath(); ctx.moveTo(PL, PT + 10); ctx.lineTo(PW - PL, PT + 10); ctx.stroke();
+
+    // Image
+    const dataUrl = await toDataUrl(imgObj.blobPath);
+    const img     = await loadImg(dataUrl);
+    const imgArea = { x: PL, y: PT + 22, w: PW - PL * 2, h: 820 };
+    drawContain(ctx, img, imgArea.x, imgArea.y, imgArea.w, imgArea.h);
+
+    // Caption strip
+    const capY = imgArea.y + imgArea.h + 14;
+    ctx.strokeStyle = RULE; ctx.lineWidth = 0.75;
+    ctx.beginPath(); ctx.moveTo(PL, capY); ctx.lineTo(PW - PL, capY); ctx.stroke();
+
+    const labelColor = selObj.label === 'SELECT' ? '#2a7a4f' : '#2a5a8a';
+    ctx.fillStyle = labelColor; ctx.font = '500 11px "IBM Plex Mono", monospace';
+    ctx.fillText(selObj.label || '', PL, capY + 20);
+
+    ctx.fillStyle = INK; ctx.font = '10px "IBM Plex Mono", monospace';
+    ctx.fillText(imgObj.filename, PL + 70, capY + 20);
+
+    if (selObj.stars > 0) {
+      ctx.fillStyle = '#c89b3c'; ctx.font = '12px serif';
+      ctx.fillText('★'.repeat(selObj.stars), PW - PL - selObj.stars * 14, capY + 20);
+    }
+
+    if (selObj.note) {
+      ctx.fillStyle = SOFT; ctx.font = '10px Inter, sans-serif';
+      ctx.fillText(selObj.note.slice(0, 120), PL, capY + 36);
+    }
+
+    return cv;
+  };
+
+  try {
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ unit: 'pt', format: 'letter', orientation: 'portrait' });
+    const PW2 = 612, PH2 = 792;
+
+    for (let i = 0; i < selImages.length; i++) {
+      const imgObj = selImages[i];
+      const selObj = sels[imgObj.filename] || {};
+      const cv = await makePage(imgObj, selObj, i + 1, selImages.length);
+      if (i > 0) pdf.addPage('letter', 'portrait');
+      pdf.addImage(cv.toDataURL('image/jpeg', 0.9), 'JPEG', 0, 0, PW2, PH2, undefined, 'FAST');
+      await new Promise(r => setTimeout(r, 0));
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    const safeName = (gallery.title || 'Gallery').replace(/[^a-zA-Z0-9]/g, '_');
+    pdf.save(`${safeName}_Selects_${today}.pdf`);
+    toast(`PDF exported — ${selImages.length} images`, 'ok');
+  } catch (err) {
+    console.error('[gallery-pdf]', err);
+    toast('PDF export failed: ' + (err?.message || 'unknown'), 'error');
+  }
+}
+
+/* ============================================================
    GALLERY DETAIL VIEW (admin reviewing client selections)
    ============================================================ */
 function GalleryDetailView({ token, navigate }) {
   const [gallery, setGallery]   = gS(null);
   const [loading, setLoading]   = gS(true);
   const [filter, setFilter]     = gS('ALL');
+  const [lightbox, setLightbox] = gS(null); // img object | null
+  const [exporting, setExporting] = gS(false);
 
   gE(() => {
     (async () => {
@@ -301,6 +652,15 @@ function GalleryDetailView({ token, navigate }) {
     navigator.clipboard.writeText(url).then(() => toast('Link copied', 'ok')).catch(() => toast(url, 'ok'));
   };
 
+  const doExportPDF = async () => {
+    setExporting(true);
+    try {
+      await exportGallerySelectsPDF(gallery, images, sels);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <>
       <PageHeader
@@ -309,6 +669,9 @@ function GalleryDetailView({ token, navigate }) {
         crumbs={[{ label: 'Admin', href: '#/dashboard' }, { label: 'Galleries', href: '#/galleries' }, { label: gallery.clientName || gallery.token }]}
         actions={
           <>
+            <Btn variant="ghost" onClick={doExportPDF} disabled={exporting || counts.SELECT + counts.ALT === 0}>
+              {exporting ? 'Exporting…' : `Export PDF (${counts.SELECT + counts.ALT})`}
+            </Btn>
             <Btn variant="ghost" onClick={copyLink}>Copy client link</Btn>
             <Btn variant="ghost" onClick={() => navigate('#/galleries')}>← Back</Btn>
           </>
@@ -319,7 +682,7 @@ function GalleryDetailView({ token, navigate }) {
         <StatCard label="Status"    value={statusText}               sub={gallery.clientName || '—'} />
         <StatCard label="SELECT"    value={counts.SELECT}            sub="client picks" />
         <StatCard label="ALT"       value={counts.ALT}               sub="alternates" />
-        <StatCard label="Reviewed"  value={`${counts.SELECT + counts.ALT + counts.KILL}/${counts.ALL}`} sub="of total frames" />
+        <StatCard label="Views"     value={gallery.viewCount || 0}   sub={gallery.lastViewedAt ? `last ${new Date(gallery.lastViewedAt).toLocaleDateString()}` : 'not yet opened'} />
       </div>
 
       {/* Filter pills */}
@@ -337,26 +700,25 @@ function GalleryDetailView({ token, navigate }) {
 
       <div className="ad-gallery-grid">
         {visible.length === 0 && <div className="ad-muted" style={{ padding: '40px 0', textAlign: 'center' }}>No images match this filter.</div>}
-        {visible.map(img => {
-          const s = sels[img.filename] || {};
-          return (
-            <div key={img.filename} className={`ad-gallery-card ${s.label ? 'has-label label-' + s.label : ''}`}>
-              <div className="ad-gallery-thumb-wrap">
-                <img src={img.blobPath} alt={img.filename} className="ad-gallery-thumb" loading="lazy"/>
-                {s.label && <span className={`ad-gallery-badge badge-${s.label}`}>{s.label}</span>}
-              </div>
-              <div className="ad-gallery-card-body">
-                <div className="ad-mono ad-muted" style={{ fontSize: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{img.filename}</div>
-                {s.stars > 0 && <div style={{ color: '#c89b3c', fontSize: 12 }}>{'★'.repeat(s.stars)}</div>}
-                {Array.isArray(s.markups) && s.markups.length > 0 && (
-                  <div style={{ fontSize: 11, color: '#5a6fa8', marginTop: 2 }}>✎ {s.markups.length} markup{s.markups.length === 1 ? '' : 's'}</div>
-                )}
-                {s.note && <div style={{ fontSize: 11, color: 'var(--ink-muted)', marginTop: 2 }}>{s.note}</div>}
-              </div>
-            </div>
-          );
-        })}
+        {visible.map(img => (
+          <GalleryImageCard
+            key={img.filename}
+            img={img}
+            sel={sels[img.filename] || {}}
+            onClick={() => setLightbox(img)}
+          />
+        ))}
       </div>
+
+      {lightbox && (
+        <GalleryLightbox
+          img={lightbox}
+          sel={sels[lightbox.filename] || {}}
+          allImages={visible}
+          allSels={sels}
+          onClose={() => setLightbox(null)}
+        />
+      )}
     </>
   );
 }

@@ -1688,11 +1688,12 @@ function WindowHost({ win, z, focused, minimized, onMove, onResize, onFocus, onC
         {baseCrumb(['~', 'portfolio', win.project.year, win.project.id])}
       </div>
     );
-    content = <ProjectDetail project={win.project} onOpenPhoto={(p) => onOpenPhoto(p, ARCHIVE.filter(a => a.project === win.project.id))}/>;
+    content = <ProjectDetail project={win.project} onOpenPhoto={onOpenPhoto}/>;
+    const projImgCount = (win.project.images || []).filter(i => !i.rejected).length;
     statusbar = (
       <div className="window-statusbar">
         <span className="col"><b>{win.project.client}</b></span>
-        <span className="col">{win.project.count} photographs</span>
+        <span className="col">{projImgCount} photographs</span>
         <span className="col">{win.project.format}</span>
         <span className="spacer"/>
         <span>{win.project.month}</span>
