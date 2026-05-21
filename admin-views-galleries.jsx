@@ -658,8 +658,10 @@ function GalleryDetailView({ token, navigate }) {
   const [filter, setFilter]     = gS('ALL');
   const [lightbox, setLightbox] = gS(null); // img object | null
   const [exporting, setExporting] = gS(false);
+  const [zipping,   setZipping]   = gS(false);
   const [showRound, setShowRound] = gS(false);
   const [showPDFOpts, setShowPDFOpts] = gS(false);
+  const [showZipOpts, setShowZipOpts] = gS(false);
   const [pdfOpts, setPdfOpts] = gS({
     includeSelect:  true,
     includeAlt:     true,
@@ -728,6 +730,36 @@ function GalleryDetailView({ token, navigate }) {
     }
   };
 
+  const doDownloadZip = async (labels) => {
+    setShowZipOpts(false);
+    setZipping(true);
+    try {
+      const token   = localStorage.getItem('aldo_admin_token');
+      const baseUrl = window.API_BASE || '';
+      const r = await fetch(`${baseUrl}/api/galleries/${gallery.token}/zip`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body:    JSON.stringify({ labels }),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        throw new Error(err.message || `Server returned ${r.status}`);
+      }
+      const blob = await r.blob();
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      const cd   = r.headers.get('Content-Disposition') || '';
+      const name = cd.match(/filename="([^"]+)"/)?.[1] || `${gallery.token}_selects.zip`;
+      a.href = url; a.download = name; a.click();
+      URL.revokeObjectURL(url);
+      toast(`ZIP downloaded — ${labels?.length ? labels.join('+') : 'all images'}`, 'ok');
+    } catch (e) {
+      toast('ZIP failed: ' + (e.message || 'unknown'), 'error');
+    } finally {
+      setZipping(false);
+    }
+  };
+
   // Count how many images match the current option filters (live preview)
   const pdfMatchCount = (() => {
     const wanted = new Set();
@@ -745,6 +777,9 @@ function GalleryDetailView({ token, navigate }) {
         crumbs={[{ label: 'Admin', href: '#/dashboard' }, { label: 'Galleries', href: '#/galleries' }, { label: gallery.clientName || gallery.token }]}
         actions={
           <>
+            <Btn variant="ghost" onClick={() => setShowZipOpts(true)} disabled={zipping || images.length === 0}>
+              {zipping ? 'Zipping…' : 'Download ZIP…'}
+            </Btn>
             <Btn variant="ghost" onClick={() => setShowPDFOpts(true)} disabled={exporting || counts.SELECT + counts.ALT + counts.KILL === 0}>
               {exporting ? 'Exporting…' : 'Export PDF…'}
             </Btn>
@@ -867,6 +902,36 @@ function GalleryDetailView({ token, navigate }) {
               <button className="ad-pdf-preset" onClick={() => setPdfOpts({ includeSelect: true, includeAlt: true, includeKill: false, includeMarkups: true, includeNotes: true, includeStars: true })}>Selects + markups</button>
               <button className="ad-pdf-preset" onClick={() => setPdfOpts({ includeSelect: true, includeAlt: true, includeKill: true, includeMarkups: true, includeNotes: true, includeStars: true })}>Everything</button>
             </div>
+          </div>
+        </Modal>
+      )}
+
+      {showZipOpts && (
+        <Modal
+          open={showZipOpts}
+          onClose={() => setShowZipOpts(false)}
+          eyebrow="Export"
+          title="Download ZIP"
+          width={400}
+          footer={<Btn variant="ghost" onClick={() => setShowZipOpts(false)}>Cancel</Btn>}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ fontSize: 12, color: 'var(--ink-muted)', marginBottom: 4 }}>
+              Choose which images to include. Files are downloaded as originals from the NAS.
+            </div>
+            {counts.SELECT > 0 && (
+              <Btn onClick={() => doDownloadZip(['SELECT'])}>
+                SELECT only — {counts.SELECT} {counts.SELECT === 1 ? 'image' : 'images'}
+              </Btn>
+            )}
+            {counts.SELECT + counts.ALT > 0 && (
+              <Btn variant="ghost" onClick={() => doDownloadZip(['SELECT', 'ALT'])}>
+                SELECT + ALT — {counts.SELECT + counts.ALT} images
+              </Btn>
+            )}
+            <Btn variant="ghost" onClick={() => doDownloadZip([])}>
+              All images — {images.length} images
+            </Btn>
           </div>
         </Modal>
       )}

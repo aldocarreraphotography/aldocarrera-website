@@ -37,6 +37,7 @@ import {
 const app        = express();
 const PORT       = process.env.PORT       || 3001;
 const PUBLIC_URL = (process.env.PUBLIC_URL || '').replace(/\/$/, '');
+const IMAGES_DIR = process.env.IMAGES_DIR || path.join(process.cwd(), 'images');
 
 if (!process.env.ADMIN_PASSWORD) throw new Error('ADMIN_PASSWORD env var is required');
 
@@ -785,6 +786,72 @@ app.delete('/api/galleries/:token', async (req, res) => {
   const ok = await deleteGallery(req.params.token);
   if (!ok) return res.status(404).json({ error: 'not_found' });
   res.status(204).send();
+});
+
+/* POST /api/galleries/:token/zip
+   Body: { labels: ['SELECT','ALT'] }  — omit or pass [] for all images
+   Streams a ZIP of the matching images directly to the client. */
+app.post('/api/galleries/:token/zip', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+
+  const { labels } = req.body || {};
+
+  const gallery = await findGallery(req.params.token).catch(() => null);
+  if (!gallery) return res.status(404).json({ error: 'not_found' });
+
+  const data    = await readProjects();
+  const project = data.projects.find(p => p.id === gallery.projectId);
+  if (!project) return res.status(404).json({ error: 'project_not_found' });
+
+  const sels = gallery.selections || {};
+  let images = project.images.filter(i => !i.rejected);
+
+  if (labels && labels.length) {
+    images = images.filter(img => labels.includes(sels[img.filename]?.label));
+  }
+
+  if (images.length === 0) {
+    return res.status(400).json({ error: 'no_images', message: 'No images match the selected filter.' });
+  }
+
+  try {
+    const { default: archiver } = await import('archiver');
+    const archive = archiver('zip', { zlib: { level: 0 } }); // store-only (JPEGs don't compress further)
+
+    const safeTitle = (gallery.title || gallery.token).replace(/[^a-zA-Z0-9_\-]/g, '_');
+    const labelStr  = labels && labels.length ? `_${labels.join('-')}` : '_ALL';
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeTitle}${labelStr}.zip"`);
+
+    archive.on('error', (err) => {
+      console.error('[zip] archive error:', err.message);
+      if (!res.headersSent) res.status(500).end();
+    });
+
+    archive.pipe(res);
+
+    let added = 0;
+    for (const img of images) {
+      const filePath = path.join(IMAGES_DIR, gallery.projectId, img.filename);
+      if (fs.existsSync(filePath)) {
+        archive.file(filePath, { name: img.filename });
+        added++;
+      } else {
+        console.warn('[zip] file not found on disk:', filePath);
+      }
+    }
+
+    if (added === 0) {
+      res.removeHeader('Content-Disposition');
+      return res.status(400).json({ error: 'no_files', message: 'No image files found on disk.' });
+    }
+
+    await archive.finalize();
+    console.log(`[zip] gallery ${gallery.token} — ${added} files zipped`);
+  } catch (err) {
+    console.error('[zip] fatal:', err.message);
+    if (!res.headersSent) res.status(500).json({ error: 'zip_failed', message: err.message });
+  }
 });
 
 /* ------------------------------------------------------------------ */
