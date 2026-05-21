@@ -4,7 +4,54 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>Aldo Carrera — Photography</title>
+
+<!-- Google Analytics 4 — aldocarrera.com (G-EJNJGESZT6) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-EJNJGESZT6"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-EJNJGESZT6', { send_page_view: true });
+</script>
+
+<!-- Image protection: block right-click + drag on photographs -->
+<script>
+  document.addEventListener('contextmenu', function (e) {
+    if (e.target && e.target.tagName === 'IMG') e.preventDefault();
+  }, { capture: true });
+  document.addEventListener('dragstart', function (e) {
+    if (e.target && e.target.tagName === 'IMG') e.preventDefault();
+  }, { capture: true });
+</script>
+
+<!-- SEO -->
+<meta name="description" content="Aldo Carrera — fashion and campaign photographer based in Los Angeles. High-end fashion, editorial, lookbook, casting, and creative direction."/>
+<meta name="author" content="Aldo Carrera"/>
+<link rel="canonical" href="https://aldocarrera.com/"/>
+
+<!-- Open Graph / social sharing -->
+<meta property="og:type" content="website"/>
+<meta property="og:url" content="https://aldocarrera.com/"/>
+<meta property="og:title" content="Aldo Carrera — Photography"/>
+<meta property="og:description" content="Fashion and campaign photographer based in Los Angeles. High-end fashion, editorial, lookbook, casting, and creative direction."/>
+<meta property="og:image" content="https://aldocarrera.com/og-image.svg"/>
+<meta property="og:image:width" content="1200"/>
+<meta property="og:image:height" content="630"/>
+<meta property="og:site_name" content="Aldo Carrera"/>
+
+<!-- Twitter / X card -->
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:title" content="Aldo Carrera — Photography"/>
+<meta name="twitter:description" content="Fashion and campaign photographer based in Los Angeles."/>
+<meta name="twitter:image" content="https://aldocarrera.com/og-image.svg"/>
+
+<!-- Favicon -->
+<link rel="icon" href="/favicon.svg" type="image/svg+xml"/>
+<link rel="icon" href="/favicon.svg" sizes="any"/>
+
 <link rel="stylesheet" href="aldo-styles.css"/>
+<!-- NAS API base URL. Set to your NAS server address. Empty string = use relative /api/ paths. -->
+<script>window.API_BASE = 'https://api.aldocarrera.com';</script>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap"/>

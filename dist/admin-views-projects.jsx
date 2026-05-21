@@ -124,11 +124,16 @@ function YearGroup({ year, projects, navigate }) {
   );
 }
 function ProjectRow({ project, navigate }) {
-  const sel  = project.images.filter(i => i.selected).length;
-  const fav  = project.images.filter(i => i.favorite).length;
-  const rej  = project.images.filter(i => i.rejected).length;
+  const sel     = project.images.filter(i => i.selected).length;
+  const fav     = project.images.filter(i => i.favorite).length;
+  const rej     = project.images.filter(i => i.rejected).length;
+  const isPublic = project.public !== false;
+  const togglePublic = (e) => {
+    e.stopPropagation();
+    window.AdminStore.updateProject(project.id, { public: !isPublic });
+  };
   return (
-    <div className="ad-project-row">
+    <div className={`ad-project-row ${isPublic ? '' : 'is-private'}`}>
       <div className="ad-project-mark"><Thumb blobPath={project.images[0]?.blobPath} aspect="1/1" placeholder={project.id.slice(0,2)}/></div>
       <div className="ad-project-mid">
         <div className="ad-project-id">{project.id}</div>
@@ -148,6 +153,9 @@ function ProjectRow({ project, navigate }) {
         {rej > 0 && <Pill tone="muted">{rej} rejected</Pill>}
       </div>
       <div className="ad-project-actions">
+        <button className={`ad-visibility-btn ${isPublic ? 'pub' : 'priv'}`} onClick={togglePublic} title={isPublic ? 'Public — click to make private' : 'Private — click to make public'}>
+          {isPublic ? '● Public' : '○ Private'}
+        </button>
         <Btn variant="ghost" size="sm" onClick={() => navigate(`#/projects/${encodeURIComponent(project.id)}/images`)}>View</Btn>
         <Btn variant="ghost" size="sm" onClick={() => navigate(`#/projects/${encodeURIComponent(project.id)}/edit`)}>Edit</Btn>
         <Btn variant="ghost" size="sm" onClick={() => navigate(`#/projects/${encodeURIComponent(project.id)}/upload`)}>Upload</Btn>
@@ -161,16 +169,63 @@ function ProjectRow({ project, navigate }) {
    ============================================================ */
 function ProjectsListView({ navigate }) {
   window.useStoreSubscribe();
+  const settings  = window.AdminStore.getSettings();
+  const sortMode  = settings.projectSort || 'year';
   const [q, setQ] = vS('');
-  const projects = window.AdminStore.getProjects()
-    .filter(p => {
-      if (!q) return true;
-      const s = q.toLowerCase();
-      return p.name.toLowerCase().includes(s)
-          || p.client.toLowerCase().includes(s)
-          || p.id.toLowerCase().includes(s);
-    });
-  const years = useMemoGroup(projects, p => p.year);
+  const [dragFrom, setDragFrom] = vS(null);
+  const [dragOver, setDragOver] = vS(null);
+
+  const setSortMode = (mode) => {
+    window.AdminStore.setSettings({ projectSort: mode });
+  };
+
+  const all = window.AdminStore.getProjects();
+  const filtered = all.filter(p => {
+    if (!q) return true;
+    const s = q.toLowerCase();
+    return p.name.toLowerCase().includes(s)
+        || p.client.toLowerCase().includes(s)
+        || p.id.toLowerCase().includes(s);
+  });
+
+  const sorted = [...filtered].sort((a, b) => {
+    if (sortMode === 'manual') return (a.order ?? 9999) - (b.order ?? 9999);
+    if (sortMode === 'client') return (a.client || '').localeCompare(b.client || '');
+    return Number(b.year || 0) - Number(a.year || 0);
+  });
+
+  const onDragStart = (id) => (e) => {
+    if (sortMode !== 'manual') return;
+    setDragFrom(id);
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', id); } catch (_) {}
+  };
+  const onDragOver = (id) => (e) => {
+    if (sortMode !== 'manual' || !dragFrom) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOver !== id) setDragOver(id);
+  };
+  const onDragLeave = () => setDragOver(null);
+  const onDrop = (id) => (e) => {
+    if (sortMode !== 'manual' || !dragFrom) return;
+    e.preventDefault();
+    if (dragFrom === id) { setDragFrom(null); setDragOver(null); return; }
+    const ids = sorted.map(p => p.id);
+    const from = ids.indexOf(dragFrom);
+    const to   = ids.indexOf(id);
+    if (from === -1 || to === -1) return;
+    ids.splice(from, 1);
+    ids.splice(to, 0, dragFrom);
+    window.AdminStore.reorderProjects(ids);
+    setDragFrom(null);
+    setDragOver(null);
+    toast('Order saved', 'ok');
+  };
+
+  const years = useMemoGroup(sorted, p => p.year);
+  const showAsGroups = sortMode === 'year';
+
   return (
     <>
       <PageHeader
@@ -180,19 +235,49 @@ function ProjectsListView({ navigate }) {
         actions={<Btn onClick={() => navigate('#/projects/new')} icon="+">New project</Btn>}
       />
       <Card padding="md">
-        <div className="ad-search-row">
+        <div className="ad-search-row" style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
           <input
             className="ad-input ad-search"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search projects, clients, or IDs…"
+            style={{ flex: 1 }}
           />
+          <div className="ad-sort-control">
+            <label className="ad-sort-label">Sort:</label>
+            <select className="ad-select ad-sort-select" value={sortMode} onChange={(e) => setSortMode(e.target.value)}>
+              <option value="year">By year (newest)</option>
+              <option value="client">By client (A–Z)</option>
+              <option value="manual">Manual order</option>
+            </select>
+          </div>
         </div>
-        {projects.length === 0
+        {sortMode === 'manual' && (
+          <div className="ad-sort-hint">Drag any row to reorder. New projects appear at the bottom.</div>
+        )}
+        {sorted.length === 0
           ? <Empty title="No projects match" sub="Try a different search."/>
-          : Object.keys(years).sort((a,b) => b - a).map(y => (
-              <YearGroup key={y} year={y} projects={years[y]} navigate={navigate}/>
-            ))
+          : showAsGroups
+            ? Object.keys(years).sort((a,b) => b - a).map(y => (
+                <YearGroup key={y} year={y} projects={years[y]} navigate={navigate}/>
+              ))
+            : (
+              <div className="ad-project-list">
+                {sorted.map(p => (
+                  <div
+                    key={p.id}
+                    draggable={sortMode === 'manual'}
+                    onDragStart={onDragStart(p.id)}
+                    onDragOver={onDragOver(p.id)}
+                    onDragLeave={onDragLeave}
+                    onDrop={onDrop(p.id)}
+                    className={`${sortMode === 'manual' ? 'is-draggable' : ''} ${dragOver === p.id ? 'is-drag-over' : ''} ${dragFrom === p.id ? 'is-dragging' : ''}`}
+                  >
+                    <ProjectRow project={p} navigate={navigate}/>
+                  </div>
+                ))}
+              </div>
+            )
         }
       </Card>
     </>
@@ -219,6 +304,7 @@ function ProjectEditorView({ projectId, navigate }) {
     month: '',
     description: '',
     location: '',
+    public: true,
   });
   const [err, setErr] = vS({});
 
@@ -295,6 +381,17 @@ function ProjectEditorView({ projectId, navigate }) {
           </Field>
           <Field label="Location" wide>
             <TextInput value={draft.location} onChange={(v) => set('location', v)} placeholder="Hong Kong — Sheung Wan"/>
+          </Field>
+          <Field label="Visibility" hint={draft.public !== false ? 'Visible on the public archive.' : 'Hidden from the public archive.'}>
+            <div className="ad-toggle-row">
+              <button
+                type="button"
+                className={`ad-visibility-btn ${draft.public !== false ? 'pub' : 'priv'}`}
+                onClick={() => set('public', draft.public === false ? true : false)}
+              >
+                {draft.public !== false ? '● Public' : '○ Private'}
+              </button>
+            </div>
           </Field>
           <Field label="Description" wide hint="Internal notes + the blurb that appears on the project page.">
             <TextArea value={draft.description} onChange={(v) => set('description', v)} rows={4}/>
@@ -461,6 +558,7 @@ function ProjectImagesView({ projectId, navigate }) {
   const [viewer, setViewer] = vS(null);
   const [dragFrom, setDragFrom] = vS(null);
   const [dragOver, setDragOver] = vS(null);
+  const [deckModal, setDeckModal] = vS(false);
 
   if (!project) return <Empty title="Project not found" sub={projectId} action={<Btn onClick={() => navigate('#/projects')}>Back to projects</Btn>}/>;
 
@@ -543,11 +641,13 @@ function ProjectImagesView({ projectId, navigate }) {
         ]}
         actions={
           <>
+            <Btn variant="ghost" onClick={() => setDeckModal(true)}>Share deck ↗</Btn>
             <Btn variant="ghost" onClick={() => navigate(`#/projects/${encodeURIComponent(project.id)}/edit`)}>Edit project</Btn>
             <Btn onClick={() => navigate(`#/projects/${encodeURIComponent(project.id)}/upload`)} icon="↑">Upload images</Btn>
           </>
         }
       />
+      <ShareDeckModal project={project} open={deckModal} onClose={() => setDeckModal(false)}/>
 
       <Card padding="md">
         <div className="ad-images-toolbar">
@@ -643,8 +743,10 @@ function ImageCard({ img, project, showMeta, selected, onToggleSelect, onOpen,
                     draggable, isDragging, isDragOver, position,
                     onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd }) {
   const cycle = (k) => window.AdminStore.updateImage(project.id, img.filename, { [k]: !img[k] });
+  const setCover = () => window.AdminStore.setCoverImage(project.id, img.filename);
   const cls = [
     'ad-image-card',
+    img.cover  ? 'is-cover'      : '',
     selected   ? 'is-selected'   : '',
     isDragging ? 'is-dragging'   : '',
     isDragOver ? 'is-drag-over'  : '',
@@ -695,6 +797,7 @@ function ImageCard({ img, project, showMeta, selected, onToggleSelect, onOpen,
         <button className={`ad-img-act ${img.selected ? 'on ok' : ''}`}      onClick={() => cycle('selected')}>SELECT</button>
         <button className={`ad-img-act ${img.favorite ? 'on accent' : ''}`}  onClick={() => cycle('favorite')}>FAV</button>
         <button className={`ad-img-act ${img.rejected ? 'on mute' : ''}`}    onClick={() => cycle('rejected')}>REJECT</button>
+        <button className={`ad-img-act ${img.cover ? 'on cover' : ''}`}      onClick={setCover}>COVER</button>
       </div>
     </div>
   );
@@ -772,6 +875,126 @@ function useMemoGroup(items, keyFn) {
 function useMemoClients() {
   window.useStoreSubscribe();
   return vM(() => window.AdminStore.getClients().map(c => c.name), []);
+}
+
+/* ============================================================
+   SHARE DECK MODAL
+   ============================================================ */
+function ShareDeckModal({ project, open, onClose }) {
+  const [decks, setDecks]     = vS([]);
+  const [creating, setCreating] = vS(false);
+  const [form, setForm]       = vS({ title: '', imagesFilter: 'selected', expiresAt: '' });
+  const [loading, setLoading] = vS(false);
+
+  vE(() => {
+    if (!open) return;
+    // Pre-fill title
+    setForm(f => ({ ...f, title: project.name + ' — To-Go Deck' }));
+    // Load existing deck links for this project
+    setLoading(true);
+    window.AdminStore.apiFetch('/api/decks')
+      .then(d => setDecks((d.decks || []).filter(dk => dk.projectId === project.id)))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [open, project.id]);
+
+  const deckURL = (token) => `${window.location.origin}/deck.html?token=${token}`;
+
+  const copy = (token) => {
+    navigator.clipboard.writeText(deckURL(token))
+      .then(() => toast('Link copied', 'ok'))
+      .catch(() => toast(deckURL(token), 'ok'));
+  };
+
+  const create = async () => {
+    setCreating(true);
+    try {
+      const dk = await window.AdminStore.apiFetch('/api/decks', {
+        method: 'POST',
+        body: JSON.stringify({
+          projectId:    project.id,
+          title:        form.title || project.name,
+          imagesFilter: form.imagesFilter,
+          expiresAt:    form.expiresAt ? new Date(form.expiresAt).toISOString() : null,
+        }),
+      });
+      setDecks(prev => [dk, ...prev]);
+      copy(dk.token);
+      toast('Deck link created — URL copied', 'ok');
+    } catch (e) {
+      toast('Error: ' + (e.message || 'failed'), 'error');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const remove = async (token) => {
+    if (!confirm('Delete this deck link?')) return;
+    try {
+      await window.AdminStore.apiFetch(`/api/decks/${token}`, { method: 'DELETE' });
+      setDecks(prev => prev.filter(d => d.token !== token));
+      toast('Deck link deleted', 'ok');
+    } catch (e) {
+      toast('Error: ' + e.message, 'error');
+    }
+  };
+
+  const selectedCount = project.images.filter(i => i.selected || i.favorite).length;
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      eyebrow="Share"
+      title="To-Go Deck link"
+      width={540}
+      footer={
+        <>
+          <Btn variant="ghost" onClick={onClose}>Close</Btn>
+          <Btn onClick={create} disabled={creating}>{creating ? 'Creating…' : 'Create & copy link'}</Btn>
+        </>
+      }
+    >
+      <Field label="Deck title" wide>
+        <TextInput value={form.title} onChange={v => setForm(f => ({ ...f, title: v }))} placeholder={project.name}/>
+      </Field>
+
+      <Field label="Images" wide hint={`Project has ${selectedCount} selected/favorite images.`}>
+        <select className="ad-select" value={form.imagesFilter} onChange={e => setForm(f => ({ ...f, imagesFilter: e.target.value }))}>
+          <option value="selected">Selected & favorite only ({selectedCount} images)</option>
+          <option value="all">All images ({project.images.filter(i => !i.rejected).length} images)</option>
+        </select>
+      </Field>
+
+      <Field label="Expires" hint="Leave blank for no expiry.">
+        <TextInput type="date" value={form.expiresAt} onChange={v => setForm(f => ({ ...f, expiresAt: v }))}/>
+      </Field>
+
+      {decks.length > 0 && (
+        <>
+          <div style={{ height: 1, background: 'var(--rule)', margin: '8px 0 16px' }}/>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--ink-muted)', marginBottom: 10 }}>Existing links</div>
+          {loading
+            ? <div style={{ color: 'var(--ink-muted)', fontSize: 13 }}>Loading…</div>
+            : decks.map(dk => (
+              <div key={dk.token} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--rule)' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{dk.title || project.name}</div>
+                  <div className="ad-mono ad-muted" style={{ fontSize: 11 }}>
+                    {dk.imagesFilter} · {dk.views || 0} views · {new Date(dk.createdAt).toLocaleDateString()}
+                    {dk.expiresAt && ` · expires ${new Date(dk.expiresAt).toLocaleDateString()}`}
+                  </div>
+                </div>
+                <button className="ad-link" onClick={() => copy(dk.token)}>Copy</button>
+                <a className="ad-link" href={deckURL(dk.token)} target="_blank" rel="noopener">Open ↗</a>
+                <button className="ad-link ad-link-quiet" onClick={() => remove(dk.token)}>Delete</button>
+              </div>
+            ))
+          }
+        </>
+      )}
+    </Modal>
+  );
 }
 
 Object.assign(window, {

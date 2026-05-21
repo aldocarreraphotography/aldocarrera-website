@@ -4,7 +4,7 @@
 
 const AldoLogo = ({ size = 28, fill = 'currentColor', className }) => (
   <svg
-    className={className}
+    className={`aldo-logo-mark ${className || ''}`}
     width={size}
     height={size * (326.97 / 452.33)}
     viewBox="0 0 452.33 326.97"

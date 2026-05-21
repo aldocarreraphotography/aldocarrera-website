@@ -10,13 +10,25 @@ function AboutEditorView({ navigate }) {
   const initial = window.AdminStore.getAbout();
   const [draft, setDraft] = cS(initial);
   const [newPractice, setNewPractice] = cS('');
+  const [saving, setSaving] = cS(false);
   const dirty = JSON.stringify(draft) !== JSON.stringify(initial);
 
-  const save = () => {
+  // Pull latest from API on mount so we always show what's live
+  cE(() => {
+    window.AdminStore.pullFromAPI().then(() => {
+      const fresh = window.AdminStore.getAbout();
+      setDraft(fresh);
+    }).catch(() => {});
+  }, []);
+
+  const save = async () => {
+    setSaving(true);
     window.AdminStore.setAbout(draft);
+    try { await window.AdminStore.forceSync(); } catch (_) {}
+    setSaving(false);
     toast('About saved', 'ok');
   };
-  const reset = () => setDraft(initial);
+  const reset = () => setDraft(window.AdminStore.getAbout());
 
   const setEdu = (k, v) => setDraft(d => ({ ...d, education: { ...d.education, [k]: v } }));
 
@@ -36,8 +48,8 @@ function AboutEditorView({ navigate }) {
         crumbs={[{ label: 'Admin', href: '#/dashboard' }, { label: 'About' }]}
         actions={
           <>
-            {dirty && <Btn variant="ghost" onClick={reset}>Discard</Btn>}
-            <Btn onClick={save} disabled={!dirty}>Save changes</Btn>
+            {dirty && !saving && <Btn variant="ghost" onClick={reset}>Discard</Btn>}
+            <Btn onClick={save} disabled={!dirty || saving}>{saving ? 'Saving…' : 'Save changes'}</Btn>
           </>
         }
       />

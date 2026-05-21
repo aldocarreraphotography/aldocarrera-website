@@ -1,6 +1,7 @@
 /* admin-views-auth.jsx — login screen */
 
 function LoginView({ onLogin }) {
+  const [username, setUsername] = React.useState('aldocarrera');
   const [password, setPassword] = React.useState('');
   const [remember, setRemember] = React.useState(true);
   const [error, setError] = React.useState(null);
@@ -31,15 +32,29 @@ function LoginView({ onLogin }) {
           </div>
         </div>
 
-        <form onSubmit={submit} className="ad-login-form">
+        <form onSubmit={submit} className="ad-login-form" autoComplete="on" action="#" method="post">
+          <Field label="Username">
+            <input
+              type="text"
+              name="username"
+              autoComplete="username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              className="ad-input"
+              disabled={busy}
+            />
+          </Field>
           <Field label="Password" error={error}>
-            <TextInput
+            <input
               type="password"
+              name="password"
+              autoComplete="current-password"
               value={password}
-              onChange={setPassword}
+              onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
               autoFocus
               disabled={busy}
+              className="ad-input"
             />
           </Field>
           <label className="ad-checkrow">

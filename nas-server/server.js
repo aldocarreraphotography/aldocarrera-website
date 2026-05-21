@@ -14,6 +14,7 @@ import express  from 'express';
 import cors     from 'cors';
 import multer   from 'multer';
 import path     from 'node:path';
+import fs       from 'node:fs';
 import sharp    from 'sharp';
 
 import { issueToken, verifyToken, authMiddleware, requireAuth } from './utils/auth.js';
@@ -1167,6 +1168,166 @@ app.get('/api/analytics', async (req, res) => {
     },
     activity: { uploadsByMonth },
   });
+});
+
+/* ------------------------------------------------------------------ */
+/* Google Analytics 4 Data API                                        */
+/* ------------------------------------------------------------------ */
+
+app.get('/api/ga-analytics', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+
+  const propertyId  = process.env.GA_PROPERTY_ID;
+  const credFile    = process.env.GA_CREDENTIALS_FILE;
+  const credJson    = process.env.GA_CREDENTIALS_JSON;
+
+  if (!propertyId || (!credFile && !credJson)) {
+    return res.status(503).json({
+      error:   'not_configured',
+      message: 'Set GA_PROPERTY_ID + GA_CREDENTIALS_FILE (or GA_CREDENTIALS_JSON) on the NAS.',
+    });
+  }
+
+  let credentials;
+  try {
+    const raw = credFile ? fs.readFileSync(credFile, 'utf8') : credJson;
+    credentials = JSON.parse(raw);
+  } catch (e) {
+    return res.status(500).json({
+      error:   'invalid_credentials',
+      message: `Could not parse GA credentials: ${e.message}`,
+    });
+  }
+
+  try {
+    const { BetaAnalyticsDataClient } = await import('@google-analytics/data');
+    const client   = new BetaAnalyticsDataClient({ credentials });
+    const property = `properties/${propertyId}`;
+    const dateRange = { startDate: '28daysAgo', endDate: 'today' };
+
+    const [
+      overviewRes,
+      topPagesRes,
+      acquisitionRes,
+      deviceRes,
+      countryRes,
+      realtimeRes,
+    ] = await Promise.all([
+      // 28-day overview
+      client.runReport({
+        property,
+        dateRanges: [dateRange],
+        metrics: [
+          { name: 'activeUsers' },
+          { name: 'sessions' },
+          { name: 'screenPageViews' },
+          { name: 'bounceRate' },
+          { name: 'averageSessionDuration' },
+          { name: 'newUsers' },
+        ],
+      }),
+      // Top 10 pages
+      client.runReport({
+        property,
+        dateRanges: [dateRange],
+        dimensions: [{ name: 'pagePath' }, { name: 'pageTitle' }],
+        metrics:    [{ name: 'screenPageViews' }, { name: 'activeUsers' }],
+        orderBys:   [{ metric: { metricName: 'screenPageViews' }, desc: true }],
+        limit: 10,
+      }),
+      // Traffic acquisition channels
+      client.runReport({
+        property,
+        dateRanges: [dateRange],
+        dimensions: [{ name: 'sessionDefaultChannelGroup' }],
+        metrics:    [{ name: 'sessions' }, { name: 'activeUsers' }],
+        orderBys:   [{ metric: { metricName: 'sessions' }, desc: true }],
+        limit: 8,
+      }),
+      // Device categories
+      client.runReport({
+        property,
+        dateRanges: [dateRange],
+        dimensions: [{ name: 'deviceCategory' }],
+        metrics:    [{ name: 'sessions' }, { name: 'activeUsers' }],
+        orderBys:   [{ metric: { metricName: 'sessions' }, desc: true }],
+      }),
+      // Top countries
+      client.runReport({
+        property,
+        dateRanges: [dateRange],
+        dimensions: [{ name: 'country' }],
+        metrics:    [{ name: 'sessions' }],
+        orderBys:   [{ metric: { metricName: 'sessions' }, desc: true }],
+        limit: 8,
+      }),
+      // Realtime active users
+      client.runRealtimeReport({
+        property,
+        metrics: [{ name: 'activeUsers' }],
+      }),
+    ]);
+
+    const getVal = (row, idx) => row.metricValues?.[idx]?.value    || '0';
+    const getDim = (row, idx) => row.dimensionValues?.[idx]?.value || '';
+
+    const overviewRow = overviewRes[0].rows?.[0];
+    const overview = overviewRow ? {
+      users:         parseInt(getVal(overviewRow, 0), 10),
+      sessions:      parseInt(getVal(overviewRow, 1), 10),
+      pageViews:     parseInt(getVal(overviewRow, 2), 10),
+      bounceRate:    parseFloat(getVal(overviewRow, 3)),
+      avgSessionDur: parseFloat(getVal(overviewRow, 4)),
+      newUsers:      parseInt(getVal(overviewRow, 5), 10),
+    } : { users: 0, sessions: 0, pageViews: 0, bounceRate: 0, avgSessionDur: 0, newUsers: 0 };
+
+    const topPages = (topPagesRes[0].rows || []).map(row => ({
+      path:  getDim(row, 0),
+      title: getDim(row, 1),
+      views: parseInt(getVal(row, 0), 10),
+      users: parseInt(getVal(row, 1), 10),
+    }));
+
+    const acquisition = (acquisitionRes[0].rows || []).map(row => ({
+      channel:  getDim(row, 0),
+      sessions: parseInt(getVal(row, 0), 10),
+      users:    parseInt(getVal(row, 1), 10),
+    }));
+
+    const devices = (deviceRes[0].rows || []).map(row => ({
+      device:   getDim(row, 0),
+      sessions: parseInt(getVal(row, 0), 10),
+      users:    parseInt(getVal(row, 1), 10),
+    }));
+
+    const countries = (countryRes[0].rows || []).map(row => ({
+      country:  getDim(row, 0),
+      sessions: parseInt(getVal(row, 0), 10),
+    }));
+
+    const realtimeActiveUsers = parseInt(
+      realtimeRes[0].rows?.[0]?.metricValues?.[0]?.value || '0',
+      10,
+    );
+
+    res.json({
+      period:      '28daysAgo to today',
+      generatedAt: new Date().toISOString(),
+      realtime:    { activeUsers: realtimeActiveUsers },
+      overview,
+      topPages,
+      acquisition,
+      devices,
+      countries,
+    });
+  } catch (err) {
+    console.error('[ga-analytics] API error:', err?.message, err?.code);
+    res.status(500).json({
+      error:   'api_error',
+      message: err?.message || 'Unknown GA4 API error',
+      code:    err?.code,
+    });
+  }
 });
 
 /* ------------------------------------------------------------------ */

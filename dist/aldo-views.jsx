@@ -60,10 +60,39 @@ function Portfolio({ view, onSetView, onOpenProject, onSetCrumb }) {
 }
 
 /* ============================================================
-   PROJECT WINDOW (single project archive)
+   PROJECT WINDOW (single project — real images from NAS)
    ============================================================ */
+function _fmtBytes(n) {
+  if (!n) return '';
+  if (n >= 1024 * 1024) return (n / 1024 / 1024).toFixed(1) + ' MB';
+  if (n >= 1024) return (n / 1024).toFixed(0) + ' KB';
+  return n + ' B';
+}
+
 function ProjectDetail({ project, onOpenPhoto }) {
-  const items = vsUseMemo(() => ARCHIVE.filter(a => a.project === project.id), [project.id]);
+  const images = vsUseMemo(() =>
+    (project.images || [])
+      .filter(i => !i.rejected)
+      .sort((a, b) => (a.order ?? 9999) - (b.order ?? 9999)),
+    [project.id, project.images]
+  );
+
+  const toViewerItem = (img) => ({
+    id:      img.filename,
+    photo:   img.blobPath,
+    name:    img.filename,
+    client:  project.client || '',
+    project: project.id,
+    date:    img.exif?.dateTaken || project.month || '',
+    dims:    img.exif?.dimensions || '',
+    size:    _fmtBytes(img.exif?.fileSize),
+    type:    project.type || '',
+    year:    String(project.year || ''),
+    note:    img.notes || '',
+  });
+
+  const viewerList = vsUseMemo(() => images.map(toViewerItem), [images, project.id]);
+
   return (
     <div>
       <div style={{padding: '24px 26px 18px', borderBottom: '1px solid var(--rule)', background: 'var(--window)'}}>
@@ -77,31 +106,23 @@ function ProjectDetail({ project, onOpenPhoto }) {
           {project.note && <div style={{gridColumn:'1 / -1', fontStyle:'italic', color:'var(--ink)', fontFamily:'Neue Haas Grotesk Display Pro, Inter, sans-serif', fontSize: 14, lineHeight: 1.5, paddingTop: 10, borderTop:'1px solid var(--rule-soft)'}}>"{project.note}"</div>}
         </div>
       </div>
-      {items.length > 0 ? (
+      {images.length > 0 ? (
         <div className="thumb-grid">
-          {items.map(it => (
-            <div key={it.id} className="thumb" onClick={() => onOpenPhoto(it)}>
-              <div className="pic"><img src={it.photo} alt={it.name} loading="lazy"/></div>
-              <span className="name">{it.name}</span>
-              <span className="sub">{it.size} · {it.note || 'archive'}</span>
-            </div>
-          ))}
+          {images.map(img => {
+            const it = toViewerItem(img);
+            return (
+              <div key={img.filename} className="thumb" onClick={() => onOpenPhoto(it, viewerList)}>
+                <div className="pic"><img src={img.blobPath} alt={img.filename} loading="lazy"/></div>
+                <span className="name">{img.filename}</span>
+                <span className="sub">{[it.dims, it.size].filter(Boolean).join(' · ') || 'archive'}</span>
+              </div>
+            );
+          })}
         </div>
       ) : (
-        <div className="thumb-grid">
-          {Array.from({length: project.count}).map((_, i) => (
-            <div key={i} className="thumb" onClick={() => onOpenPhoto({ photo: project.photo, name: `${project.id}_F${(i+1).toString().padStart(2,'0')}.jpg`, size: "—", date: project.month, client: project.client, dims: "—" })}>
-              <div className="pic">
-                {i < project.count - 2 ? (
-                  <img src={project.photo} alt="" loading="lazy"/>
-                ) : (
-                  <div className="placeholder">reserved<br/>frame {i+1}</div>
-                )}
-              </div>
-              <span className="name">{project.id}_F{(i+1).toString().padStart(2,'0')}.jpg</span>
-              <span className="sub">7.{i+1} MB · select</span>
-            </div>
-          ))}
+        <div style={{padding:'60px 24px', textAlign:'center', color:'var(--ink-soft)'}}>
+          <div style={{fontSize:32, marginBottom:12}}>∅</div>
+          <div>No images in this project yet.</div>
         </div>
       )}
     </div>
@@ -569,7 +590,7 @@ function Services() {
   return (
     <div className="services">
       <div className="hello">Services · v2026.05</div>
-      <h1>What I make.</h1>
+      <h1>What I offer.</h1>
       <p className="lede">
         A full-service practice — available as a complete creative partnership
         or à la carte. Photography is the spine; everything around it (casting,
@@ -606,6 +627,147 @@ function Services() {
   );
 }
 
+/* ============================================================
+   REELS — video grid
+   ============================================================ */
+const API_BASE_V = window.API_BASE || '';
+
+function getEmbedSrc(url) {
+  if (!url) return '';
+  const vimeo = url.match(/vimeo\.com\/(\d+)/);
+  if (vimeo) return `https://player.vimeo.com/video/${vimeo[1]}?autoplay=1&muted=1&loop=1&background=1&title=0&byline=0&portrait=0`;
+  const yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]+)/);
+  if (yt) return `https://www.youtube.com/embed/${yt[1]}?autoplay=1&mute=1&loop=1&playlist=${yt[1]}&rel=0&controls=0`;
+  return url;
+}
+
+function getFullEmbedSrc(url) {
+  if (!url) return '';
+  // Browsers block autoplay-with-sound, but the user just clicked the card so
+  // we have a transient autoplay-with-sound permission. Don't force mute=1 here.
+  const vimeo = url.match(/vimeo\.com\/(\d+)/);
+  if (vimeo) return `https://player.vimeo.com/video/${vimeo[1]}?autoplay=1&title=0&byline=0&portrait=0`;
+  const yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]+)/);
+  if (yt) return `https://www.youtube.com/embed/${yt[1]}?autoplay=1&rel=0`;
+  return url;
+}
+
+function videoSrc(v) {
+  if (!v.blobPath) return '';
+  const parts = v.blobPath.replace(/^__videos\//, '').split('/');
+  return `${API_BASE_V}/api/videos/${parts[0]}/file/${parts.slice(1).join('/')}`;
+}
+
+function ReelCard({ video, onOpen }) {
+  const [hover, setHover] = vsUseState(false);
+  const videoRef = vsUseRef(null);
+  const posterSrc = video.poster
+    ? (video.poster.startsWith('__vidposters/')
+        ? `${API_BASE_V}/api/videoposters/${video.poster.slice('__vidposters/'.length)}`
+        : video.poster)
+    : null;
+  const fileSrc = videoSrc(video);
+  const embed   = getEmbedSrc(video.embedUrl);
+  const canHoverPreview = !!(fileSrc || embed);
+
+  vsUseEffect(() => {
+    const el = videoRef.current;
+    if (!el) return;
+    if (hover) { el.play().catch(() => {}); }
+    else { el.pause(); try { el.currentTime = 0; } catch (_) {} }
+  }, [hover]);
+
+  return (
+    <article
+      className="reel-card"
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      onClick={() => onOpen(video)}
+    >
+      <div className="reel-thumb">
+        {/* Layer 1: poster (always rendered, hidden when previewing) */}
+        {posterSrc
+          ? <img src={posterSrc} alt={video.title} className={`reel-poster ${hover && canHoverPreview ? 'is-hidden' : ''}`}/>
+          : <div className={`reel-thumb-placeholder ${hover && canHoverPreview ? 'is-hidden' : ''}`}>▶</div>
+        }
+        {/* Layer 2: hover preview — self-hosted gets a muted <video>, embed gets an iframe with background=1 */}
+        {hover && fileSrc && (
+          <video
+            ref={videoRef}
+            className="reel-preview"
+            src={fileSrc}
+            muted
+            playsInline
+            loop
+            preload="metadata"
+          />
+        )}
+        {hover && !fileSrc && embed && (
+          <iframe className="reel-preview" src={embed} frameBorder="0" allow="autoplay"/>
+        )}
+        <div className="reel-play-overlay"><span>▶</span></div>
+      </div>
+      <div className="reel-info">
+        <div className="reel-title">{video.title}</div>
+        <div className="reel-meta">
+          <span className="reel-cat">{video.category}</span>
+          {video.client && <><span className="dot">·</span><span>{video.client.toUpperCase()}</span></>}
+          <span className="dot">·</span><span>{video.year}</span>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function ReelsView({ onOpenVideo }) {
+  const { VIDEOS } = window.ALDO;
+  if (!VIDEOS || VIDEOS.length === 0) {
+    return (
+      <div className="reels-empty">
+        <div className="reels-empty-icon">▶</div>
+        <div className="reels-empty-text">No reels yet.</div>
+      </div>
+    );
+  }
+  return (
+    <div className="reels-grid">
+      {VIDEOS.map(v => <ReelCard key={v.id} video={v} onOpen={onOpenVideo}/>)}
+    </div>
+  );
+}
+
+function VideoPlayer({ video }) {
+  const src = videoSrc(video);
+  const embed = getFullEmbedSrc(video.embedUrl);
+  return (
+    <div className="video-player-wrap">
+      {embed ? (
+        <iframe
+          className="video-player-iframe"
+          src={embed}
+          frameBorder="0"
+          allow="autoplay; fullscreen; picture-in-picture"
+          allowFullScreen
+        />
+      ) : src ? (
+        <video
+          className="video-player-el"
+          src={src}
+          autoPlay
+          controls
+          playsInline
+          loop
+        />
+      ) : (
+        <div className="video-player-empty">No video source.</div>
+      )}
+      {video.description && (
+        <div className="video-player-desc">{video.description}</div>
+      )}
+    </div>
+  );
+}
+
 window.Services = Services;
 window.ProjectDetail = ProjectDetail;
 window.Archive = Archive;
@@ -613,3 +775,5 @@ window.PhotoViewer = PhotoViewer;
 window.Clients = Clients;
 window.About = About;
 window.Contact = Contact;
+window.ReelsView = ReelsView;
+window.VideoPlayer = VideoPlayer;

@@ -236,7 +236,9 @@ const SETTINGS = {
   accentColor:  '#d63e5a',
 };
 
-window.ALDO = { PROJECTS, ARCHIVE, CLIENTS, PHOTOS, SERVICES, ABOUT, SETTINGS };
+const VIDEOS = [];
+
+window.ALDO = { PROJECTS, ARCHIVE, CLIENTS, PHOTOS, SERVICES, ABOUT, SETTINGS, VIDEOS };
 
 /* ============================================================================
    LIVE DATA SYNC — admin ↔ public site
@@ -346,9 +348,24 @@ function _aldoSortImgs(imgs) {
 
 /* Transform an admin-shape project record into the PROJECTS row the public
    portfolio expects. Drops rejected frames. */
+function _aldoThumbUrl(blobPath, w) {
+  if (!blobPath || !blobPath.startsWith('http')) return blobPath;
+  try {
+    const url = new URL(blobPath);
+    url.searchParams.set('w', String(w));
+    return url.toString();
+  } catch (_) { return blobPath; }
+}
+
 function _aldoToPublicProject(p) {
   const sorted = _aldoSortImgs(p.images).filter(img => !img.rejected);
-  const cover = sorted[0];
+  const cover = sorted.find(img => img.cover) || sorted[0];
+  // Web-optimised copies: 800px for the portfolio grid cover, 1400px for
+  // the project detail window (still sharp on retina, ~150KB vs ~15MB).
+  const imagesWeb = sorted.map(img => ({
+    ...img,
+    blobPath: _aldoThumbUrl(img.blobPath, 1400),
+  }));
   return {
     id: p.id,
     name: p.name,
@@ -357,11 +374,12 @@ function _aldoToPublicProject(p) {
     month: p.month ? `${p.month} ${p.year || ''}`.trim() : String(p.year || ''),
     type: (p.type || 'EDITORIAL').toUpperCase(),
     format: p.format || 'Digital',
-    photo: cover ? cover.blobPath : PHOTOS[0],
+    photo: cover ? _aldoThumbUrl(cover.blobPath, 800) : PHOTOS[0],
     count: sorted.length,
     note: p.description || '',
     crew: p.crew || '',
     location: p.location || '',
+    images: imagesWeb,
   };
 }
 
@@ -383,7 +401,7 @@ function _aldoToPublicArchive(projects) {
         date: dt && !isNaN(dt) ? dt.toISOString().slice(0, 10) : '',
         size: _aldoFmtBytes(img.exif?.fileSize || 0),
         dims: img.exif?.dimensions || '',
-        photo: img.blobPath,
+        photo: _aldoThumbUrl(img.blobPath, 1400),
         note: img.favorite ? 'favorite' : (img.selected ? 'select' : ''),
         order: img.order ?? 9999,
       });
@@ -433,8 +451,16 @@ function _aldoReplaceObject(target, src) {
    never been written to — once we get content from it, we trust it. */
 function _aldoApplyData(data) {
   if (!data) return false;
-  const newProjects = (data.projects || []).map(_aldoToPublicProject);
-  const newArchive  = _aldoToPublicArchive(data.projects || []);
+  const publicProjects = (data.projects || []).filter(p => p.public !== false);
+  const sortMode = (data.settings && data.settings.projectSort) || 'year';
+  publicProjects.sort((a, b) => {
+    if (sortMode === 'manual') return (a.order ?? 9999) - (b.order ?? 9999);
+    if (sortMode === 'client') return (a.client || '').localeCompare(b.client || '');
+    return Number(b.year || 0) - Number(a.year || 0);
+  });
+  const newProjects = publicProjects.map(_aldoToPublicProject);
+  const newArchive  = _aldoToPublicArchive(publicProjects);
+  const newVideos   = (data.videos   || []).filter(v => v.public !== false).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   const newClients  = _aldoToPublicClients(data.clients || []);
   const newServices = _aldoToPublicServices(data.services || []);
 
@@ -442,6 +468,7 @@ function _aldoApplyData(data) {
   ARCHIVE.length  = 0; ARCHIVE.push(...newArchive);
   CLIENTS.length  = 0; CLIENTS.push(...newClients);
   SERVICES.length = 0; SERVICES.push(...newServices);
+  VIDEOS.length   = 0; VIDEOS.push(...newVideos);
 
   if (data.about    && Object.keys(data.about).length    > 0) _aldoReplaceObject(ABOUT,    data.about);
   if (data.settings && Object.keys(data.settings).length > 0) _aldoReplaceObject(SETTINGS, data.settings);
@@ -457,17 +484,16 @@ function _aldoNotify(source) {
    nor any intermediary CDN can hand us a stale copy. */
 async function _aldoFetchFromApi() {
   try {
-    const url = `/api/public/site?t=${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
-    const res = await fetch(url, {
-      cache: 'no-store',
-      headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' },
-    });
+    const base = (typeof window !== 'undefined' && window.API_BASE) || '';
+    const url = `${base}/api/public/site?t=${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+    const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) return false;
     const data = await res.json();
     // public-site.js returns { projects, about, clients, services, settings }.
     // `services` and `clients` come as raw arrays in the Blobs shape.
     const normalized = {
       projects: data.projects || [],
+      videos:   data.videos   || [],
       clients:  Array.isArray(data.clients)  ? data.clients  : (data.clients?.clients  || []),
       services: Array.isArray(data.services) ? data.services : (data.services?.services || []),
       about:    data.about    || {},
@@ -494,6 +520,7 @@ async function _aldoApplyFromLocalAdmin(source) {
   const projects = JSON.parse(JSON.stringify(store.projects || []));
   const applied = _aldoApplyData({
     projects,
+    videos:   store.videos   || [],
     clients:  store.clients  || [],
     services: store.services || [],
     about:    store.about    || {},
@@ -506,6 +533,7 @@ async function _aldoApplyFromLocalAdmin(source) {
     const resolved = await _aldoResolveIdbPaths(projects);
     _aldoApplyData({
       projects: resolved,
+      videos:   store.videos   || [],
       clients:  store.clients  || [],
       services: store.services || [],
       about:    store.about    || {},

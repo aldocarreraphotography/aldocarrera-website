@@ -3,13 +3,13 @@
 const { useState: aUseState, useEffect: aUseEffect, useRef: aUseRef, useMemo: aUseMemo, useCallback: aUseCallback } = React;
 
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
-  "accent": "#d63e5a",
+  "accent": "#f6c2cf",
   "tone": "warm",
   "saturation": 88
 }/*EDITMODE-END*/;
 
 const TONES = {
-  warm:    { paper: "#f1ede5", paperSoft: "#e9e3d8", rule: "#c8c2b3", ruleSoft: "#ddd6c6", window: "#fbfaf7" },
+  warm:    { paper: "#f5f2ee", paperSoft: "#ece8e3", rule: "#cdc8c2", ruleSoft: "#e0dbd5", window: "#faf9f7" },
   cool:    { paper: "#eef0f3", paperSoft: "#e3e6eb", rule: "#bfc4cc", ruleSoft: "#d6dae2", window: "#fafbfc" },
   neutral: { paper: "#f0efeb", paperSoft: "#e5e3dd", rule: "#c5c2ba", ruleSoft: "#d8d5cb", window: "#fbfaf7" },
 };
@@ -87,6 +87,13 @@ const DockGlyph = ({ kind, accent }) => {
           <circle cx="15" cy="7" r="3" stroke={stroke} strokeWidth="1.2"/>
           <circle cx="7" cy="15" r="3" stroke={stroke} strokeWidth="1.2"/>
           <circle cx="15" cy="15" r="3" stroke={stroke} strokeWidth="1.2"/>
+        </svg>
+      );
+    case 'reels':
+      return (
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+          <rect x="2.5" y="3.5" width="17" height="15" rx="1.5" stroke={stroke} strokeWidth="1.2"/>
+          <polygon points="9,8 9,14 15,11" fill={stroke}/>
         </svg>
       );
     default: return null;
@@ -462,82 +469,372 @@ function DeckOverlay({ deck, onClose }) {
   const shellRef = aUseRef(null);
   const [exportStatus, setExportStatus] = aUseState({ state: 'idle', current: 0, total: 0 });
 
-  // Make sure every photo referenced by the deck (inside <img> tags AND inside
-  // CSS background-images on .dk-image-wrap / .dk-slot) is decoded before
-  // html2canvas captures. Without this, the first page would frequently
-  // capture before the background-image fetched, producing the old crop/black
-  // artifacts.
-  const waitForImages = async (root) => {
-    const sources = new Set();
-    root.querySelectorAll('img').forEach(img => {
-      if (img.src) sources.add(img.src);
+  // ── PDF canvas helpers ────────────────────────────────────────────
+
+  const LOGO_SVG_D1 = "M251.26,311.81c-20.41,8.99-48.31,8.03-59.87-14.11-3.88-7.43-4.92-15.21-4.91-24.26-28,6.38-54.77,14.5-81.4,23.53-10.5,9.27-20.26,17.42-31.89,24.47-4.87,2.95-18.4,8.75-21.77,3.24-2.27-3.72,6.89-2.89,12.74-6.42,7.4-4.46,13.68-9.24,20.25-15.1-18.34,4.45-35,7.75-52.8,3.75-14.35-3.23-27.04-12.81-30.24-27.52-6.87-31.59,12.98-70.87,32.17-95.53,15.62-20.07,32.69-38.17,52.33-54.57,50.52-42.21,106.49-76.75,167.47-101.79,30.55-12.55,61.52-22.08,94.23-26.43,13.49-1.79,26.57-.99,39.93-.02,34.53,2.49,65.67,22.9,64.81,60.77-.25,10.94-.59,21.08-3.28,31.67-4.9,19.24-12.69,36.69-23.4,53.4-24.1,37.6-57.61,70.29-90.29,101.9,19.86,5.47,32.69,19.49,44.84,34.78,1.96,4.43,3.9,8.77,1.29,13.54-9.81-11.63-19.66-21.92-31.22-31.04-6.8-5.37-14.96-8.03-23.84-9.12-23,20.31-47.01,42.47-75.16,54.87ZM288.73,93.35c-17.55,32.15-41.56,59.54-65.09,87.17-12.36,24.44-24.62,53.23-27.1,80.91,42.52-8.01,83.23-15.3,126.23-14.22,21.63-20.25,42.32-40.86,62.18-63.07,24.4-27.28,45.62-57.44,54.77-93.16,2.72-10.6,3.21-21.17,3.01-32.08-.34-18.78-11.06-33.95-27.93-41.53-13.41-6.02-27.38-7.56-42.21-7.97-17.07-.47-32.64,1.25-49.42,5.09-79.68,18.25-160.19,63.3-223.49,114.65-22.48,18.24-42.51,37.93-59.91,61.03-17.21,22.85-36,57.87-29.98,87.1,5.24,25.4,42.05,25.42,60.93,19.83l31.69-9.38,53.1-49.69c21.52-20.14,40.85-41.1,60.46-63.26,13.85-27.22,29.55-52.33,48.79-75.85,4.66-5.69,16.4-20.8,22.94-14.57,2.02,1.92,2.76,5.82,1.02,9ZM187.17,263.37c.79-20.75,7.81-38.58,13.74-57.35l-75.13,73.61,61.39-16.25ZM270.64,290.13c14.59-10.25,27.74-21.11,41.11-33.3-7.4-.29-13.77-.21-21.05.38-32.05,2.61-63.05,7.3-94.38,14.11-1.93,14.53,3.54,30.15,18.01,34.65,20.12,6.25,39.79-4.22,56.32-15.84Z";
+  const LOGO_SVG_D2 = "M367.54,313.59c-.39,2.14-6.52,2.45-10.33-5.47-2.03-4.21.38-9,4.14-10.1,2.35,10.4,7.2,10.04,6.2,15.57Z";
+
+  const makeSvgLogoUrl = (color, h) => {
+    const w = h * (452.33 / 326.97);
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 452.33 326.97"><g fill="${color}"><path d="${LOGO_SVG_D1}"/><path d="${LOGO_SVG_D2}"/></g></svg>`;
+    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  };
+
+  const loadImg = (src) => new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+
+  const toDataUrl = async (src) => {
+    try {
+      const r = await fetch(src, { mode: 'cors', cache: 'no-store' });
+      const blob = await r.blob();
+      return await new Promise(res => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.readAsDataURL(blob); });
+    } catch (_) { return src; }
+  };
+
+  // Draw image contain-fitted (full image visible, background fills gaps).
+  const drawContain = (ctx, img, x, y, w, h, bg) => {
+    ctx.fillStyle = bg; ctx.fillRect(x, y, w, h);
+    if (!img) return;
+    const ia = img.naturalWidth / img.naturalHeight;
+    const sa = w / h;
+    let dw, dh, dx, dy;
+    if (ia > sa) { dw = w; dh = w / ia; dx = x; dy = y + (h - dh) / 2; }
+    else         { dh = h; dw = h * ia; dy = y; dx = x + (w - dw) / 2; }
+    ctx.drawImage(img, dx, dy, dw, dh);
+  };
+
+  // Draw page header + footer chrome (logo, title, contact, page number).
+  const drawChrome = (ctx, logoImg, pageNum, totalPgs) => {
+    const PW = 816, PH = 1056;
+    const SOFT = '#7a7468', RULE = '#c8c2b3';
+    // Header
+    if (logoImg) {
+      const lh = 13, lw = lh * (452.33 / 326.97);
+      ctx.drawImage(logoImg, 48, 26, lw, lh);
+      ctx.fillStyle = SOFT; ctx.font = '10px "IBM Plex Mono", monospace';
+      ctx.fillText('ALDO CARRERA', 48 + lw + 9, 38);
+    } else {
+      ctx.fillStyle = SOFT; ctx.font = '10px "IBM Plex Mono", monospace';
+      ctx.fillText('ALDO CARRERA', 48, 38);
+    }
+    ctx.fillStyle = SOFT; ctx.font = '10px "IBM Plex Mono", monospace';
+    const dl = (meta.title || '').toUpperCase();
+    ctx.fillText(dl, PW - 48 - ctx.measureText(dl).width, 38);
+    // Footer rule + text
+    ctx.strokeStyle = RULE; ctx.lineWidth = 0.75;
+    ctx.beginPath(); ctx.moveTo(48, PH - 36); ctx.lineTo(PW - 48, PH - 36); ctx.stroke();
+    ctx.fillStyle = SOFT; ctx.font = '10px "IBM Plex Mono", monospace';
+    ctx.fillText('aldo@aldocarrera.com  ·  +1 (619) 971-7182  ·  @aldocarrera', 48, PH - 20);
+    const pgLabel = `${pageNum} / ${totalPgs}`;
+    ctx.fillText(pgLabel, PW - 48 - ctx.measureText(pgLabel).width, PH - 20);
+  };
+
+  const renderCoverPage = async (logoImg) => {
+    const PW = 816, PH = 1056, SC = 2;
+    const cv = document.createElement('canvas');
+    cv.width = PW * SC; cv.height = PH * SC;
+    const ctx = cv.getContext('2d');
+    ctx.scale(SC, SC);
+
+    const PAPER = '#f5f2ee', INK = '#1a1714', SOFT = '#7a7675', RULE = '#cdc8c2';
+    const PL = 64, PT = 60;
+
+    ctx.fillStyle = PAPER; ctx.fillRect(0, 0, PW, PH);
+
+    // Top stamp
+    ctx.fillStyle = SOFT; ctx.font = '500 10px "IBM Plex Mono", monospace';
+    ctx.fillText('ALDO CARRERA  ·  TO-GO DECK', PL, PT + 14);
+    const stampR = `${totalPages} PAGES  ·  ${items.length} IMAGES`;
+    ctx.fillText(stampR, PW - PL - ctx.measureText(stampR).width, PT + 14);
+    ctx.strokeStyle = RULE; ctx.lineWidth = 0.75;
+    ctx.beginPath(); ctx.moveTo(PL, PT + 30); ctx.lineTo(PW - PL, PT + 30); ctx.stroke();
+
+    // Mid: logo + title block, vertically centered in upper 2/3
+    const midCtrY = 390;
+    if (logoImg) {
+      const lh = 46, lw = lh * (452.33 / 326.97);
+      ctx.drawImage(logoImg, PL, midCtrY - lh, lw, lh);
+    }
+    const eyebrowY = midCtrY + 24;
+    ctx.fillStyle = SOFT; ctx.font = '11px "IBM Plex Mono", monospace';
+    ctx.fillText(`SELECTED,  ${(meta.date || new Date().toISOString().slice(0,10)).toUpperCase()}`, PL, eyebrowY);
+
+    ctx.fillStyle = INK; ctx.font = '500 58px Inter, sans-serif';
+    const titleStr = meta.title || 'Selected Work';
+    const titleWords = titleStr.split(' ');
+    let line = '', lineY = eyebrowY + 70;
+    for (const w of titleWords) {
+      const test = line ? line + ' ' + w : w;
+      if (ctx.measureText(test).width > 600 && line) {
+        ctx.fillText(line, PL, lineY); line = w; lineY += 64;
+      } else { line = test; }
+    }
+    ctx.fillText(line, PL, lineY);
+
+    if (meta.recipient) {
+      lineY += 40;
+      ctx.fillStyle = SOFT; ctx.font = '400 18px Inter, sans-serif';
+      ctx.fillText(`for ${meta.recipient}`, PL, lineY);
+    }
+
+    if (meta.note) {
+      lineY += 36;
+      ctx.strokeStyle = RULE; ctx.lineWidth = 0.75;
+      ctx.beginPath(); ctx.moveTo(PL, lineY - 12); ctx.lineTo(PL + 460, lineY - 12); ctx.stroke();
+      ctx.fillStyle = SOFT; ctx.font = '13px Inter, sans-serif';
+      const noteWords = meta.note.split(' ');
+      let nl = '', ny = lineY + 6;
+      for (const w of noteWords) {
+        const t = nl ? nl + ' ' + w : w;
+        if (ctx.measureText(t).width > 440 && nl) { ctx.fillText(nl, PL, ny); nl = w; ny += 20; }
+        else nl = t;
+      }
+      ctx.fillText(nl, PL, ny);
+    }
+
+    // Footer 3-column grid
+    const footRuleY = PH - PT - 88;
+    ctx.strokeStyle = RULE; ctx.lineWidth = 0.75;
+    ctx.beginPath(); ctx.moveTo(PL, footRuleY); ctx.lineTo(PW - PL, footRuleY); ctx.stroke();
+    const colW = (PW - PL * 2 - 18 * 2) / 3;
+    const cols = [
+      { label: 'STUDIO',    v1: 'Aldo Carrera',          v2: 'Photographer · LA' },
+      { label: 'CONTACT',   v1: 'aldo@aldocarrera.com',  v2: '@aldocarrera' },
+      { label: 'THIS DECK', v1: meta.date || new Date().toISOString().slice(0,10), v2: `${items.length} ${items.length === 1 ? 'image' : 'images'}` },
+    ];
+    cols.forEach((col, i) => {
+      const cx = PL + i * (colW + 18);
+      ctx.fillStyle = SOFT; ctx.font = '9px "IBM Plex Mono", monospace';
+      ctx.fillText(col.label, cx, footRuleY + 20);
+      ctx.fillStyle = INK; ctx.font = '500 11px "IBM Plex Mono", monospace';
+      ctx.fillText(col.v1, cx, footRuleY + 40);
+      ctx.fillStyle = SOFT; ctx.font = '400 11px "IBM Plex Mono", monospace';
+      ctx.fillText(col.v2, cx, footRuleY + 58);
     });
-    root.querySelectorAll('[style*="background-image"]').forEach(el => {
-      const m = (el.style.backgroundImage || '').match(/url\(["']?([^"')]+)["']?\)/);
-      if (m && m[1]) sources.add(m[1]);
-    });
-    await Promise.all(Array.from(sources).map(src => new Promise(resolve => {
-      const i = new Image();
-      i.onload = i.onerror = resolve;
-      // hard cap so a broken src doesn't deadlock the export
-      setTimeout(resolve, 5000);
-      i.src = src;
-    })));
+
+    return cv;
+  };
+
+  const renderBackPage = async (logoImg) => {
+    const PW = 816, PH = 1056, SC = 2;
+    const cv = document.createElement('canvas');
+    cv.width = PW * SC; cv.height = PH * SC;
+    const ctx = cv.getContext('2d');
+    ctx.scale(SC, SC);
+
+    const PAPER = '#f5f2ee', INK = '#1a1714', SOFT = '#7a7675', RULE = '#cdc8c2';
+    const PAPER_SOFT = '#eeedeb';
+    const PL = 64, PT = 60;
+
+    ctx.fillStyle = PAPER; ctx.fillRect(0, 0, PW, PH);
+
+    // Top row
+    ctx.fillStyle = SOFT; ctx.font = '500 10px "IBM Plex Mono", monospace';
+    ctx.fillText('END OF DECK', PL, PT + 14);
+    const topR = `${items.length} ${items.length === 1 ? 'IMAGE' : 'IMAGES'}  ·  ${(meta.date || '').toUpperCase()}`;
+    ctx.fillText(topR, PW - PL - ctx.measureText(topR).width, PT + 14);
+
+    // Center block
+    const ctrY = PH / 2;
+    if (logoImg) {
+      const lh = 58, lw = lh * (452.33 / 326.97);
+      ctx.drawImage(logoImg, PW / 2 - lw / 2, ctrY - 165, lw, lh);
+    }
+    ctx.fillStyle = INK; ctx.font = '500 36px Inter, sans-serif';
+    const nameText = 'Aldo Carrera';
+    ctx.fillText(nameText, PW / 2 - ctx.measureText(nameText).width / 2, ctrY - 80);
+    ctx.fillStyle = SOFT; ctx.font = '400 15px Inter, sans-serif';
+    const roleText = 'Photographer · Los Angeles';
+    ctx.fillText(roleText, PW / 2 - ctx.measureText(roleText).width / 2, ctrY - 52);
+
+    // Contact box
+    const boxW = 440, boxH = 84;
+    const boxX = PW / 2 - boxW / 2, boxY = ctrY - 20;
+    ctx.fillStyle = PAPER_SOFT;
+    ctx.strokeStyle = RULE; ctx.lineWidth = 0.75;
+    ctx.fillRect(boxX, boxY, boxW, boxH);
+    ctx.strokeRect(boxX, boxY, boxW, boxH);
+    const c1x = boxX + 28, c2x = boxX + boxW / 2 + 14;
+    ctx.fillStyle = SOFT; ctx.font = '9px "IBM Plex Mono", monospace';
+    ctx.fillText('CONTACT', c1x, boxY + 20);
+    ctx.fillText('WEB', c2x, boxY + 20);
+    ctx.fillStyle = INK; ctx.font = '11px "IBM Plex Mono", monospace';
+    ctx.fillText('aldo@aldocarrera.com', c1x, boxY + 38);
+    ctx.fillText('aldocarrera.com', c2x, boxY + 38);
+    ctx.fillStyle = SOFT; ctx.font = '11px "IBM Plex Mono", monospace';
+    ctx.fillText('+1 (619) 971-7182', c1x, boxY + 56);
+    ctx.fillText('@aldocarrera', c2x, boxY + 56);
+
+    // Copyright
+    const copyRuleY = PH - PT - 28;
+    ctx.strokeStyle = RULE; ctx.lineWidth = 0.75;
+    ctx.beginPath(); ctx.moveTo(PL, copyRuleY); ctx.lineTo(PW - PL, copyRuleY); ctx.stroke();
+    ctx.fillStyle = SOFT; ctx.font = '9px "IBM Plex Mono", monospace';
+    const copyText = '© 2026 ALDO CARRERA  ·  ALL RIGHTS RESERVED';
+    ctx.fillText(copyText, PW / 2 - ctx.measureText(copyText).width / 2, copyRuleY + 18);
+
+    return cv;
+  };
+
+  const renderImagePage = async (dataUrls, pageNum, totalPgs, layout, logoSmallImg) => {
+    const PW = 816, PH = 1056, SC = 2;
+    const cv = document.createElement('canvas');
+    cv.width = PW * SC; cv.height = PH * SC;
+    const ctx = cv.getContext('2d');
+    ctx.scale(SC, SC);
+
+    const PAPER = '#f5f2ee', INK = '#1a1714', SOFT = '#7a7675', RULE = '#cdc8c2';
+    ctx.fillStyle = PAPER; ctx.fillRect(0, 0, PW, PH);
+    drawChrome(ctx, logoSmallImg, pageNum, totalPgs);
+
+    if (layout === 'full') {
+      const img = await loadImg(dataUrls[0].url);
+      drawContain(ctx, img, 48, 80, 720, 896, PAPER);
+
+    } else if (layout === 'duo') {
+      const slotH = Math.floor((896 - 14) / 2);
+      for (let s = 0; s < 2; s++) {
+        const d = dataUrls[s]; if (!d) continue;
+        const img = await loadImg(d.url);
+        const sy = 80 + s * (slotH + 14);
+        drawContain(ctx, img, 48, sy, 720, slotH, PAPER);
+        // Meta strip with cream background + rule border (matches .dk-meta-strip)
+        ctx.font = '10px "IBM Plex Mono", monospace';
+        const stripText = d.client ? `${d.client} · ${d.name}` : d.name;
+        const stripW = Math.min(ctx.measureText(stripText).width + 18, 680);
+        ctx.fillStyle = 'rgba(247,243,235,0.93)';
+        ctx.fillRect(58, sy + slotH - 30, stripW, 22);
+        ctx.strokeStyle = RULE; ctx.lineWidth = 0.75;
+        ctx.strokeRect(58, sy + slotH - 30, stripW, 22);
+        ctx.fillStyle = INK;
+        ctx.fillText(stripText, 66, sy + slotH - 13);
+      }
+
+    } else {
+      // Caption layout — image takes flex-1, caption section sits below
+      // cap-stack inset: top=80, right=48, bottom=90, left=48
+      const capPadTop = 18, capLabelH = 16, capV1H = 22, capV2H = 18, capBorder = 1;
+      const capSectionH = capBorder + capPadTop + capLabelH + capV1H + capV2H; // ~75px
+      const gapH = 22;
+      const imgH = 886 - gapH - capSectionH; // 886 = PH - 80 - 90
+      const imgY = 80;
+
+      const img = await loadImg(dataUrls[0].url);
+      drawContain(ctx, img, 48, imgY, 720, imgH, PAPER);
+
+      // Caption section
+      const capY = imgY + imgH + gapH;
+      ctx.strokeStyle = RULE; ctx.lineWidth = 0.75;
+      ctx.beginPath(); ctx.moveTo(48, capY); ctx.lineTo(768, capY); ctx.stroke();
+
+      const colW = (720 - 22 * 2) / 3;
+      // Truncate text to fit column width with ellipsis
+      const ellipsis = (text, maxW) => {
+        if (!text) return '';
+        if (ctx.measureText(text).width <= maxW) return text;
+        let t = text;
+        while (t.length > 1 && ctx.measureText(t + '…').width > maxW) t = t.slice(0, -1);
+        return t + '…';
+      };
+      const d = dataUrls[0];
+      const capCols = [
+        { label: 'PROJECT', v1: d.client || '—', v1font: '500 17px Inter, sans-serif',      v2: d.project || '' },
+        { label: 'FRAME',   v1: d.name   || '—', v1font: '12px "IBM Plex Mono", monospace', v2: [d.dims, d.size].filter(Boolean).join(' · ') },
+        { label: 'DATE',    v1: d.date   || '—', v1font: '12px "IBM Plex Mono", monospace', v2: d.type  || '' },
+      ];
+      capCols.forEach((col, i) => {
+        const cx = 48 + i * (colW + 22);
+        const maxW = colW - 4;
+        ctx.fillStyle = SOFT; ctx.font = '9.5px "IBM Plex Mono", monospace';
+        ctx.fillText(col.label, cx, capY + capPadTop + capLabelH - 4);
+        ctx.fillStyle = INK; ctx.font = col.v1font;
+        ctx.fillText(ellipsis(col.v1, maxW), cx, capY + capPadTop + capLabelH + capV1H - 4);
+        ctx.fillStyle = SOFT; ctx.font = '11px "IBM Plex Mono", monospace';
+        ctx.fillText(ellipsis(col.v2, maxW), cx, capY + capPadTop + capLabelH + capV1H + capV2H - 2);
+      });
+    }
+
+    return cv;
   };
 
   const downloadPDF = async () => {
-    if (!pagesRef.current) return;
-    if (typeof window.html2canvas !== 'function' || !window.jspdf) {
-      alert('PDF engine still loading — please try again in a moment.');
-      return;
-    }
+    if (!window.jspdf) { alert('PDF engine still loading — please try again in a moment.'); return; }
 
-    const pages = Array.from(pagesRef.current.querySelectorAll('.dk-page'));
-    setExportStatus({ state: 'preparing', current: 0, total: pages.length });
-    await waitForImages(pagesRef.current);
-    // one more frame to let layout settle after images decode
-    await new Promise(r => requestAnimationFrame(() => r()));
-
-    const { jsPDF } = window.jspdf;
-    // Letter portrait, 612 x 792 pt. We render each page (816 x 1056 css px)
-    // at 2x scale via html2canvas, then drop the JPEG full-bleed onto the page.
-    const pdf = new jsPDF({ unit: 'pt', format: 'letter', orientation: 'portrait' });
-    const PAGE_W = 612, PAGE_H = 792;
-
-    // Flatten radial-gradient backgrounds while capturing — html2canvas
-    // renders them as a banded halo otherwise.
-    shellRef.current && shellRef.current.classList.add('dk-exporting');
+    const totalPgs = totalPages;
+    setExportStatus({ state: 'preparing', current: 0, total: totalPgs });
 
     try {
-      for (let i = 0; i < pages.length; i++) {
-        setExportStatus({ state: 'rendering', current: i + 1, total: pages.length });
-        const canvas = await window.html2canvas(pages[i], {
-          scale: 2,
-          backgroundColor: '#ffffff',
-          useCORS: true,
-          allowTaint: true,
-          logging: false,
-          imageTimeout: 0,
-          width: pages[i].offsetWidth,
-          height: pages[i].offsetHeight,
-        });
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
-        if (i > 0) pdf.addPage('letter', 'portrait');
-        pdf.addImage(dataUrl, 'JPEG', 0, 0, PAGE_W, PAGE_H, undefined, 'FAST');
-        // yield to the browser so the progress UI can repaint
-        await new Promise(r => setTimeout(r, 0));
+      // Ensure web fonts (IBM Plex Mono, Inter) are loaded before canvas draws
+      await document.fonts.ready;
+
+      // Pre-load logos (SVG → Image element)
+      const [logoLgImg, logoSmImg] = await Promise.all([
+        loadImg(makeSvgLogoUrl('#f6c2cf', 58)),
+        loadImg(makeSvgLogoUrl('#f6c2cf', 13)),
+      ]);
+
+      // Pre-fetch all photos as data URLs (bypasses CORS in canvas)
+      const itemDataUrls = await Promise.all(items.map(async it => ({
+        url:     await toDataUrl(it.photo),
+        name:    it.name    || '',
+        client:  it.client  || '',
+        project: it.project || '',
+        dims:    it.dims    || '',
+        size:    it.size    || '',
+        date:    it.date    || '',
+        type:    it.type    || '',
+      })));
+
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF({ unit: 'pt', format: 'letter', orientation: 'portrait' });
+      const PW = 612, PH = 792;
+
+      // Cover
+      setExportStatus({ state: 'rendering', current: 1, total: totalPgs });
+      const coverCv = await renderCoverPage(logoLgImg);
+      pdf.addImage(coverCv.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, PW, PH, undefined, 'FAST');
+      await new Promise(r => setTimeout(r, 0));
+
+      // Image pages
+      const layout = meta.layout || 'caption';
+      if (layout === 'duo') {
+        for (let i = 0; i < itemDataUrls.length; i += 2) {
+          const pgNum = 2 + Math.floor(i / 2);
+          setExportStatus({ state: 'rendering', current: pgNum, total: totalPgs });
+          const cv = await renderImagePage([itemDataUrls[i], itemDataUrls[i + 1]].filter(Boolean), pgNum, totalPgs, 'duo', logoSmImg);
+          pdf.addPage('letter', 'portrait');
+          pdf.addImage(cv.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, PW, PH, undefined, 'FAST');
+          await new Promise(r => setTimeout(r, 0));
+        }
+      } else {
+        for (let i = 0; i < itemDataUrls.length; i++) {
+          const pgNum = i + 2;
+          setExportStatus({ state: 'rendering', current: pgNum, total: totalPgs });
+          const cv = await renderImagePage([itemDataUrls[i]], pgNum, totalPgs, layout, logoSmImg);
+          pdf.addPage('letter', 'portrait');
+          pdf.addImage(cv.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, PW, PH, undefined, 'FAST');
+          await new Promise(r => setTimeout(r, 0));
+        }
       }
+
+      // Back cover
+      setExportStatus({ state: 'rendering', current: totalPgs, total: totalPgs });
+      pdf.addPage('letter', 'portrait');
+      const backCv = await renderBackPage(logoLgImg);
+      pdf.addImage(backCv.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, PW, PH, undefined, 'FAST');
 
       const today = new Date().toISOString().slice(0, 10);
       pdf.save(`Aldo_Carrera_SelectedWork_${today}.pdf`);
-      setExportStatus({ state: 'done', current: pages.length, total: pages.length });
+      setExportStatus({ state: 'done', current: totalPgs, total: totalPgs });
       setTimeout(() => setExportStatus({ state: 'idle', current: 0, total: 0 }), 1800);
     } catch (err) {
       console.error('PDF export failed', err);
-      alert('Sorry — PDF export failed. ' + (err && err.message ? err.message : ''));
+      alert('Sorry — PDF export failed. ' + (err?.message || ''));
       setExportStatus({ state: 'idle', current: 0, total: 0 });
-    } finally {
-      shellRef.current && shellRef.current.classList.remove('dk-exporting');
     }
   };
 
@@ -1002,7 +1299,7 @@ function ArchiveApp() {
           date: it.date, dims: it.dims, size: it.size, photo: it.photo,
           note: it.note, project: it.project,
         })),
-        accent: t ? t.accent : '#d63e5a',
+        accent: t ? t.accent : '#f6c2cf',
       }));
     } catch (_) {}
   }, [selectedIds, t]);
@@ -1078,6 +1375,8 @@ function ArchiveApp() {
       clients:   { title:'Clients.txt',          path: '~/about/clients',                   w: 400, h: 540 },
       about:     { title:'about_me.txt',         path: '~/info',                            w: 460, h: 620 },
       contact:   { title:'Inquiry · contact.html', path:'~/contact',                        w: 480, h: 540 },
+      reels:     { title:'Reels',                path: '~/reels',                           w: 680, h: 520 },
+      video:     { title: opts.video ? opts.video.title : 'Video', path: opts.video ? `~/reels/${opts.video.id}` : '~/reels', w: 840, h: 560 },
       project:   { title: opts.project ? opts.project.name : 'Project', path: opts.project ? `~/portfolio/${opts.project.id}` : '~/portfolio', w: 760, h: 600 },
     };
     const p = presets[kind] || { title: kind, w: 500, h: 400 };
@@ -1090,6 +1389,7 @@ function ArchiveApp() {
         w: p.w, h: p.h, z: 10,
         title: p.title, path: p.path,
         project: opts.project || null,
+        video:   opts.video   || null,
       },
     }));
     setOrder(o => [...o, id]);
@@ -1174,6 +1474,7 @@ function ArchiveApp() {
             onClose={close} onMinimize={minimize} onMaximize={maximize}
             onOpenPhoto={openPhotoViewer}
             onOpenProject={(p) => openWindow('project', { project: p })}
+            onOpenVideo={(v) => openWindow('video', { video: v })}
             view={view} setView={setView}
             archiveFilter={archiveFilter}
             setArchiveFilter={setArchiveFilter}
@@ -1228,6 +1529,7 @@ function ArchiveApp() {
           {[
             { k: 'portfolio', g: 'portfolio', l: 'Portfolio' },
             { k: 'archive',   g: 'archive',   l: 'Archive'   },
+            { k: 'reels',     g: 'reels',     l: 'Reels'     },
             { k: 'services',  g: 'services',  l: 'Services'  },
             { k: 'clients',   g: 'clients',   l: 'Clients'   },
             { k: 'about',     g: 'about',     l: 'About'     },
@@ -1288,9 +1590,9 @@ function ArchiveApp() {
       />
       <TweakSection label="Accent"/>
       <TweakColor
-        label="Coral pink"
+        label="Accent"
         value={t.accent}
-        options={['#d63e5a', '#b84a5c', '#c25068', '#a93d55']}
+        options={['#f6c2cf', '#f0a8bc', '#e48aaa', '#b8d4e8', '#8ab4cc', '#d63e5a']}
         onChange={(v) => setTweak('accent', v)}
       />
       <TweakSection label="Photographs"/>
@@ -1308,7 +1610,7 @@ function ArchiveApp() {
 /* ============================================================
    WINDOW HOST — content router
    ============================================================ */
-function WindowHost({ win, z, focused, minimized, onMove, onResize, onFocus, onClose, onMinimize, onMaximize, onOpenPhoto, onOpenProject, view, setView, archiveFilter, setArchiveFilter, selectionMode, setSelectionMode, selectedIds, toggleSelection }) {
+function WindowHost({ win, z, focused, minimized, onMove, onResize, onFocus, onClose, onMinimize, onMaximize, onOpenPhoto, onOpenProject, onOpenVideo, view, setView, archiveFilter, setArchiveFilter, selectionMode, setSelectionMode, selectedIds, toggleSelection }) {
   let content, toolbar, statusbar;
   const baseCrumb = (parts) => (
     <div className="crumbs">
@@ -1386,16 +1688,42 @@ function WindowHost({ win, z, focused, minimized, onMove, onResize, onFocus, onC
         {baseCrumb(['~', 'portfolio', win.project.year, win.project.id])}
       </div>
     );
-    content = <ProjectDetail project={win.project} onOpenPhoto={(p) => onOpenPhoto(p, ARCHIVE.filter(a => a.project === win.project.id))}/>;
+    content = <ProjectDetail project={win.project} onOpenPhoto={onOpenPhoto}/>;
+    const projImgCount = (win.project.images || []).filter(i => !i.rejected).length;
     statusbar = (
       <div className="window-statusbar">
         <span className="col"><b>{win.project.client}</b></span>
-        <span className="col">{win.project.count} photographs</span>
+        <span className="col">{projImgCount} photographs</span>
         <span className="col">{win.project.format}</span>
         <span className="spacer"/>
         <span>{win.project.month}</span>
       </div>
     );
+  } else if (win.kind === 'reels') {
+    toolbar = <div className="window-toolbar">{baseCrumb(['~', 'reels'])}</div>;
+    content = <ReelsView onOpenVideo={onOpenVideo}/>;
+    statusbar = (
+      <div className="window-statusbar">
+        <span className="col"><b>{VIDEOS.length}</b> {VIDEOS.length === 1 ? 'reel' : 'reels'}</span>
+        <span className="spacer"/>
+        <span>photography · direction · production</span>
+      </div>
+    );
+  } else if (win.kind === 'video') {
+    toolbar = (
+      <div className="window-toolbar">
+        {baseCrumb(['~', 'reels', win.video ? win.video.id : ''])}
+      </div>
+    );
+    content = win.video ? <VideoPlayer video={win.video}/> : null;
+    statusbar = win.video ? (
+      <div className="window-statusbar">
+        <span className="col"><b>{win.video.client || 'Self-directed'}</b></span>
+        <span className="col">{win.video.category}</span>
+        <span className="spacer"/>
+        <span>{win.video.year}</span>
+      </div>
+    ) : null;
   } else {
     content = <div style={{padding: 24}} className="mono">empty.</div>;
   }
@@ -1422,9 +1750,12 @@ function WindowHost({ win, z, focused, minimized, onMove, onResize, onFocus, onC
    MOBILE SHELL
    ============================================================ */
 function MobileShell({ active, setActive, project, setProject, folders, setFolders, openPhoto, setOpenPhoto }) {
+  const [mobileVideo, setMobileVideo] = aUseState(null);
+  const VIDEOS = (window.ALDO && window.ALDO.VIDEOS) || [];
   const tabs = [
     { k: 'portfolio', l: 'Portfolio' },
     { k: 'archive',   l: 'Archive'   },
+    { k: 'reels',     l: 'Reels'     },
     { k: 'services',  l: 'Services'  },
     { k: 'clients',   l: 'Clients'   },
     { k: 'about',     l: 'About'     },
@@ -1436,16 +1767,17 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
 
   let body;
   if (project) {
+    const projectImages = ARCHIVE.filter(a => a.project === project.id);
     body = (
       <div className="mobile-page portfolio">
         <button className="btn ghost" onClick={() => setProject(null)} style={{marginBottom: 16}}>← back</button>
         <h2 className="headline" style={{fontSize: 24, margin: '0 0 4px'}}>{project.name}</h2>
         <div className="ui-label" style={{marginBottom:14}}>{project.client} · {project.year} · {project.type}</div>
-        <p style={{fontSize:14, color:'var(--ink-soft)', marginBottom:18, fontStyle:'italic'}}>"{project.note}"</p>
-        {Array.from({length: Math.min(project.count, 6)}).map((_,i) => (
-          <div key={i} className="mp-project" onClick={() => setOpenPhoto({ photo: { photo: project.photo, name: `${project.id}_${i+1}.jpg`, client: project.client, date: project.month, dims: '—', size: '—' }, list: null })}>
-            <div className="photo"><img src={project.photo} alt=""/></div>
-            <div className="info"><div className="name">Frame {i+1}</div><div className="year">{project.month}</div></div>
+        {project.note && <p style={{fontSize:14, color:'var(--ink-soft)', marginBottom:18, fontStyle:'italic'}}>"{project.note}"</p>}
+        {projectImages.map((img) => (
+          <div key={img.id} className="mp-project" onClick={() => setOpenPhoto({ photo: img, list: projectImages })}>
+            <div className="photo"><img src={img.photo} alt={img.name}/></div>
+            <div className="info"><div className="name">{img.name}</div><div className="year">{img.date ? img.date.slice(0,7) : project.month}</div></div>
           </div>
         ))}
       </div>
@@ -1504,6 +1836,47 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
         </div>
       </div>
     );
+  } else if (active === 'reels') {
+    const apiBase = window.API_BASE || '';
+    const posterFor = (v) => {
+      if (!v.poster) return null;
+      return v.poster.startsWith('__vidposters/')
+        ? `${apiBase}/api/videoposters/${v.poster.slice('__vidposters/'.length)}`
+        : v.poster;
+    };
+    body = (
+      <div className="mobile-page reels">
+        {VIDEOS.length === 0 ? (
+          <div style={{ padding: 40, textAlign: 'center', color: 'var(--ink-muted)' }}>
+            <div style={{ fontSize: 36, color: 'var(--rule)' }}>▶</div>
+            <div style={{ fontFamily: '"IBM Plex Mono", monospace', fontSize: 12, marginTop: 8 }}>No reels yet.</div>
+          </div>
+        ) : (
+          VIDEOS.map(v => {
+            const p = posterFor(v);
+            return (
+              <div key={v.id} className="m-reel" onClick={() => setMobileVideo(v)}>
+                <div className="m-reel-thumb">
+                  {p
+                    ? <img src={p} alt={v.title}/>
+                    : <div className="m-reel-placeholder">▶</div>
+                  }
+                  <div className="m-reel-play">▶</div>
+                </div>
+                <div className="m-reel-info">
+                  <div className="m-reel-title">{v.title}</div>
+                  <div className="m-reel-meta">
+                    <span>{v.category}</span>
+                    {v.client && <><span> · </span><span>{v.client.toUpperCase()}</span></>}
+                    <span> · </span><span>{v.year}</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+    );
   } else if (active === 'services') {
     body = <div className="mobile-page services"><Services/></div>;
   } else if (active === 'about') {
@@ -1546,6 +1919,24 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
           </div>
         </div>
       )}
+      {mobileVideo && (
+        <div className="m-viewer">
+          <div className="topbar">
+            <span>{mobileVideo.title}</span>
+            <span onClick={() => setMobileVideo(null)} style={{cursor:'pointer'}}>CLOSE ×</span>
+          </div>
+          <div className="stage" style={{ background: '#0e0d0c' }}>
+            <VideoPlayer video={mobileVideo}/>
+          </div>
+          <div className="info">
+            <h3>{mobileVideo.title}</h3>
+            <b>{mobileVideo.category}</b>
+            {mobileVideo.client && <> · {mobileVideo.client.toUpperCase()}</>}
+            {mobileVideo.year && <> · {mobileVideo.year}</>}
+            {mobileVideo.description && <><br/><span style={{color:'var(--ink-muted)'}}>"{mobileVideo.description}"</span></>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1585,17 +1976,32 @@ function LiveDataProvider() {
 
   if (!ready) {
     return (
-      <div style={{
-        position: 'fixed', inset: 0,
-        display: 'grid', placeItems: 'center',
-        background: 'var(--paper, #f1ede5)',
-        color: 'var(--ink-soft, #7a7468)',
-        fontFamily: 'IBM Plex Mono, monospace',
-        fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase',
-      }}>
-        <div style={{ textAlign: 'center', opacity: 0.7 }}>
-          <div style={{ fontSize: 13, marginBottom: 6 }}>Aldo Carrera</div>
-          <div>Loading archive…</div>
+      <div className="sk-shell">
+        <div className="sk-sidebar">
+          <div className="sk-sidebar-logo">
+            <div className="sk-sidebar-logo-mark"/>
+            <div className="sk-bone" style={{ height: 12, width: 100, background: 'rgba(255,255,255,.1)', animation: 'none' }}/>
+          </div>
+          <div className="sk-sidebar-nav">
+            {[80, 60, 75, 55, 65].map((w, i) => (
+              <div key={i} className="sk-sidebar-item" style={{ width: `${w}%` }}/>
+            ))}
+          </div>
+        </div>
+        <div className="sk-main">
+          <div className="sk-heading">
+            <div className="sk-bone" style={{ height: 20, width: 180 }}/>
+            <div className="sk-bone" style={{ height: 12, width: 320 }}/>
+          </div>
+          <div className="sk-grid">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="sk-card">
+                <div className="sk-bone sk-card-photo"/>
+                <div className="sk-bone sk-card-name"/>
+                <div className="sk-bone sk-card-meta"/>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     );

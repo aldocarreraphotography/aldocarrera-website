@@ -10,6 +10,12 @@ const AUTH_KEY  = 'aldo_admin_token';
 const IDB_NAME  = 'aldo_admin_images';
 const IDB_STORE = 'blobs';
 
+// When deployed with a NAS backend, Admin.html sets window.API_BASE to the
+// NAS server URL (e.g. https://api.aldocarrera.com). Falls back to '' so
+// all relative /api/ paths keep working in local netlify dev.
+// Read at call-time (not module init) so Babel async loading order doesn't matter.
+const getAPI = () => (window.API_BASE || '');
+
 /* -------- seed data ---------------------------------------------------- */
 
 const SEED = {
@@ -329,7 +335,7 @@ async function pushToAPI() {
     images: (p.images || []).filter(img => isServedPath(img.blobPath)),
   }));
   try {
-    const r = await fetch('/api/admin/sync', {
+    const r = await fetch(getAPI() + '/api/admin/sync', {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -356,15 +362,16 @@ async function pullFromAPI() {
   if (!_isRealJWT(token)) return false;
   try {
     const [pjs, ab, cl, sv, st] = await Promise.all([
-      fetch('/api/projects',  { headers: { Authorization: `Bearer ${token}` } }).then(r => r.ok ? r.json() : null),
-      fetch('/api/about',     { headers: { Authorization: `Bearer ${token}` } }).then(r => r.ok ? r.json() : null),
-      fetch('/api/clients',   { headers: { Authorization: `Bearer ${token}` } }).then(r => r.ok ? r.json() : null),
-      fetch('/api/services',  { headers: { Authorization: `Bearer ${token}` } }).then(r => r.ok ? r.json() : null),
-      fetch('/api/settings',  { headers: { Authorization: `Bearer ${token}` } }).then(r => r.ok ? r.json() : null),
+      fetch(getAPI() + '/api/projects',  { headers: { Authorization: `Bearer ${token}` } }).then(r => r.ok ? r.json() : null),
+      fetch(getAPI() + '/api/about',     { headers: { Authorization: `Bearer ${token}` } }).then(r => r.ok ? r.json() : null),
+      fetch(getAPI() + '/api/clients',   { headers: { Authorization: `Bearer ${token}` } }).then(r => r.ok ? r.json() : null),
+      fetch(getAPI() + '/api/services',  { headers: { Authorization: `Bearer ${token}` } }).then(r => r.ok ? r.json() : null),
+      fetch(getAPI() + '/api/settings',  { headers: { Authorization: `Bearer ${token}` } }).then(r => r.ok ? r.json() : null),
     ]);
     patchStore(s => {
       if (pjs?.projects?.length) s.projects = pjs.projects;
-      if (ab && Object.keys(ab).length) s.about = ab;
+      // Only apply API about if it has real content (not an empty defaultAbout shell)
+      if (ab && (ab.bio || ab.location || (ab.practice && ab.practice.length) || (ab.education && (ab.education.school || ab.education.degree || ab.education.year)))) s.about = ab;
       if (cl?.clients?.length) s.clients = cl.clients;
       if (sv?.services?.length) s.services = sv.services;
       if (st && Object.keys(st).length) s.settings = st;
@@ -407,7 +414,7 @@ const AdminStore = {
     // and `netlify dev`), this issues a JWT signed with JWT_SECRET that
     // every admin-only endpoint will accept.
     try {
-      const r = await fetch('/api/auth/login', {
+      const r = await fetch(getAPI() + '/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password }),
@@ -441,7 +448,7 @@ const AdminStore = {
   },
   logout() {
     // Best-effort; the server treats logout as a no-op anyway (JWTs are stateless).
-    fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+    fetch(getAPI() + '/api/auth/logout', { method: 'POST' }).catch(() => {});
     localStorage.removeItem(AUTH_KEY);
     window.dispatchEvent(new CustomEvent('admin-store-changed'));
   },
@@ -450,8 +457,14 @@ const AdminStore = {
     if (!token) return false;
     try {
       const parts = token.split('.');
-      const payload = JSON.parse(atob(parts[1]));
-      return payload.exp > Date.now();
+      // base64url → base64 (handle both formats)
+      const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      const payload = JSON.parse(atob(b64));
+      if (!payload.exp) return true;
+      // JWT exp is seconds; legacy prototype tokens used ms. Normalise: any
+      // exp under 10^12 is treated as seconds, above as ms.
+      const expMs = payload.exp < 1e12 ? payload.exp * 1000 : payload.exp;
+      return expMs > Date.now();
     } catch (_) { return false; }
   },
 
@@ -467,6 +480,8 @@ const AdminStore = {
     return { ...p, images: sortImagesByOrder(p.images) };
   },
   async createProject(input) {
+    const existing = readStore().projects || [];
+    const maxOrder = existing.reduce((m, p) => Math.max(m, p.order ?? 0), 0);
     const project = {
       id: input.id || nextId('PRJ'),
       name: input.name || 'Untitled project',
@@ -476,6 +491,8 @@ const AdminStore = {
       month: input.month || '',
       description: input.description || '',
       location: input.location || '',
+      public: input.public ?? false,  // default private — flip to public when ready
+      order: maxOrder + 1,
       createdAt: nowISO(),
       updatedAt: nowISO(),
       folderPath: `archive/${input.year || new Date().getFullYear()}/${input.id || 'NEW'}`,
@@ -490,7 +507,7 @@ const AdminStore = {
     const token = _getAuthToken();
     if (_isRealJWT(token)) {
       try {
-        const r = await fetch('/api/projects', {
+        const r = await fetch(getAPI() + '/api/projects', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify(project),
@@ -516,6 +533,15 @@ const AdminStore = {
   },
   deleteProject(id) {
     patchStore(s => { s.projects = s.projects.filter(p => p.id !== id); });
+  },
+  /* Set explicit display order from an array of project IDs (first → order 0). */
+  reorderProjects(orderedIds) {
+    patchStore(s => {
+      const map = new Map(orderedIds.map((id, i) => [id, i]));
+      s.projects.forEach(p => {
+        if (map.has(p.id)) p.order = map.get(p.id);
+      });
+    });
   },
 
   // Images --------------------------------------------------------------
@@ -549,7 +575,7 @@ const AdminStore = {
           if (exif.dimensions) fd.append('dimensions', exif.dimensions);
 
           const r = await fetch(
-            `/api/projects/${encodeURIComponent(projectId)}/images/upload`,
+            `${getAPI()}/api/projects/${encodeURIComponent(projectId)}/images/upload`,
             {
               method: 'POST',
               headers: { Authorization: `Bearer ${token}` },
@@ -566,7 +592,7 @@ const AdminStore = {
             const proj = readStore().projects.find(x => x.id === projectId);
             if (proj) {
               try {
-                const cr = await fetch('/api/projects', {
+                const cr = await fetch(getAPI() + '/api/projects', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
                   body: JSON.stringify({ ...proj, images: [] }),
@@ -578,7 +604,7 @@ const AdminStore = {
                   if (exif.dateTaken)  fd2.append('dateTaken',  exif.dateTaken);
                   if (exif.dimensions) fd2.append('dimensions', exif.dimensions);
                   const retry = await fetch(
-                    `/api/projects/${encodeURIComponent(projectId)}/images/upload`,
+                    `${getAPI()}/api/projects/${encodeURIComponent(projectId)}/images/upload`,
                     { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd2 }
                   );
                   if (retry.ok) record = await retry.json();
@@ -697,6 +723,14 @@ const AdminStore = {
       p.updatedAt = nowISO();
     });
   },
+  setCoverImage(projectId, filename) {
+    patchStore(s => {
+      const p = s.projects.find(x => x.id === projectId);
+      if (!p) return;
+      p.images.forEach(img => { img.cover = img.filename === filename; });
+      p.updatedAt = nowISO();
+    });
+  },
   async deleteImage(projectId, filename) {
     const token  = _getAuthToken();
     const useAPI = _isRealJWT(token);
@@ -714,7 +748,7 @@ const AdminStore = {
     if (useAPI) {
       try {
         await fetch(
-          `/api/projects/${encodeURIComponent(projectId)}/images/${encodeURIComponent(filename)}`,
+          `${getAPI()}/api/projects/${encodeURIComponent(projectId)}/images/${encodeURIComponent(filename)}`,
           { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }
         );
       } catch (_) {}
@@ -811,6 +845,35 @@ const AdminStore = {
   reseed() {
     localStorage.removeItem(STORE_KEY);
     return readStore();
+  },
+
+  // Generic authenticated fetch to the NAS API
+  async apiFetch(path, opts = {}) {
+    const token = _getAuthToken();
+    const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const r = await fetch(getAPI() + path, { ...opts, headers });
+    if (!r.ok) {
+      const body = await r.json().catch(() => ({}));
+      throw Object.assign(new Error(body.message || body.error || r.statusText), { status: r.status, body });
+    }
+    if (r.status === 204) return null;
+    return r.json();
+  },
+
+  /* Multipart upload — does NOT set Content-Type (browser sets the boundary).
+     Authenticated via Bearer token like apiFetch. */
+  async apiUpload(path, formData) {
+    const token = _getAuthToken();
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const r = await fetch(getAPI() + path, { method: 'POST', body: formData, headers });
+    if (!r.ok) {
+      const body = await r.json().catch(() => ({}));
+      throw Object.assign(new Error(body.message || body.error || r.statusText), { status: r.status, body });
+    }
+    if (r.status === 204) return null;
+    return r.json();
   },
 
   // API sync ------------------------------------------------------------
