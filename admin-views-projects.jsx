@@ -320,11 +320,13 @@ function ProjectEditorView({ projectId, navigate }) {
     setErr(e);
     if (Object.keys(e).length) return;
     // Auto-save client name to clients list if it's new
-    const existingClients = window.AdminStore.getClients().map(c => c.name.toLowerCase());
-    if (draft.client && !existingClients.includes(draft.client.toLowerCase())) {
-      const slug = draft.client.toUpperCase().replace(/[^A-Z0-9]+/g, '_');
-      window.AdminStore.createClient({ name: draft.client, slug, note: '' });
-    }
+    try {
+      const existingClients = window.AdminStore.getClients().map(c => c.name.toLowerCase());
+      if (draft.client && !existingClients.includes(draft.client.toLowerCase())) {
+        const slug = draft.client.toUpperCase().replace(/[^A-Z0-9]+/g, '_');
+        window.AdminStore.addClient({ name: draft.client, slug, note: '' });
+      }
+    } catch (_) { /* non-fatal — project save continues regardless */ }
 
     if (isNew) {
       const id = draft.id.toUpperCase().replace(/[^A-Z0-9_]+/g, '_');
