@@ -1770,7 +1770,7 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
     const projectImages = ARCHIVE.filter(a => a.project === project.id);
     body = (
       <div className="mobile-page portfolio">
-        <button className="btn ghost" onClick={() => setProject(null)} style={{marginBottom: 16}}>← back</button>
+        <button className="btn ghost" onClick={() => { setProject(null); window.scrollTo(0, 0); }} style={{marginBottom: 16}}>← back</button>
         <h2 className="headline" style={{fontSize: 24, margin: '0 0 4px'}}>{project.name}</h2>
         <div className="ui-label" style={{marginBottom:14}}>{project.client} · {project.year} · {project.type}</div>
         {project.note && <p style={{fontSize:14, color:'var(--ink-soft)', marginBottom:18, fontStyle:'italic'}}>"{project.note}"</p>}
@@ -1786,7 +1786,7 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
     body = (
       <div className="mobile-page portfolio">
         {PROJECTS.map(p => (
-          <div key={p.id} className="mp-project" onClick={() => setProject(p)}>
+          <div key={p.id} className="mp-project" onClick={() => { setProject(p); window.scrollTo(0, 0); }}>
             <div className="photo"><img src={p.photo} alt={p.name}/></div>
             <div className="info">
               <div className="name">{p.name}</div>
@@ -1897,7 +1897,7 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
         </div>
         <div className="mobile-tabs">
           {tabs.map(t => (
-            <button key={t.k} className={`tab ${active === t.k && !project ? 'on' : ''}`} onClick={() => { setActive(t.k); setProject(null); }}>{t.l}</button>
+            <button key={t.k} className={`tab ${active === t.k && !project ? 'on' : ''}`} onClick={() => { setActive(t.k); setProject(null); window.scrollTo(0, 0); }}>{t.l}</button>
           ))}
         </div>
       </div>

@@ -2407,23 +2407,23 @@ input, textarea, select {
   .mobile-page.archive,
   .mobile-page.clients { padding: 24px 20px 40px; }
 
-  .mp-project { margin-bottom: 28px; cursor: pointer; }
+  .mp-project { margin-bottom: 28px; cursor: pointer; touch-action: manipulation; }
   .mp-project .photo { aspect-ratio: 4/5; background: var(--paper-soft); border: 1px solid var(--rule); overflow: hidden; }
   .mp-project .photo img { width: 100%; height: 100%; object-fit: cover; filter: saturate(0.9); }
-  .mp-project .info { margin-top: 10px; display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
-  .mp-project .name { font-size: 17px; font-weight: 500; letter-spacing: -0.014em; }
-  .mp-project .year { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--ink-muted); }
-  .mp-project .meta { font-family: "IBM Plex Mono", monospace; font-size: 10.5px; color: var(--ink-soft); margin-top: 4px; letter-spacing: 0.02em; }
+  .mp-project .info { margin-top: 10px; display: flex; justify-content: space-between; align-items: baseline; gap: 12px; overflow: hidden; }
+  .mp-project .name { font-size: 17px; font-weight: 500; letter-spacing: -0.014em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .mp-project .year { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--ink-muted); flex-shrink: 0; }
+  .mp-project .meta { font-family: "IBM Plex Mono", monospace; font-size: 10.5px; color: var(--ink-soft); margin-top: 4px; letter-spacing: 0.02em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   /* mobile collapsible folders */
   .m-folder { border-bottom: 1px solid var(--rule); }
-  .m-folder .fhead { display: flex; justify-content: space-between; padding: 14px 0; cursor: pointer; align-items: baseline; }
+  .m-folder .fhead { display: flex; justify-content: space-between; padding: 14px 0; cursor: pointer; touch-action: manipulation; align-items: baseline; }
   .m-folder .fhead .yr { font-family: "Neue Haas Grotesk Display Pro", "Inter", sans-serif; font-size: 22px; font-weight: 500; letter-spacing: -0.018em; }
   .m-folder .fhead .ct { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--ink-muted); letter-spacing: 0.06em; }
   .m-folder .fbody { padding: 0 0 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-  .m-folder .fbody .thumb { cursor: pointer; }
+  .m-folder .fbody .thumb { cursor: pointer; touch-action: manipulation; }
   .m-folder .fbody .thumb .pic { aspect-ratio: 4/5; }
-  .m-folder .fbody .thumb .name { font-size: 10px; }
+  .m-folder .fbody .thumb .name { font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .m-folder.collapsed .fbody { display: none; }
 
   /* mobile reels — uses padding-top trick (not aspect-ratio) so the
