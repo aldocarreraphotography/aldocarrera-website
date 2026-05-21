@@ -137,11 +137,8 @@ function ProjectDetail({ project, onOpenPhoto, onOpenVideo }) {
   );
 
   const btsVideos = vsUseMemo(() =>
-    (window.ALDO?.VIDEOS || []).filter(v =>
-      v.client && project.client &&
-      v.client.toUpperCase() === project.client.toUpperCase()
-    ),
-    [project.client]
+    (window.ALDO?.VIDEOS || []).filter(v => v.projectId && v.projectId === project.id),
+    [project.id]
   );
 
   const toViewerItem = (img) => ({

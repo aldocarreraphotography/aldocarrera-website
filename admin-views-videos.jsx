@@ -135,6 +135,7 @@ function VideosView({ navigate }) {
    SHARED FORM FIELDS FRAGMENT
    ============================================================ */
 function VideoFormFields({ form, set, sourceType, setSourceType }) {
+  const projects = window.AdminStore.getProjects();
   return (
     <>
       <Field label="Title" wide>
@@ -143,6 +144,19 @@ function VideoFormFields({ form, set, sourceType, setSourceType }) {
           onChange={v => set('title', v)}
           placeholder="e.g. BAPE FW24 Campaign"
         />
+      </Field>
+
+      <Field label="BTS project link" wide hint="Links this reel to a specific project — it will appear in that project's BTS sidebar.">
+        <select
+          className="ad-select"
+          value={form.projectId || ''}
+          onChange={e => set('projectId', e.target.value)}
+        >
+          <option value="">None (not linked to a project)</option>
+          {projects.map(p => (
+            <option key={p.id} value={p.id}>{p.name} — {p.client} ({p.year})</option>
+          ))}
+        </select>
       </Field>
 
       <div className="ad-form-grid">
@@ -262,6 +276,7 @@ function VideoCreateModal({ open, onClose, onCreated }) {
     title: '', client: '', year: CURRENT_YEAR, category: 'Reel',
     description: '', public: true, embedUrl: '',
     videoFile: null, posterFile: null,
+    projectId: '',
   };
 
   const [form, setForm]           = vS(blankForm);
@@ -294,6 +309,7 @@ function VideoCreateModal({ open, onClose, onCreated }) {
         description: form.description.trim() || null,
         public:      form.public,
         embedUrl:    sourceType === 'embed' ? form.embedUrl.trim() : null,
+        projectId:   form.projectId || null,
       };
 
       const created = await window.AdminStore.apiFetch('/api/videos', {
@@ -372,6 +388,7 @@ function VideoEditModal({ open, video, onClose, onSaved }) {
         embedUrl:    video.embedUrl || '',
         videoFile:   null,
         posterFile:  null,
+        projectId:   video.projectId || '',
       });
       setSourceType(video.embedUrl ? 'embed' : 'file');
     }
@@ -394,6 +411,7 @@ function VideoEditModal({ open, video, onClose, onSaved }) {
         description: form.description.trim() || null,
         public:      form.public,
         embedUrl:    sourceType === 'embed' ? form.embedUrl.trim() : null,
+        projectId:   form.projectId || null,
       };
 
       const updated = await window.AdminStore.apiFetch(`/api/videos/${video.id}`, {
