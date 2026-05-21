@@ -2865,25 +2865,6 @@ img {
 }
 .featured-strip-dot.on { background: #fff; transform: scale(1.4); }
 
-/* ============================================================
-   ADMIN HIGHLIGHT BUTTON ON IMAGE CARDS
-   ============================================================ */
-.ad-image-frame { position: relative; }
-.ad-highlight-btn {
-  position: absolute; top: 6px; right: 6px;
-  width: 24px; height: 24px;
-  background: rgba(250,249,247,0.72);
-  border: 1px solid var(--rule);
-  border-radius: 2px;
-  font-size: 13px; line-height: 1;
-  cursor: pointer;
-  color: var(--ink-muted);
-  display: grid; place-items: center;
-  transition: color 120ms var(--easing), background 120ms var(--easing), border-color 120ms var(--easing);
-  z-index: 2;
-}
-.ad-highlight-btn:hover { color: var(--ink); background: var(--window); }
-.ad-highlight-btn.on { color: #c89b3c; border-color: #c89b3c; background: rgba(200,155,60,0.10); }
 
 /* ── Touch devices: disable hover transforms to prevent double-tap flicker ── */
 @media (hover: none) {

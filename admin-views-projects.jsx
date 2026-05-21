@@ -807,10 +807,10 @@ function ImageCard({ img, project, showMeta, selected, onToggleSelect, onOpen,
         </div>
       )}
       <div className="ad-image-actions">
-        <button className={`ad-img-act ${img.selected ? 'on ok' : ''}`}         onClick={() => cycle('selected')}>SELECT</button>
-        <button className={`ad-img-act ${img.favorite ? 'on accent' : ''}`}     onClick={() => cycle('favorite')}>FAV</button>
-        <button className={`ad-img-act ${img.rejected ? 'on mute' : ''}`}       onClick={() => cycle('rejected')}>REJECT</button>
-        <button className={`ad-img-act ad-img-act-star ${img.highlighted ? 'on gold' : ''}`} onClick={toggleHighlight} title="Feature on homepage">✦</button>
+        <button className={`ad-img-act ${img.selected ? 'on ok' : ''}`}     onClick={() => cycle('selected')}>SELECT</button>
+        <button className={`ad-img-act ${img.favorite ? 'on accent' : ''}`} onClick={() => cycle('favorite')}>FAV</button>
+        <button className={`ad-img-act ${img.rejected ? 'on mute' : ''}`}   onClick={() => cycle('rejected')}>REJECT</button>
+        <button className={`ad-img-act ad-img-act-star ${img.highlighted ? 'on gold' : ''}`} onClick={toggleHighlight} title="Feature on homepage">✦ HIGHLIGHT</button>
         <button className={`ad-img-act ad-img-act-cover ${img.cover ? 'on cover' : ''}`} onClick={setCover}>COVER</button>
       </div>
     </div>
