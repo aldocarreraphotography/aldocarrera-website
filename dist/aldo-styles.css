@@ -2426,6 +2426,33 @@ input, textarea, select {
   .m-folder .fbody .thumb .name { font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .m-folder.collapsed .fbody { display: none; }
 
+  /* archive filter chips */
+  .m-archive-filters { margin-bottom: 16px; display: flex; flex-direction: column; gap: 8px; }
+  .m-filter-row { display: flex; flex-wrap: wrap; gap: 6px; }
+  .m-chip {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase;
+    padding: 4px 10px; border-radius: 20px;
+    border: 1px solid var(--rule); background: var(--paper);
+    color: var(--ink-muted); cursor: pointer; touch-action: manipulation;
+    transition: background 0.14s, color 0.14s, border-color 0.14s;
+  }
+  .m-chip.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  .m-chip-clear { border-color: transparent; color: var(--accent); }
+
+  /* viewer swipe nav */
+  .m-viewer-nav {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 20px; border-top: 1px solid rgba(255,255,255,0.1);
+  }
+  .m-nav-btn {
+    font-size: 20px; color: #fff; background: none; border: none;
+    cursor: pointer; touch-action: manipulation; padding: 6px 12px;
+    opacity: 0.9; transition: opacity 0.15s;
+  }
+  .m-nav-btn:disabled { opacity: 0.2; cursor: default; }
+  .m-nav-ct { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: rgba(255,255,255,0.5); }
+
   /* mobile reels — uses padding-top trick (not aspect-ratio) so the
      box collapses to its proper height before the image loads, avoiding
      a giant-image flash on first paint. */
