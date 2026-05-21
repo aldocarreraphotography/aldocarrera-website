@@ -425,20 +425,12 @@ function AnMetric({ label, value, sub }) {
   );
 }
 
-/* ── Editorial section divider (numbered, mono eyebrow) ─────────── */
-function AnSection({ num, eyebrow, title, sub, right }) {
+/* ── Section separator (thin rule + small label) ────────────────── */
+function AnSep({ title }) {
   return (
-    <div className="an-section">
-      <div className="an-section-inner">
-        <div className="an-section-num">{num}</div>
-        <div className="an-section-text">
-          <div className="an-section-eyebrow">{eyebrow}</div>
-          <div className="an-section-title">{title}</div>
-          {sub && <div className="an-section-sub">{sub}</div>}
-        </div>
-        {right && <div className="an-section-right">{right}</div>}
-      </div>
-      <div className="an-section-rule"/>
+    <div className="an-sep">
+      {title && <span className="an-sep-label">{title}</span>}
+      <div className="an-sep-rule"/>
     </div>
   );
 }
@@ -700,26 +692,10 @@ function AnalyticsView({ navigate }) {
         }}>⚠ {warning}</div>
       )}
 
-      {/* ════════════════════════════════════════════════════════════
-          01 — PUBLIC SITE
-      ════════════════════════════════════════════════════════════ */}
-      <AnSection
-        num="01"
-        eyebrow="Public site"
-        title="Live traffic"
-        sub="Real-time visitors and 28-day window from Google Analytics."
-      />
+      <AnSep title="Public site"/>
       <GAPublicTrafficCard/>
 
-      {/* ════════════════════════════════════════════════════════════
-          02 — THE ARCHIVE
-      ════════════════════════════════════════════════════════════ */}
-      <AnSection
-        num="02"
-        eyebrow="Studio operations"
-        title="The archive"
-        sub="What's on disk, how it's growing, where each frame stands."
-      />
+      <AnSep title="Archive"/>
 
       <div className="an-overview-grid an-overview-4">
         <AnStat
@@ -831,15 +807,7 @@ function AnalyticsView({ navigate }) {
 
       </div>
 
-      {/* ════════════════════════════════════════════════════════════
-          03 — CLIENT WORK
-      ════════════════════════════════════════════════════════════ */}
-      <AnSection
-        num="03"
-        eyebrow="Client work"
-        title="Who you shoot for"
-        sub="Projects, clients, and the people receiving your gallery links."
-      />
+      <AnSep title="Client work"/>
 
       <div className="an-overview-grid an-overview-4">
         <AnStat
@@ -866,66 +834,28 @@ function AnalyticsView({ navigate }) {
         />
       </div>
 
-      <div className="an-grid-2">
+      <Card padding="lg">
+        <SectionHead
+          eyebrow="Roster"
+          title="Projects per client"
+          sub="Ranked by total shoots"
+        />
+        <div className="an-bar-list">
+          {projects.byClient.slice(0, 10).map(r => (
+            <AnBarRow
+              key={r.client}
+              label={r.client}
+              value={r.count}
+              max={maxClient}
+              sub={r.count === 1 ? 'project' : 'projects'}
+              color={C_BLUE}
+            />
+          ))}
+          {projects.byClient.length === 0 && <div className="ad-muted">No data yet.</div>}
+        </div>
+      </Card>
 
-        {/* ── Top clients by projects ─────────────────────────────── */}
-        <Card padding="lg">
-          <SectionHead
-            eyebrow="Roster"
-            title="Projects per client"
-            sub="Ranked by total shoots"
-          />
-          <div className="an-bar-list">
-            {projects.byClient.slice(0, 10).map(r => (
-              <AnBarRow
-                key={r.client}
-                label={r.client}
-                value={r.count}
-                max={maxClient}
-                sub={r.count === 1 ? 'project' : 'projects'}
-                color={C_BLUE}
-              />
-            ))}
-            {projects.byClient.length === 0 && <div className="ad-muted">No data yet.</div>}
-          </div>
-        </Card>
-
-        {/* ── Roster by image volume ──────────────────────────────── */}
-        <Card padding="lg">
-          <SectionHead
-            eyebrow="Volume"
-            title="Frames per client"
-            sub="Total images shot, not just project count"
-          />
-          <div className="an-bar-list">
-            {Object.entries(clientImgs).sort((a,b) => b[1]-a[1]).slice(0, 10).map(([client, count]) => {
-              const maxImgsClient = Math.max(...Object.values(clientImgs), 1);
-              return (
-                <AnBarRow
-                  key={client}
-                  label={client}
-                  value={count}
-                  max={maxImgsClient}
-                  sub="frames"
-                  color={C_PINK}
-                />
-              );
-            })}
-            {Object.keys(clientImgs).length === 0 && <div className="ad-muted">No data yet.</div>}
-          </div>
-        </Card>
-
-      </div>
-
-      {/* ════════════════════════════════════════════════════════════
-          04 — GALLERY PERFORMANCE
-      ════════════════════════════════════════════════════════════ */}
-      <AnSection
-        num="04"
-        eyebrow="Gallery performance"
-        title="Review behavior"
-        sub="How clients move through the funnel and what they choose."
-      />
+      <AnSep title="Gallery performance"/>
 
       <div className="an-overview-grid an-overview-4">
         <AnStat
@@ -1042,12 +972,7 @@ function AnalyticsView({ navigate }) {
       ════════════════════════════════════════════════════════════ */}
       {(topClientByImgs || largestProj || quickest || hottest) && (
         <>
-          <AnSection
-            num="05"
-            eyebrow="Insights"
-            title="Notable patterns"
-            sub="Highlights surfaced from your library."
-          />
+          <AnSep title="Insights"/>
           <div className="an-insight-grid">
             {topClientByImgs && (
               <AnInsight
