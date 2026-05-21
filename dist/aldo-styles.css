@@ -2426,32 +2426,17 @@ input, textarea, select {
   .m-folder .fbody .thumb .name { font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .m-folder.collapsed .fbody { display: none; }
 
-  /* archive filter chips */
-  .m-archive-filters { margin-bottom: 16px; display: flex; flex-direction: column; gap: 8px; }
-  .m-filter-row { display: flex; flex-wrap: wrap; gap: 6px; }
-  .m-chip {
-    font-family: "IBM Plex Mono", monospace;
-    font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase;
-    padding: 4px 10px; border-radius: 20px;
-    border: 1px solid var(--rule); background: var(--paper);
-    color: var(--ink-muted); cursor: pointer; touch-action: manipulation;
-    transition: background 0.14s, color 0.14s, border-color 0.14s;
+  /* viewer position dots */
+  .m-viewer-dots {
+    position: absolute; bottom: 14px; left: 0; right: 0;
+    display: flex; justify-content: center; gap: 6px; pointer-events: none;
   }
-  .m-chip.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
-  .m-chip-clear { border-color: transparent; color: var(--accent); }
-
-  /* viewer swipe nav */
-  .m-viewer-nav {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 10px 20px; border-top: 1px solid rgba(255,255,255,0.1);
+  .m-viewer-dot {
+    width: 5px; height: 5px; border-radius: 50%;
+    background: rgba(255,255,255,0.35);
+    transition: background 0.2s, transform 0.2s;
   }
-  .m-nav-btn {
-    font-size: 20px; color: #fff; background: none; border: none;
-    cursor: pointer; touch-action: manipulation; padding: 6px 12px;
-    opacity: 0.9; transition: opacity 0.15s;
-  }
-  .m-nav-btn:disabled { opacity: 0.2; cursor: default; }
-  .m-nav-ct { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: rgba(255,255,255,0.5); }
+  .m-viewer-dot.on { background: #fff; transform: scale(1.3); }
 
   /* mobile reels — uses padding-top trick (not aspect-ratio) so the
      box collapses to its proper height before the image loads, avoiding
@@ -2516,7 +2501,7 @@ input, textarea, select {
 
   /* mobile photo viewer */
   .m-viewer { position: fixed; inset: 0; z-index: 200; background: #16140f; display: flex; flex-direction: column; }
-  .m-viewer .stage { flex: 1; display: grid; place-items: center; padding: 12px; }
+  .m-viewer .stage { flex: 1; display: grid; place-items: center; padding: 12px; position: relative; }
   .m-viewer .stage img { max-width: 100%; max-height: 100%; }
   .m-viewer .topbar { padding: 14px 18px; color: var(--paper); display: flex; justify-content: space-between; font-family: "IBM Plex Mono", monospace; font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; }
   .m-viewer .info { padding: 16px 20px 26px; background: var(--window); color: var(--ink); font-family: "IBM Plex Mono", monospace; font-size: 11px; line-height: 1.7; }
@@ -2738,4 +2723,14 @@ img {
 }
 @media (prefers-reduced-motion: reduce) {
   .aldo-logo-mark { animation: none; }
+}
+
+/* ── Touch devices: disable hover transforms to prevent double-tap flicker ── */
+@media (hover: none) {
+  .portfolio .project:hover .photo { border-color: var(--rule); }
+  .portfolio .project:hover .photo img { transform: none; filter: saturate(0.88) contrast(1.02); }
+  .portfolio .project:hover .photo::after { transform: translateY(100%); }
+  .thumb:hover .pic { border-color: var(--rule); }
+  .thumb:hover .pic img { transform: none; }
+  .thumb-grid.selection-mode .thumb:hover .pic { transform: none; }
 }

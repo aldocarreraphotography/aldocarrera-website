@@ -1751,7 +1751,6 @@ function WindowHost({ win, z, focused, minimized, onMove, onResize, onFocus, onC
    ============================================================ */
 function MobileShell({ active, setActive, project, setProject, folders, setFolders, openPhoto, setOpenPhoto }) {
   const [mobileVideo, setMobileVideo] = aUseState(null);
-  const [archiveFilter, setArchiveFilter] = aUseState({ year: null, type: null, client: null });
   const [swipeStartX, setSwipeStartX] = aUseState(null);
   const VIDEOS = (window.ALDO && window.ALDO.VIDEOS) || [];
   const tabs = [
@@ -1767,6 +1766,32 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
   const toggleFolder = (y) => setFolders(f => ({ ...f, [y]: !f[y] }));
   const years = [...new Set(ARCHIVE.map(a => a.year))].sort().reverse();
 
+  /* ── Navigate to project — pushes history so browser back works ── */
+  const openProject = (p) => {
+    setProject(p);
+    window.scrollTo(0, 0);
+    if (p) {
+      document.title = `${p.name} — Aldo Carrera`;
+      history.pushState({ mobileProject: p.id }, '', '#' + encodeURIComponent(p.id));
+    } else {
+      document.title = 'Aldo Carrera — Photography';
+      history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
+  };
+
+  /* ── Handle browser back button inside the app ── */
+  aUseEffect(() => {
+    const onPop = (e) => {
+      if (project) {
+        setProject(null);
+        document.title = 'Aldo Carrera — Photography';
+        window.scrollTo(0, 0);
+      }
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [project]);
+
   /* ── Swipe navigation for photo viewer ── */
   const onViewerTouchStart = (e) => setSwipeStartX(e.touches[0].clientX);
   const onViewerTouchEnd = (e) => {
@@ -1778,13 +1803,6 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
     if (dx < 0 && i < list.length - 1) setOpenPhoto({ ...openPhoto, photo: list[i + 1] });
     else if (dx > 0 && i > 0) setOpenPhoto({ ...openPhoto, photo: list[i - 1] });
     setSwipeStartX(null);
-  };
-
-  /* ── Navigate to project (with SEO title update) ── */
-  const openProject = (p) => {
-    setProject(p);
-    window.scrollTo(0, 0);
-    document.title = p ? `${p.name} — Aldo Carrera` : 'Aldo Carrera — Photography';
   };
 
   let body;
@@ -1820,37 +1838,10 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
       </div>
     );
   } else if (active === 'archive') {
-    const allTypes   = [...new Set(ARCHIVE.map(a => a.type).filter(Boolean))].sort();
-    const allClients = [...new Set(ARCHIVE.map(a => a.client).filter(Boolean))].sort();
-    const filteredArchive = ARCHIVE.filter(a =>
-      (!archiveFilter.year   || a.year   === archiveFilter.year) &&
-      (!archiveFilter.type   || a.type   === archiveFilter.type) &&
-      (!archiveFilter.client || a.client === archiveFilter.client)
-    );
-    const filteredYears = [...new Set(filteredArchive.map(a => a.year))].sort().reverse();
-    const setAF = (key, val) => setArchiveFilter(f => ({ ...f, [key]: f[key] === val ? null : val }));
     body = (
       <div className="mobile-page archive">
-        {/* Filter chips */}
-        <div className="m-archive-filters">
-          <div className="m-filter-row">
-            {years.map(y => (
-              <button key={y} className={`m-chip ${archiveFilter.year === y ? 'on' : ''}`} onClick={() => setAF('year', y)}>{y}</button>
-            ))}
-          </div>
-          {allTypes.length > 1 && (
-            <div className="m-filter-row">
-              {allTypes.map(t => (
-                <button key={t} className={`m-chip ${archiveFilter.type === t ? 'on' : ''}`} onClick={() => setAF('type', t)}>{t}</button>
-              ))}
-            </div>
-          )}
-          {(archiveFilter.year || archiveFilter.type || archiveFilter.client) && (
-            <button className="m-chip m-chip-clear" onClick={() => setArchiveFilter({ year: null, type: null, client: null })}>✕ Clear</button>
-          )}
-        </div>
-        {filteredYears.map(y => {
-          const items = filteredArchive.filter(a => a.year === y);
+        {years.map(y => {
+          const items = ARCHIVE.filter(a => a.year === y);
           const collapsed = folders[y];
           return (
             <div key={y} className={`m-folder ${collapsed ? 'collapsed' : ''}`}>
@@ -1870,9 +1861,6 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
             </div>
           );
         })}
-        {filteredYears.length === 0 && (
-          <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--ink-muted)', fontSize: 13 }}>No images match this filter.</div>
-        )}
       </div>
     );
   } else if (active === 'clients') {
@@ -1970,16 +1958,14 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
             </div>
             <div className="stage">
               <img src={openPhoto.photo.photo || openPhoto.photo.src} alt={openPhoto.photo.name}/>
+              {list.length > 1 && (
+                <div className="m-viewer-dots">
+                  {list.map((_, di) => (
+                    <span key={di} className={`m-viewer-dot ${di === idx ? 'on' : ''}`}/>
+                  ))}
+                </div>
+              )}
             </div>
-            {list.length > 1 && (
-              <div className="m-viewer-nav">
-                <button className="m-nav-btn" disabled={!hasPrev}
-                  onClick={() => hasPrev && setOpenPhoto({ ...openPhoto, photo: list[idx - 1] })}>←</button>
-                <span className="m-nav-ct">{idx + 1} / {list.length}</span>
-                <button className="m-nav-btn" disabled={!hasNext}
-                  onClick={() => hasNext && setOpenPhoto({ ...openPhoto, photo: list[idx + 1] })}>→</button>
-              </div>
-            )}
             <div className="info">
               <h3>{openPhoto.photo.name}</h3>
               <b>{openPhoto.photo.client}</b>{openPhoto.photo.type ? ` · ${openPhoto.photo.type}` : ''}<br/>
