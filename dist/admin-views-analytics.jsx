@@ -277,21 +277,28 @@ function GAPublicTrafficCard() {
             <div className="ga-setup-error">⚠ GA4 API error: {gaError}</div>
           ) : (
             <>
-              <div className="ga-setup-title">Enable inline metrics</div>
+              <div className="ga-setup-title">One more step — add GA4 credentials to the NAS</div>
               <div className="ga-setup-body">
-                Set two env vars on the NAS Docker container and rebuild — metrics will appear here automatically.
+                The service account and credentials JSON are already set up. You just need to add three lines to the NAS <code>.env</code> file and rebuild the container.
               </div>
               <ol className="ga-setup-steps">
-                <li>Go to <strong>console.cloud.google.com</strong> → create a project → enable the <em>Google Analytics Data API</em></li>
-                <li>Create a <strong>Service Account</strong> → add a JSON key → download the <code>.json</code> file</li>
-                <li>In <strong>Google Analytics</strong> → Admin → Property Access Management → add the service account email as <em>Viewer</em></li>
-                <li>Find your GA4 <strong>property numeric ID</strong> (Admin → Property Settings → Property ID — looks like <code>123456789</code>)</li>
-                <li>In your <strong>docker-compose.yml</strong> add:
-                  <pre className="ga-setup-pre">{`GA_PROPERTY_ID=123456789
-GA_CREDENTIALS_JSON='{"type":"service_account",...}'`}</pre>
+                <li>SSH into the NAS: <code>ssh aldocarrera@YOUR_NAS_IP</code></li>
+                <li>Copy your credentials JSON to the NAS if not done yet:<br/>
+                  <code>scp ~/Downloads/aldocarrera-analytics-586e5e10dd71.json aldocarrera@YOUR_NAS_IP:/var/services/homes/aldocarrera/ga4-credentials.json</code>
                 </li>
-                <li>Run <code>git pull && sudo docker-compose build --no-cache && sudo docker-compose up -d</code> on the NAS</li>
+                <li>Edit the <code>.env</code> file: <code>vi /path/to/aldocarrera/nas-server/.env</code><br/>
+                  Add these three lines:
+                  <pre className="ga-setup-pre">{`GA_PROPERTY_ID=538429297
+GA_CREDENTIALS_FILE=/credentials/ga4.json
+GA_CREDENTIALS_HOST_PATH=/var/services/homes/aldocarrera/ga4-credentials.json`}</pre>
+                </li>
+                <li>Rebuild and restart:<br/>
+                  <code>cd /path/to/nas-server && sudo docker-compose up -d --force-recreate</code>
+                </li>
               </ol>
+              <div className="ga-setup-body" style={{ marginTop: 10, fontStyle: 'italic' }}>
+                Once the container restarts, refresh this page — live visitor counts will replace this message.
+              </div>
             </>
           )}
         </div>
@@ -425,20 +432,12 @@ function AnMetric({ label, value, sub }) {
   );
 }
 
-/* ── Editorial section divider (numbered, mono eyebrow) ─────────── */
-function AnSection({ num, eyebrow, title, sub, right }) {
+/* ── Section separator (thin rule + small label) ────────────────── */
+function AnSep({ title }) {
   return (
-    <div className="an-section">
-      <div className="an-section-inner">
-        <div className="an-section-num">{num}</div>
-        <div className="an-section-text">
-          <div className="an-section-eyebrow">{eyebrow}</div>
-          <div className="an-section-title">{title}</div>
-          {sub && <div className="an-section-sub">{sub}</div>}
-        </div>
-        {right && <div className="an-section-right">{right}</div>}
-      </div>
-      <div className="an-section-rule"/>
+    <div className="an-sep">
+      {title && <span className="an-sep-label">{title}</span>}
+      <div className="an-sep-rule"/>
     </div>
   );
 }
@@ -700,28 +699,9 @@ function AnalyticsView({ navigate }) {
         }}>⚠ {warning}</div>
       )}
 
-      {/* ════════════════════════════════════════════════════════════
-          01 — PUBLIC SITE
-      ════════════════════════════════════════════════════════════ */}
-      <AnSection
-        num="01"
-        eyebrow="Public site"
-        title="Live traffic"
-        sub="Real-time visitors and 28-day window from Google Analytics."
-      />
       <GAPublicTrafficCard/>
 
-      {/* ════════════════════════════════════════════════════════════
-          02 — THE ARCHIVE
-      ════════════════════════════════════════════════════════════ */}
-      <AnSection
-        num="02"
-        eyebrow="Studio operations"
-        title="The archive"
-        sub="What's on disk, how it's growing, where each frame stands."
-      />
-
-      <div className="an-overview-grid an-overview-4">
+      <div className="an-overview-grid an-overview-4" style={{ marginTop: 32 }}>
         <AnStat
           label="Total images"
           value={anFmtNum(overview.totalImages)}
@@ -831,17 +811,7 @@ function AnalyticsView({ navigate }) {
 
       </div>
 
-      {/* ════════════════════════════════════════════════════════════
-          03 — CLIENT WORK
-      ════════════════════════════════════════════════════════════ */}
-      <AnSection
-        num="03"
-        eyebrow="Client work"
-        title="Who you shoot for"
-        sub="Projects, clients, and the people receiving your gallery links."
-      />
-
-      <div className="an-overview-grid an-overview-4">
+      <div className="an-overview-grid an-overview-4" style={{ marginTop: 32 }}>
         <AnStat
           label="Active clients"
           value={anFmtNum(totalClients)}
@@ -866,68 +836,28 @@ function AnalyticsView({ navigate }) {
         />
       </div>
 
-      <div className="an-grid-2">
+      <Card padding="lg">
+        <SectionHead
+          eyebrow="Roster"
+          title="Projects per client"
+          sub="Ranked by total shoots"
+        />
+        <div className="an-bar-list">
+          {projects.byClient.slice(0, 10).map(r => (
+            <AnBarRow
+              key={r.client}
+              label={r.client}
+              value={r.count}
+              max={maxClient}
+              sub={r.count === 1 ? 'project' : 'projects'}
+              color={C_BLUE}
+            />
+          ))}
+          {projects.byClient.length === 0 && <div className="ad-muted">No data yet.</div>}
+        </div>
+      </Card>
 
-        {/* ── Top clients by projects ─────────────────────────────── */}
-        <Card padding="lg">
-          <SectionHead
-            eyebrow="Roster"
-            title="Projects per client"
-            sub="Ranked by total shoots"
-          />
-          <div className="an-bar-list">
-            {projects.byClient.slice(0, 10).map(r => (
-              <AnBarRow
-                key={r.client}
-                label={r.client}
-                value={r.count}
-                max={maxClient}
-                sub={r.count === 1 ? 'project' : 'projects'}
-                color={C_BLUE}
-              />
-            ))}
-            {projects.byClient.length === 0 && <div className="ad-muted">No data yet.</div>}
-          </div>
-        </Card>
-
-        {/* ── Roster by image volume ──────────────────────────────── */}
-        <Card padding="lg">
-          <SectionHead
-            eyebrow="Volume"
-            title="Frames per client"
-            sub="Total images shot, not just project count"
-          />
-          <div className="an-bar-list">
-            {Object.entries(clientImgs).sort((a,b) => b[1]-a[1]).slice(0, 10).map(([client, count]) => {
-              const maxImgsClient = Math.max(...Object.values(clientImgs), 1);
-              return (
-                <AnBarRow
-                  key={client}
-                  label={client}
-                  value={count}
-                  max={maxImgsClient}
-                  sub="frames"
-                  color={C_PINK}
-                />
-              );
-            })}
-            {Object.keys(clientImgs).length === 0 && <div className="ad-muted">No data yet.</div>}
-          </div>
-        </Card>
-
-      </div>
-
-      {/* ════════════════════════════════════════════════════════════
-          04 — GALLERY PERFORMANCE
-      ════════════════════════════════════════════════════════════ */}
-      <AnSection
-        num="04"
-        eyebrow="Gallery performance"
-        title="Review behavior"
-        sub="How clients move through the funnel and what they choose."
-      />
-
-      <div className="an-overview-grid an-overview-4">
+      <div className="an-overview-grid an-overview-4" style={{ marginTop: 32 }}>
         <AnStat
           label="Open rate"
           value={openRate + '%'}
@@ -1041,12 +971,11 @@ function AnalyticsView({ navigate }) {
           05 — NOTABLE PATTERNS
       ════════════════════════════════════════════════════════════ */}
       {(topClientByImgs || largestProj || quickest || hottest) && (
-        <>
-          <AnSection
-            num="05"
+        <Card padding="lg" className="an-span-2" style={{ marginTop: 32 }}>
+          <SectionHead
             eyebrow="Insights"
             title="Notable patterns"
-            sub="Highlights surfaced from your library."
+            sub="Highlights derived from your studio data"
           />
           <div className="an-insight-grid">
             {topClientByImgs && (
@@ -1092,12 +1021,8 @@ function AnalyticsView({ navigate }) {
               />
             )}
           </div>
-        </>
+        </Card>
       )}
-
-      <div className="an-footer">
-        <span className="mono">Generated {new Date(data.generatedAt).toLocaleString()}</span>
-      </div>
     </>
   );
 }

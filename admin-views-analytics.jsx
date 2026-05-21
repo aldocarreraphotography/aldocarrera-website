@@ -277,21 +277,28 @@ function GAPublicTrafficCard() {
             <div className="ga-setup-error">⚠ GA4 API error: {gaError}</div>
           ) : (
             <>
-              <div className="ga-setup-title">Enable inline metrics</div>
+              <div className="ga-setup-title">One more step — add GA4 credentials to the NAS</div>
               <div className="ga-setup-body">
-                Set two env vars on the NAS Docker container and rebuild — metrics will appear here automatically.
+                The service account and credentials JSON are already set up. You just need to add three lines to the NAS <code>.env</code> file and rebuild the container.
               </div>
               <ol className="ga-setup-steps">
-                <li>Go to <strong>console.cloud.google.com</strong> → create a project → enable the <em>Google Analytics Data API</em></li>
-                <li>Create a <strong>Service Account</strong> → add a JSON key → download the <code>.json</code> file</li>
-                <li>In <strong>Google Analytics</strong> → Admin → Property Access Management → add the service account email as <em>Viewer</em></li>
-                <li>Find your GA4 <strong>property numeric ID</strong> (Admin → Property Settings → Property ID — looks like <code>123456789</code>)</li>
-                <li>In your <strong>docker-compose.yml</strong> add:
-                  <pre className="ga-setup-pre">{`GA_PROPERTY_ID=123456789
-GA_CREDENTIALS_JSON='{"type":"service_account",...}'`}</pre>
+                <li>SSH into the NAS: <code>ssh aldocarrera@YOUR_NAS_IP</code></li>
+                <li>Copy your credentials JSON to the NAS if not done yet:<br/>
+                  <code>scp ~/Downloads/aldocarrera-analytics-586e5e10dd71.json aldocarrera@YOUR_NAS_IP:/var/services/homes/aldocarrera/ga4-credentials.json</code>
                 </li>
-                <li>Run <code>git pull && sudo docker-compose build --no-cache && sudo docker-compose up -d</code> on the NAS</li>
+                <li>Edit the <code>.env</code> file: <code>vi /path/to/aldocarrera/nas-server/.env</code><br/>
+                  Add these three lines:
+                  <pre className="ga-setup-pre">{`GA_PROPERTY_ID=538429297
+GA_CREDENTIALS_FILE=/credentials/ga4.json
+GA_CREDENTIALS_HOST_PATH=/var/services/homes/aldocarrera/ga4-credentials.json`}</pre>
+                </li>
+                <li>Rebuild and restart:<br/>
+                  <code>cd /path/to/nas-server && sudo docker-compose up -d --force-recreate</code>
+                </li>
               </ol>
+              <div className="ga-setup-body" style={{ marginTop: 10, fontStyle: 'italic' }}>
+                Once the container restarts, refresh this page — live visitor counts will replace this message.
+              </div>
             </>
           )}
         </div>
@@ -692,12 +699,9 @@ function AnalyticsView({ navigate }) {
         }}>⚠ {warning}</div>
       )}
 
-      <AnSep title="Public site"/>
       <GAPublicTrafficCard/>
 
-      <AnSep title="Archive"/>
-
-      <div className="an-overview-grid an-overview-4">
+      <div className="an-overview-grid an-overview-4" style={{ marginTop: 32 }}>
         <AnStat
           label="Total images"
           value={anFmtNum(overview.totalImages)}
@@ -807,9 +811,7 @@ function AnalyticsView({ navigate }) {
 
       </div>
 
-      <AnSep title="Client work"/>
-
-      <div className="an-overview-grid an-overview-4">
+      <div className="an-overview-grid an-overview-4" style={{ marginTop: 32 }}>
         <AnStat
           label="Active clients"
           value={anFmtNum(totalClients)}
@@ -855,9 +857,7 @@ function AnalyticsView({ navigate }) {
         </div>
       </Card>
 
-      <AnSep title="Gallery performance"/>
-
-      <div className="an-overview-grid an-overview-4">
+      <div className="an-overview-grid an-overview-4" style={{ marginTop: 32 }}>
         <AnStat
           label="Open rate"
           value={openRate + '%'}
@@ -971,8 +971,12 @@ function AnalyticsView({ navigate }) {
           05 — NOTABLE PATTERNS
       ════════════════════════════════════════════════════════════ */}
       {(topClientByImgs || largestProj || quickest || hottest) && (
-        <>
-          <AnSep title="Insights"/>
+        <Card padding="lg" className="an-span-2" style={{ marginTop: 32 }}>
+          <SectionHead
+            eyebrow="Insights"
+            title="Notable patterns"
+            sub="Highlights derived from your studio data"
+          />
           <div className="an-insight-grid">
             {topClientByImgs && (
               <AnInsight
@@ -1017,12 +1021,8 @@ function AnalyticsView({ navigate }) {
               />
             )}
           </div>
-        </>
+        </Card>
       )}
-
-      <div className="an-footer">
-        <span className="mono">Generated {new Date(data.generatedAt).toLocaleString()}</span>
-      </div>
     </>
   );
 }
