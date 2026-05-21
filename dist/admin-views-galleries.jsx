@@ -945,7 +945,10 @@ function GalleryDetailView({ token, navigate }) {
 
 /* Netlify-function fetch — uses relative URL (NO API_BASE prefix) + admin JWT */
 async function _netlifyFetch(method, path, body) {
-  const token = localStorage.getItem('aldo_admin_token') || '';
+  // Use the Netlify-signed token (stored at login time). Falls back to the
+  // NAS token only if the Netlify token hasn't been obtained yet — caller
+  // will get a 401 and should prompt re-login.
+  const token = localStorage.getItem('aldo_netlify_token') || localStorage.getItem('aldo_admin_token') || '';
   const opts = {
     method,
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },

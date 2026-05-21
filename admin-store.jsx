@@ -422,6 +422,15 @@ const AdminStore = {
       if (r.ok) {
         const data = await r.json();
         localStorage.setItem(AUTH_KEY, data.token);
+        // Also obtain a Netlify-signed token for Netlify Functions (gallery admin,
+        // etc.) — the NAS JWT uses a different secret so it won't verify there.
+        fetch('/.netlify/functions/auth-login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password }),
+        }).then(nr => nr.ok ? nr.json() : null).then(nd => {
+          if (nd?.token) localStorage.setItem('aldo_netlify_token', nd.token);
+        }).catch(() => {});
         // Pull any newer state from Blobs and reconcile.
         pullFromAPI().catch(() => {});
         return data;

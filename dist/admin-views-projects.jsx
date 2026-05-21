@@ -753,17 +753,9 @@ function ImageCard({ img, project, showMeta, selected, onToggleSelect, onOpen,
                     onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd }) {
   const cycle = (k) => window.AdminStore.updateImage(project.id, img.filename, { [k]: !img[k] });
   const setCover = () => window.AdminStore.setCoverImage(project.id, img.filename);
-  const toggleHighlight = async (e) => {
+  const toggleHighlight = (e) => {
     e.stopPropagation();
-    try {
-      await window.AdminStore.apiFetch(
-        `/api/projects/${project.id}/images/${encodeURIComponent(img.filename)}`,
-        { method: 'PATCH', body: JSON.stringify({ highlighted: !img.highlighted }) }
-      );
-      window.AdminStore.updateImage(project.id, img.filename, { highlighted: !img.highlighted });
-    } catch (err) {
-      toast('Highlight failed: ' + (err.message || 'error'), 'error');
-    }
+    window.AdminStore.updateImage(project.id, img.filename, { highlighted: !img.highlighted });
   };
   const cls = [
     'ad-image-card',
@@ -801,11 +793,6 @@ function ImageCard({ img, project, showMeta, selected, onToggleSelect, onOpen,
       </div>
       <div className="ad-image-frame" onClick={onOpen}>
         <Thumb blobPath={img.blobPath} aspect="4/5"/>
-        <button
-          className={`ad-highlight-btn ${img.highlighted ? 'on' : ''}`}
-          onClick={toggleHighlight}
-          title={img.highlighted ? 'Remove highlight' : 'Highlight image (appears in featured strip)'}
-        >✦</button>
       </div>
       {showMeta && (
         <div className="ad-image-meta">
@@ -820,10 +807,11 @@ function ImageCard({ img, project, showMeta, selected, onToggleSelect, onOpen,
         </div>
       )}
       <div className="ad-image-actions">
-        <button className={`ad-img-act ${img.selected ? 'on ok' : ''}`}      onClick={() => cycle('selected')}>SELECT</button>
-        <button className={`ad-img-act ${img.favorite ? 'on accent' : ''}`}  onClick={() => cycle('favorite')}>FAV</button>
-        <button className={`ad-img-act ${img.rejected ? 'on mute' : ''}`}    onClick={() => cycle('rejected')}>REJECT</button>
-        <button className={`ad-img-act ${img.cover ? 'on cover' : ''}`}      onClick={setCover}>COVER</button>
+        <button className={`ad-img-act ${img.selected ? 'on ok' : ''}`}         onClick={() => cycle('selected')}>SELECT</button>
+        <button className={`ad-img-act ${img.favorite ? 'on accent' : ''}`}     onClick={() => cycle('favorite')}>FAV</button>
+        <button className={`ad-img-act ${img.rejected ? 'on mute' : ''}`}       onClick={() => cycle('rejected')}>REJECT</button>
+        <button className={`ad-img-act ad-img-act-star ${img.highlighted ? 'on gold' : ''}`} onClick={toggleHighlight} title="Feature on homepage">✦</button>
+        <button className={`ad-img-act ad-img-act-cover ${img.cover ? 'on cover' : ''}`} onClick={setCover}>COVER</button>
       </div>
     </div>
   );
