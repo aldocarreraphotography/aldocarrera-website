@@ -53,6 +53,36 @@
   to     = "/deck.html"
   status = 200
 
+# Client gallery portal
+[[redirects]]
+  from   = "/g"
+  to     = "/client-gallery.html"
+  status = 200
+[[redirects]]
+  from   = "/g/*"
+  to     = "/client-gallery.html"
+  status = 200
+
+# Gallery admin API
+[[redirects]]
+  from   = "/api/gallery-admin"
+  to     = "/.netlify/functions/gallery-admin"
+  status = 200
+[[redirects]]
+  from   = "/api/gallery-admin/*"
+  to     = "/.netlify/functions/gallery-admin"
+  status = 200
+
+# Gallery public API
+[[redirects]]
+  from   = "/api/gallery/:token"
+  to     = "/.netlify/functions/gallery-public"
+  status = 200
+[[redirects]]
+  from   = "/api/gallery/:token/*"
+  to     = "/.netlify/functions/gallery-public"
+  status = 200
+
 ################################################################
 # Headers
 ################################################################

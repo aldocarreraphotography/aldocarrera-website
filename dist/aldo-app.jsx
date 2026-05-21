@@ -1688,7 +1688,7 @@ function WindowHost({ win, z, focused, minimized, onMove, onResize, onFocus, onC
         {baseCrumb(['~', 'portfolio', win.project.year, win.project.id])}
       </div>
     );
-    content = <ProjectDetail project={win.project} onOpenPhoto={onOpenPhoto}/>;
+    content = <ProjectDetail project={win.project} onOpenPhoto={onOpenPhoto} onOpenVideo={onOpenVideo}/>;
     const projImgCount = (win.project.images || []).filter(i => !i.rejected).length;
     statusbar = (
       <div className="window-statusbar">
@@ -1791,6 +1791,22 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
   }, [project]);
+
+  /* ── iOS-safe scroll lock when viewer/video is open ── */
+  aUseEffect(() => {
+    const isOpen = !!(openPhoto || mobileVideo);
+    if (!isOpen) return;
+    const scrollY = window.scrollY;
+    document.body.style.position = 'fixed';
+    document.body.style.top    = `-${scrollY}px`;
+    document.body.style.width  = '100%';
+    return () => {
+      document.body.style.position = '';
+      document.body.style.top      = '';
+      document.body.style.width    = '';
+      window.scrollTo(0, scrollY);
+    };
+  }, [!!openPhoto, !!mobileVideo]);
 
   /* ── Swipe navigation for photo viewer ── */
   const onViewerTouchStart = (e) => setSwipeStartX(e.touches[0].clientX);

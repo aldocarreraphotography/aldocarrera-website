@@ -7,9 +7,68 @@ const { PROJECTS, ARCHIVE, CLIENTS, PHOTOS, SERVICES, ABOUT, SETTINGS } = window
 /* ============================================================
    PORTFOLIO
    ============================================================ */
+function FeaturedStrip({ onOpenProject }) {
+  const stars = vsUseMemo(() =>
+    PROJECTS.flatMap(p =>
+      (p.images || [])
+        .filter(i => i.highlighted)
+        .map(i => ({ ...i, projectName: p.name, client: p.client, project: p }))
+    ),
+    []
+  );
+
+  const [idx, setIdx] = vsUseState(0);
+
+  vsUseEffect(() => {
+    if (stars.length < 2) return;
+    const t = setInterval(() => setIdx(i => (i + 1) % stars.length), 5000);
+    return () => clearInterval(t);
+  }, [stars.length]);
+
+  if (stars.length === 0) return null;
+
+  const cur = stars[idx];
+
+  return (
+    <div className="featured-strip">
+      <div className="featured-strip-img">
+        {stars.map((s, i) => (
+          <img
+            key={s.blobPath || i}
+            src={s.blobPath}
+            alt={s.projectName}
+            className={i === idx ? 'on' : ''}
+          />
+        ))}
+      </div>
+      <div className="featured-strip-info">
+        <div className="featured-strip-label">Featured</div>
+        <div className="featured-strip-name">{cur.projectName}</div>
+        <div className="featured-strip-client">{cur.client}</div>
+        <button
+          className="featured-strip-link"
+          onClick={() => onOpenProject && onOpenProject(cur.project)}
+        >▸ View project</button>
+      </div>
+      {stars.length > 1 && (
+        <div className="featured-strip-dots">
+          {stars.map((_, i) => (
+            <div
+              key={i}
+              className={`featured-strip-dot ${i === idx ? 'on' : ''}`}
+              onClick={() => setIdx(i)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Portfolio({ view, onSetView, onOpenProject, onSetCrumb }) {
   return (
     <div className={`portfolio ${view}`}>
+      <FeaturedStrip onOpenProject={onOpenProject}/>
       <div className="heading">
         <div>
           <h2>Selected Work</h2>
@@ -69,12 +128,20 @@ function _fmtBytes(n) {
   return n + ' B';
 }
 
-function ProjectDetail({ project, onOpenPhoto }) {
+function ProjectDetail({ project, onOpenPhoto, onOpenVideo }) {
   const images = vsUseMemo(() =>
     (project.images || [])
       .filter(i => !i.rejected)
       .sort((a, b) => (a.order ?? 9999) - (b.order ?? 9999)),
     [project.id, project.images]
+  );
+
+  const btsVideos = vsUseMemo(() =>
+    (window.ALDO?.VIDEOS || []).filter(v =>
+      v.client && project.client &&
+      v.client.toUpperCase() === project.client.toUpperCase()
+    ),
+    [project.client]
   );
 
   const toViewerItem = (img) => ({
@@ -93,7 +160,7 @@ function ProjectDetail({ project, onOpenPhoto }) {
 
   const viewerList = vsUseMemo(() => images.map(toViewerItem), [images, project.id]);
 
-  return (
+  const mainContent = (
     <div>
       <div style={{padding: '24px 26px 18px', borderBottom: '1px solid var(--rule)', background: 'var(--window)'}}>
         <div className="ui-label">{project.client} · {project.year} · {project.type}</div>
@@ -125,6 +192,48 @@ function ProjectDetail({ project, onOpenPhoto }) {
           <div>No images in this project yet.</div>
         </div>
       )}
+    </div>
+  );
+
+  if (btsVideos.length === 0) {
+    return mainContent;
+  }
+
+  return (
+    <div className="project-detail-shell">
+      <div className="project-detail-main">{mainContent}</div>
+      <div className="project-bts-panel">
+        <div className="project-bts-head">
+          BTS / REELS
+          <span className="bts-count">{btsVideos.length}</span>
+        </div>
+        {btsVideos.map(v => {
+          const API_BASE_V = window.API_BASE || '';
+          const posterSrc = v.poster
+            ? (v.poster.startsWith('__vidposters/')
+                ? `${API_BASE_V}/api/videoposters/${v.poster.slice('__vidposters/'.length)}`
+                : v.poster)
+            : null;
+          return (
+            <div key={v.id} className="bts-tile" onClick={() => onOpenVideo && onOpenVideo(v)}>
+              <div className="bts-thumb">
+                {posterSrc
+                  ? <img src={posterSrc} alt={v.title} loading="lazy"/>
+                  : <div className="bts-thumb-placeholder">▶</div>
+                }
+                <div className="bts-play">▶</div>
+              </div>
+              <div className="bts-info">
+                <div className="bts-title">{v.title}</div>
+                <div className="bts-meta">{[v.category, v.year].filter(Boolean).join(' · ')}</div>
+              </div>
+            </div>
+          );
+        })}
+        <div className="project-bts-footer" onClick={() => onOpenVideo && onOpenVideo(btsVideos[0])}>
+          ↗ View all reels
+        </div>
+      </div>
     </div>
   );
 }

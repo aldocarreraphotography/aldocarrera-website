@@ -939,7 +939,235 @@ function GalleryDetailView({ token, navigate }) {
   );
 }
 
+/* ============================================================
+   CLIENT GALLERY PORTALS (PIN-gated /g/:token pages)
+   ============================================================ */
+
+/* Netlify-function fetch — uses relative URL (NO API_BASE prefix) + admin JWT */
+async function _netlifyFetch(method, path, body) {
+  const token = localStorage.getItem('aldo_admin_token') || '';
+  const opts = {
+    method,
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+  };
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch(path, opts);
+  if (!r.ok) {
+    const b = await r.json().catch(() => ({}));
+    throw Object.assign(new Error(b.message || b.error || r.statusText), { status: r.status });
+  }
+  if (r.status === 204) return null;
+  return r.json();
+}
+
+function ClientGalleryPortalsView({ navigate }) {
+  window.useStoreSubscribe();
+  const projects = window.AdminStore.getProjects();
+  const [portals, setPortals]   = gS([]);
+  const [loading, setLoading]   = gS(true);
+  const [creating, setCreating] = gS(false);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const data = await _netlifyFetch('GET', '/api/gallery-admin');
+      setPortals(Array.isArray(data) ? data : []);
+    } catch (e) {
+      toast('Failed to load portals: ' + (e.message || 'error'), 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  gE(() => { load(); }, []);
+
+  const copyLink = (token) => {
+    const url = `${window.location.origin}/g/${token}`;
+    navigator.clipboard.writeText(url)
+      .then(() => toast('Portal link copied', 'ok'))
+      .catch(() => toast(url, 'ok'));
+  };
+
+  const deletePortal = async (token, title) => {
+    if (!confirm(`Delete gallery portal "${title}"?`)) return;
+    try {
+      await _netlifyFetch('DELETE', `/api/gallery-admin/${token}`);
+      setPortals(ps => ps.filter(p => p.token !== token));
+      toast('Portal deleted', 'ok');
+    } catch (e) {
+      toast('Delete failed: ' + (e.message || 'error'), 'error');
+    }
+  };
+
+  return (
+    <>
+      <PageHeader
+        eyebrow="Workspace"
+        title="Client Gallery Portals"
+        crumbs={[{ label: 'Admin', href: '#/dashboard' }, { label: 'Gallery Portals' }]}
+        actions={<Btn onClick={() => setCreating(true)} icon="+">New portal</Btn>}
+      />
+
+      <Card padding="lg">
+        <SectionHead
+          eyebrow={`${portals.length} ${portals.length === 1 ? 'portal' : 'portals'}`}
+          title="PIN-gated client galleries"
+          sub="Share a /g/:token URL with a client. They unlock with a 4-digit PIN and can heart images and add notes."
+        />
+
+        {loading ? (
+          <div className="ad-loading-row">Loading…</div>
+        ) : portals.length === 0 ? (
+          <Empty
+            title="No portals yet"
+            sub="Create a portal to share a project with a client via a PIN-gated link."
+            action={<Btn onClick={() => setCreating(true)}>New portal</Btn>}
+          />
+        ) : (
+          <table className="ad-table">
+            <thead>
+              <tr>
+                <th>Title</th>
+                <th>Project</th>
+                <th>Token</th>
+                <th>Created</th>
+                <th style={{ width: 1 }}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {portals.map(p => (
+                <tr key={p.token}>
+                  <td><b>{p.title}</b></td>
+                  <td className="ad-mono ad-muted">{p.projectId}</td>
+                  <td>
+                    <code className="ad-mono" style={{ fontSize: 12, background: 'var(--paper-soft)', padding: '2px 6px' }}>
+                      {p.token}
+                    </code>
+                    <span className="ad-mono ad-muted" style={{ marginLeft: 8, fontSize: 11 }}>PIN: {p.pin}</span>
+                  </td>
+                  <td className="ad-mono ad-muted" style={{ fontSize: 12 }}>
+                    {p.createdAt ? new Date(p.createdAt).toLocaleDateString() : '—'}
+                  </td>
+                  <td>
+                    <div className="ad-row-actions">
+                      <button className="ad-link" onClick={() => copyLink(p.token)}>Copy link</button>
+                      <a className="ad-link" href={`/g/${p.token}`} target="_blank" rel="noopener">Open ↗</a>
+                      <button className="ad-link ad-link-quiet" onClick={() => deletePortal(p.token, p.title)}>Delete</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Card>
+
+      {creating && (
+        <PortalCreateModal
+          projects={projects}
+          onClose={() => setCreating(false)}
+          onCreated={(p) => {
+            setPortals(ps => [p, ...ps]);
+            setCreating(false);
+            const url = `${window.location.origin}/g/${p.token}`;
+            navigator.clipboard.writeText(url).catch(() => {});
+            toast(`Portal created · ${p.token} — link copied`, 'ok');
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+function PortalCreateModal({ projects, onClose, onCreated }) {
+  const [form, setForm] = gS({ projectId: '', title: '', pin: '' });
+  const [saving, setSaving] = gS(false);
+  const [pinError, setPinError] = gS('');
+
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const onProjectChange = (id) => {
+    const p = projects.find(x => x.id === id);
+    set('projectId', id);
+    if (p && !form.title) set('title', p.name + ' — Preview');
+  };
+
+  const handlePinChange = (v) => {
+    const digits = v.replace(/\D/g, '').slice(0, 4);
+    set('pin', digits);
+    setPinError(digits.length > 0 && digits.length < 4 ? 'PIN must be exactly 4 digits' : '');
+  };
+
+  const submit = async () => {
+    if (!form.projectId) { toast('Select a project', 'warn'); return; }
+    if (form.pin.length !== 4) { setPinError('PIN must be exactly 4 digits'); return; }
+    setSaving(true);
+    try {
+      const portal = await _netlifyFetch('POST', '/api/gallery-admin', {
+        projectId: form.projectId,
+        title: form.title,
+        pin: form.pin,
+      });
+      onCreated(portal);
+      setForm({ projectId: '', title: '', pin: '' });
+    } catch (e) {
+      toast('Error: ' + (e.message || 'failed'), 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal
+      open={true}
+      onClose={onClose}
+      eyebrow="New"
+      title="Create client gallery portal"
+      width={480}
+      footer={
+        <>
+          <Btn variant="ghost" onClick={onClose}>Cancel</Btn>
+          <Btn onClick={submit} disabled={saving || !form.projectId || form.pin.length !== 4}>
+            {saving ? 'Creating…' : 'Create & copy link'}
+          </Btn>
+        </>
+      }
+    >
+      <Field label="Project" wide>
+        <select
+          className="ad-select"
+          value={form.projectId}
+          onChange={e => onProjectChange(e.target.value)}
+        >
+          <option value="">Select a project…</option>
+          {projects.map(p => (
+            <option key={p.id} value={p.id}>{p.name} ({p.year})</option>
+          ))}
+        </select>
+      </Field>
+      <Field label="Gallery title" wide hint="Shown to the client after they unlock.">
+        <TextInput
+          value={form.title}
+          onChange={v => set('title', v)}
+          placeholder="e.g. BAPE FW24 — Final Edit"
+        />
+      </Field>
+      <Field label="PIN" hint="4-digit code the client enters to unlock." error={pinError}>
+        <TextInput
+          value={form.pin}
+          onChange={handlePinChange}
+          placeholder="e.g. 2847"
+          type="text"
+          inputMode="numeric"
+          maxLength={4}
+        />
+      </Field>
+    </Modal>
+  );
+}
+
 Object.assign(window, {
   GalleriesView,
   GalleryDetailView,
+  ClientGalleryPortalsView,
 });

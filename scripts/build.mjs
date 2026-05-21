@@ -63,6 +63,10 @@ const FILES = [
   'gallery.html',
   'gallery-styles.css',
 
+  // Client gallery portals (PIN-gated /g/:token)
+  'client-gallery.html',
+  'client-gallery.jsx',
+
   // To-go deck (public slideshow)
   'deck.html',
   'deck-styles.css',

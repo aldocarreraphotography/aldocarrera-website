@@ -753,6 +753,18 @@ function ImageCard({ img, project, showMeta, selected, onToggleSelect, onOpen,
                     onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd }) {
   const cycle = (k) => window.AdminStore.updateImage(project.id, img.filename, { [k]: !img[k] });
   const setCover = () => window.AdminStore.setCoverImage(project.id, img.filename);
+  const toggleHighlight = async (e) => {
+    e.stopPropagation();
+    try {
+      await window.AdminStore.apiFetch(
+        `/api/projects/${project.id}/images/${encodeURIComponent(img.filename)}`,
+        { method: 'PATCH', body: JSON.stringify({ highlighted: !img.highlighted }) }
+      );
+      window.AdminStore.updateImage(project.id, img.filename, { highlighted: !img.highlighted });
+    } catch (err) {
+      toast('Highlight failed: ' + (err.message || 'error'), 'error');
+    }
+  };
   const cls = [
     'ad-image-card',
     img.cover  ? 'is-cover'      : '',
@@ -789,6 +801,11 @@ function ImageCard({ img, project, showMeta, selected, onToggleSelect, onOpen,
       </div>
       <div className="ad-image-frame" onClick={onOpen}>
         <Thumb blobPath={img.blobPath} aspect="4/5"/>
+        <button
+          className={`ad-highlight-btn ${img.highlighted ? 'on' : ''}`}
+          onClick={toggleHighlight}
+          title={img.highlighted ? 'Remove highlight' : 'Highlight image (appears in featured strip)'}
+        >✦</button>
       </div>
       {showMeta && (
         <div className="ad-image-meta">

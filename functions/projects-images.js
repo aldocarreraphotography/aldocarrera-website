@@ -53,6 +53,19 @@ export default async function handler(req) {
     return json(img);
   }
 
+  if (req.method === 'PATCH') {
+    const body = await req.json().catch(() => ({}));
+    const data = await readProjects();
+    const project = data.projects.find(p => p.id === projectId);
+    if (!project) return json({ error: 'project_not_found' }, 404);
+    const img = project.images.find(i => i.filename === filename);
+    if (!img) return json({ error: 'image_not_found' }, 404);
+    if ('highlighted' in body) img.highlighted = !!body.highlighted;
+    project.updatedAt = new Date().toISOString();
+    await writeProjects(data);
+    return json(img);
+  }
+
   if (req.method === 'DELETE') {
     const data = await readProjects();
     const project = data.projects.find(p => p.id === projectId);

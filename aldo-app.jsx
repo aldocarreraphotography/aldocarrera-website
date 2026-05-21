@@ -1688,7 +1688,7 @@ function WindowHost({ win, z, focused, minimized, onMove, onResize, onFocus, onC
         {baseCrumb(['~', 'portfolio', win.project.year, win.project.id])}
       </div>
     );
-    content = <ProjectDetail project={win.project} onOpenPhoto={onOpenPhoto}/>;
+    content = <ProjectDetail project={win.project} onOpenPhoto={onOpenPhoto} onOpenVideo={onOpenVideo}/>;
     const projImgCount = (win.project.images || []).filter(i => !i.rejected).length;
     statusbar = (
       <div className="window-statusbar">

@@ -2728,6 +2728,163 @@ img {
   .aldo-logo-mark { animation: none; }
 }
 
+/* ============================================================
+   PROJECT DETAIL + BTS SIDEBAR
+   ============================================================ */
+.project-detail-shell { display: flex; height: 100%; min-height: 0; }
+.project-detail-main { flex: 1; min-width: 0; overflow-y: auto; }
+.project-bts-panel {
+  width: 176px; flex-shrink: 0;
+  border-left: 1px solid var(--rule);
+  overflow-y: auto;
+  background: var(--window);
+  display: flex; flex-direction: column;
+}
+.project-bts-head {
+  padding: 11px 14px 9px;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--ink-muted);
+  border-bottom: 1px solid var(--rule-soft);
+  position: sticky; top: 0; background: var(--window);
+  display: flex; justify-content: space-between; align-items: center;
+}
+.project-bts-head .bts-count {
+  background: var(--paper-soft);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-size: 9px;
+}
+.bts-tile {
+  cursor: pointer; padding: 10px 10px 8px;
+  border-bottom: 1px solid var(--rule-soft);
+  transition: background 120ms var(--easing);
+}
+.bts-tile:hover { background: var(--paper-soft); }
+.bts-tile .bts-thumb {
+  aspect-ratio: 9/16; background: #14110d;
+  overflow: hidden; border: 1px solid var(--rule);
+  position: relative;
+}
+.bts-tile .bts-thumb img {
+  width: 100%; height: 100%; object-fit: cover;
+  opacity: 0.88; transition: opacity 180ms var(--easing);
+}
+.bts-tile:hover .bts-thumb img { opacity: 1; }
+.bts-tile .bts-thumb-placeholder {
+  width: 100%; height: 100%;
+  display: grid; place-items: center;
+  color: var(--rule); font-size: 20px;
+}
+.bts-tile .bts-play {
+  position: absolute; inset: 0;
+  display: grid; place-items: center;
+  color: rgba(255,255,255,0.7); font-size: 16px;
+  pointer-events: none;
+}
+.bts-tile .bts-info { margin-top: 6px; }
+.bts-tile .bts-title {
+  font-size: 11px; font-weight: 500;
+  letter-spacing: -0.01em; line-height: 1.3;
+  overflow: hidden; text-overflow: ellipsis;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.bts-tile .bts-meta {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 9px; color: var(--ink-muted);
+  margin-top: 3px; letter-spacing: 0.04em;
+}
+.project-bts-footer {
+  margin-top: auto; padding: 10px 12px;
+  border-top: 1px solid var(--rule-soft);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 9.5px; color: var(--ink-muted);
+  text-align: center; cursor: pointer;
+  transition: color 120ms var(--easing);
+}
+.project-bts-footer:hover { color: var(--ink); }
+
+/* ============================================================
+   FEATURED STRIP IN PORTFOLIO
+   ============================================================ */
+.featured-strip {
+  border-bottom: 1px solid var(--rule);
+  position: relative;
+  overflow: hidden;
+  height: 280px;
+  display: flex;
+  cursor: default;
+}
+.featured-strip-img {
+  width: 65%; flex-shrink: 0;
+  position: relative; overflow: hidden;
+  background: var(--paper-soft);
+}
+.featured-strip-img img {
+  width: 100%; height: 100%; object-fit: cover;
+  filter: saturate(0.88) contrast(1.02);
+  position: absolute; inset: 0;
+  opacity: 0; transition: opacity 0.8s ease;
+}
+.featured-strip-img img.on { opacity: 1; }
+.featured-strip-info {
+  flex: 1; padding: 32px 28px; display: flex; flex-direction: column; justify-content: center;
+  border-left: 1px solid var(--rule-soft);
+}
+.featured-strip-label {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 16px;
+}
+.featured-strip-name {
+  font-size: 18px; font-weight: 500; letter-spacing: -0.016em;
+  line-height: 1.25; margin-bottom: 6px;
+}
+.featured-strip-client {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10px; color: var(--ink-muted); letter-spacing: 0.06em;
+}
+.featured-strip-link {
+  margin-top: 18px; font-family: "IBM Plex Mono", monospace;
+  font-size: 9.5px; letter-spacing: 0.1em; color: var(--ink);
+  background: none; border: none; padding: 0; cursor: pointer;
+  text-transform: uppercase;
+}
+.featured-strip-link:hover { color: var(--accent); }
+.featured-strip-dots {
+  position: absolute; bottom: 10px; left: 0; width: 65%;
+  display: flex; justify-content: center; gap: 5px;
+  pointer-events: none;
+}
+.featured-strip-dot {
+  width: 4px; height: 4px; border-radius: 50%;
+  background: rgba(255,255,255,0.35);
+  transition: background 0.3s, transform 0.3s;
+  pointer-events: all; cursor: pointer;
+}
+.featured-strip-dot.on { background: #fff; transform: scale(1.4); }
+
+/* ============================================================
+   ADMIN HIGHLIGHT BUTTON ON IMAGE CARDS
+   ============================================================ */
+.ad-image-frame { position: relative; }
+.ad-highlight-btn {
+  position: absolute; top: 6px; right: 6px;
+  width: 24px; height: 24px;
+  background: rgba(250,249,247,0.72);
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  font-size: 13px; line-height: 1;
+  cursor: pointer;
+  color: var(--ink-muted);
+  display: grid; place-items: center;
+  transition: color 120ms var(--easing), background 120ms var(--easing), border-color 120ms var(--easing);
+  z-index: 2;
+}
+.ad-highlight-btn:hover { color: var(--ink); background: var(--window); }
+.ad-highlight-btn.on { color: #c89b3c; border-color: #c89b3c; background: rgba(200,155,60,0.10); }
+
 /* ── Touch devices: disable hover transforms to prevent double-tap flicker ── */
 @media (hover: none) {
   .portfolio .project:hover .photo { border-color: var(--rule); }
