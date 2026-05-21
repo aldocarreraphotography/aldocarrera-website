@@ -961,7 +961,9 @@ input, textarea, select {
   color: var(--ink);
   margin-top: 8px;
   display: block;
-  word-break: break-all;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   line-height: 1.35;
   transition: color 140ms var(--easing);
 }
@@ -2421,9 +2423,10 @@ input, textarea, select {
   .m-folder .fhead .yr { font-family: "Neue Haas Grotesk Display Pro", "Inter", sans-serif; font-size: 22px; font-weight: 500; letter-spacing: -0.018em; }
   .m-folder .fhead .ct { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--ink-muted); letter-spacing: 0.06em; }
   .m-folder .fbody { padding: 0 0 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-  .m-folder .fbody .thumb { cursor: pointer; touch-action: manipulation; }
+  .m-folder .fbody .thumb { cursor: pointer; touch-action: manipulation; min-width: 0; }
   .m-folder .fbody .thumb .pic { aspect-ratio: 4/5; }
   .m-folder .fbody .thumb .name { font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .m-folder .fbody .thumb .sub  { font-size: 9px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .m-folder.collapsed .fbody { display: none; }
 
   /* viewer position dots */

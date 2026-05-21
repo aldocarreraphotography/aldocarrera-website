@@ -1792,6 +1792,22 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
     return () => window.removeEventListener('popstate', onPop);
   }, [project]);
 
+  /* ── iOS-safe scroll lock when viewer/video is open ── */
+  aUseEffect(() => {
+    const isOpen = !!(openPhoto || mobileVideo);
+    if (!isOpen) return;
+    const scrollY = window.scrollY;
+    document.body.style.position = 'fixed';
+    document.body.style.top    = `-${scrollY}px`;
+    document.body.style.width  = '100%';
+    return () => {
+      document.body.style.position = '';
+      document.body.style.top      = '';
+      document.body.style.width    = '';
+      window.scrollTo(0, scrollY);
+    };
+  }, [!!openPhoto, !!mobileVideo]);
+
   /* ── Swipe navigation for photo viewer ── */
   const onViewerTouchStart = (e) => setSwipeStartX(e.touches[0].clientX);
   const onViewerTouchEnd = (e) => {
