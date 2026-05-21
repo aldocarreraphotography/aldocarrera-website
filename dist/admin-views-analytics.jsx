@@ -113,217 +113,179 @@ function GAPublicTrafficCard() {
   /* ── Device colors ── */
   const deviceColors = { mobile: '#3a70a8', desktop: '#2a7a4f', tablet: '#c89b3c' };
 
+  const srcColors = ['#3a70a8','#2a7a4f','#c89b3c','#8a6a9a','#5a8a6a','#b84242','#7a7675','#4a90a8'];
+  const ageColors = ['#3a70a8','#2a7a4f','#c89b3c','#8a6a9a','#b84242','#a88670'];
+
   return (
-    <Card padding="lg" className="an-span-2">
-      <SectionHead
-        eyebrow="Public site"
-        title="Google Analytics 4"
-        sub={`Traffic for ${GA_PROPERTY_NAME} · live data via GA4 Data API`}
-      />
+    <>
+      {/* ── Overview card ── */}
+      <Card padding="lg" className="an-span-2">
+        <SectionHead
+          eyebrow="Public site"
+          title="Google Analytics 4"
+          sub={`Traffic for ${GA_PROPERTY_NAME} · live data via GA4 Data API`}
+        />
 
-      {/* Install status + tracking ID */}
-      <div className="ga-status-row">
-        <div className="ga-status-pill">
-          <span className="ga-status-dot" style={{ background: dotColor }}/>
-          <span className="ga-status-label">{dotLabel}</span>
+        {/* Tracking status */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+          <div className="ga-status-pill">
+            <span className="ga-status-dot" style={{ background: dotColor }}/>
+            <span className="ga-status-label">{dotLabel}</span>
+          </div>
+          <span className="ad-muted" style={{ fontSize: 11 }}>{GA_MEASUREMENT_ID} · {GA_PROPERTY_NAME}</span>
+          {installDetail && <span className="ad-muted" style={{ fontSize: 11 }}>· {installDetail}</span>}
         </div>
-        <div className="ga-status-meta">
-          <div className="ga-meta-row">
-            <span className="ga-meta-k">Measurement ID</span>
-            <span className="ga-meta-v mono">{GA_MEASUREMENT_ID}</span>
-          </div>
-          <div className="ga-meta-row">
-            <span className="ga-meta-k">Property</span>
-            <span className="ga-meta-v">{GA_PROPERTY_NAME}</span>
-          </div>
-          <div className="ga-meta-row">
-            <span className="ga-meta-k">Tracking on</span>
-            <span className="ga-meta-v">Public site · Client galleries · To-go deck</span>
-          </div>
-          {installDetail && <div className="ga-meta-detail">{installDetail}</div>}
-        </div>
-      </div>
 
-      {/* ── Inline metrics (when GA4 Data API is wired up) ── */}
-      {gaLoading && (
-        <div className="ga-data-loading">◌ Loading live metrics…</div>
-      )}
+        {gaLoading && (
+          <div style={{ color: 'var(--ink-muted)', fontSize: 13, padding: '16px 0' }}>◌ Loading live metrics…</div>
+        )}
 
+        {!gaLoading && gaData && (
+          <>
+            {/* Realtime pulse */}
+            <div className="ga-realtime-bar">
+              <div className="ga-realtime-pulse"/>
+              <strong className="ga-realtime-num">{anFmtNum(gaData.realtime?.activeUsers ?? 0)}</strong>
+              <span className="ga-realtime-label"> active right now</span>
+              <span className="ga-realtime-period"> · Last 28 days ↓</span>
+            </div>
+
+            {/* 28-day overview — uses same an-overview-grid as rest of page */}
+            <div className="an-overview-grid" style={{ marginBottom: 0 }}>
+              <AnStat label="Users"       value={anFmtNum(gaData.overview.users)}    sub={`${anFmtNum(gaData.overview.newUsers)} new`} accent />
+              <AnStat label="Sessions"    value={anFmtNum(gaData.overview.sessions)} sub="total visits" />
+              <AnStat label="Page views"  value={anFmtNum(gaData.overview.pageViews)} sub="screens viewed" />
+              <AnStat label="Avg session" value={anFmtDur(gaData.overview.avgSessionDur)} sub="time per visit" />
+              <AnStat label="Bounce rate" value={gaData.overview.bounceRate ? Math.round(gaData.overview.bounceRate * 100) + '%' : '—'} sub="left without engaging" />
+              <AnStat label="New users"   value={anFmtNum(gaData.overview.newUsers)}  sub={anPct(gaData.overview.newUsers, gaData.overview.users) + ' of total'} />
+            </div>
+          </>
+        )}
+
+        {/* Setup guide */}
+        {!gaLoading && gaData === false && (
+          <div className="ga-setup-box">
+            {gaError ? (
+              <div className="ga-setup-error">⚠ GA4 API error: {gaError}</div>
+            ) : (
+              <>
+                <div className="ga-setup-title">One more step — add GA4 credentials to the NAS</div>
+                <div className="ga-setup-body">Add these three lines to the NAS <code>.env</code> file and rebuild the container.</div>
+                <pre className="ga-setup-pre">{`GA_PROPERTY_ID=538429297\nGA_CREDENTIALS_FILE=/credentials/ga4.json\nGA_CREDENTIALS_HOST_PATH=/var/services/homes/aldocarrera/ga4-credentials.json`}</pre>
+                <div className="ga-setup-body" style={{ marginTop: 8 }}>Then run: <code>sudo docker-compose up -d --force-recreate</code></div>
+              </>
+            )}
+          </div>
+        )}
+      </Card>
+
+      {/* ── Detail cards (only when data is loaded) ── */}
       {!gaLoading && gaData && (
-        <>
-          {/* Realtime pulse */}
-          <div className="ga-realtime-bar">
-            <div className="ga-realtime-pulse"/>
-            <strong className="ga-realtime-num">{anFmtNum(gaData.realtime?.activeUsers ?? 0)}</strong>
-            <span className="ga-realtime-label"> active right now</span>
-            <span className="ga-realtime-period">  ·  Last 28 days ↓</span>
-          </div>
+        <div className="an-grid-2">
 
-          {/* 28-day overview strip */}
-          <div className="ga-metric-strip">
-            <div className="ga-metric-tile">
-              <div className="ga-metric-val">{anFmtNum(gaData.overview.users)}</div>
-              <div className="ga-metric-lbl">Users</div>
-            </div>
-            <div className="ga-metric-tile">
-              <div className="ga-metric-val">{anFmtNum(gaData.overview.newUsers)}</div>
-              <div className="ga-metric-lbl">New users</div>
-            </div>
-            <div className="ga-metric-tile">
-              <div className="ga-metric-val">{anFmtNum(gaData.overview.sessions)}</div>
-              <div className="ga-metric-lbl">Sessions</div>
-            </div>
-            <div className="ga-metric-tile">
-              <div className="ga-metric-val">{anFmtNum(gaData.overview.pageViews)}</div>
-              <div className="ga-metric-lbl">Page views</div>
-            </div>
-            <div className="ga-metric-tile">
-              <div className="ga-metric-val">{anFmtDur(gaData.overview.avgSessionDur)}</div>
-              <div className="ga-metric-lbl">Avg session</div>
-            </div>
-            <div className="ga-metric-tile">
-              <div className="ga-metric-val">{gaData.overview.bounceRate ? Math.round(gaData.overview.bounceRate * 100) + '%' : '—'}</div>
-              <div className="ga-metric-lbl">Bounce rate</div>
-            </div>
-          </div>
-
-          {/* 3-column detail: top pages · acquisition · devices + countries */}
-          <div className="ga-detail-grid">
-
-            {/* Top pages */}
-            <div className="ga-detail-col">
-              <div className="ga-detail-head">Top pages</div>
+          {/* Top pages */}
+          <Card padding="lg">
+            <SectionHead eyebrow="Top pages" title="Most viewed" sub="Page views · last 28 days"/>
+            <div className="an-bar-list">
               {(() => {
                 const maxV = Math.max(...(gaData.topPages || []).map(p => p.views), 1);
                 return (gaData.topPages || []).map((p, i) => (
-                  <AnBarRow
-                    key={i}
-                    label={p.path === '/' ? 'Home' : p.path}
-                    value={p.views}
-                    max={maxV}
-                    sub="views"
-                    color="var(--accent)"
-                  />
+                  <AnBarRow key={i} label={p.path === '/' ? 'Home' : p.path} value={p.views} max={maxV} sub="views" color="var(--accent)"/>
                 ));
               })()}
             </div>
+          </Card>
 
-            {/* Traffic sources */}
-            <div className="ga-detail-col">
-              <div className="ga-detail-head">Traffic sources</div>
+          {/* Traffic sources */}
+          <Card padding="lg">
+            <SectionHead eyebrow="Acquisition" title="Traffic sources" sub="Where visitors come from"/>
+            <div className="an-bar-list">
               {(() => {
                 const maxS = Math.max(...(gaData.acquisition || []).map(a => a.sessions), 1);
-                const srcColors = ['#3a70a8','#2a7a4f','#c89b3c','#8a6a9a','#5a8a6a','#b84242','#7a7675','#4a90a8'];
                 return (gaData.acquisition || []).map((a, i) => (
-                  <AnBarRow
-                    key={i}
-                    label={a.channel}
-                    value={a.sessions}
-                    max={maxS}
-                    sub="sessions"
-                    color={srcColors[i % srcColors.length]}
-                  />
+                  <AnBarRow key={i} label={a.channel} value={a.sessions} max={maxS} sub="sessions" color={srcColors[i % srcColors.length]}/>
                 ));
               })()}
             </div>
+          </Card>
 
-            {/* Devices + Countries */}
-            <div className="ga-detail-col">
-              <div className="ga-detail-head">Devices</div>
-              {(() => {
-                const totalD = (gaData.devices || []).reduce((s, d) => s + d.sessions, 0) || 1;
-                return (gaData.devices || []).map((d, i) => (
-                  <AnBarRow
-                    key={i}
-                    label={d.device.charAt(0).toUpperCase() + d.device.slice(1)}
-                    value={d.sessions}
-                    max={totalD}
-                    sub={`${Math.round((d.sessions / totalD) * 100)}%`}
-                    color={deviceColors[d.device.toLowerCase()] || '#7a7675'}
-                  />
-                ));
-              })()}
-
-              <div className="ga-detail-head" style={{ marginTop: 20 }}>Top countries</div>
+          {/* Devices + Countries */}
+          <Card padding="lg">
+            <SectionHead eyebrow="Technology" title="Devices & countries" sub="How visitors access the site"/>
+            <div className="an-mini-section-label">Device type</div>
+            <AnSegBar
+              total={(gaData.devices || []).reduce((s, d) => s + d.sessions, 0) || 1}
+              items={(gaData.devices || []).map(d => ({
+                label: d.device.charAt(0).toUpperCase() + d.device.slice(1),
+                value: d.sessions,
+                color: deviceColors[d.device.toLowerCase()] || '#7a7675',
+              }))}
+            />
+            <div className="an-mini-section-label" style={{ marginTop: 20 }}>Top countries</div>
+            <div className="an-bar-list">
               {(() => {
                 const maxC = Math.max(...(gaData.countries || []).map(c => c.sessions), 1);
                 return (gaData.countries || []).map((c, i) => (
-                  <AnBarRow
-                    key={i}
-                    label={c.country}
-                    value={c.sessions}
-                    max={maxC}
-                    sub="sessions"
-                    color="#7a6a9a"
-                  />
+                  <AnBarRow key={i} label={c.country} value={c.sessions} max={maxC} sub="sessions" color="#7a6a9a"/>
                 ));
               })()}
             </div>
-          </div>
+          </Card>
 
-          <div className="ga-footer-note" style={{ marginTop: 12 }}>
-            <div className="ga-footer-line">
-              <strong>Data lag:</strong> GA4 standard reports refresh every ~24 hours. Realtime is instant.
-              &nbsp;·&nbsp; <span className="ad-muted">Fetched: {gaData.generatedAt ? new Date(gaData.generatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '—'}</span>
-            </div>
-          </div>
-        </>
-      )}
+          {/* Demographics */}
+          <Card padding="lg">
+            <SectionHead eyebrow="Audience" title="Demographics" sub="Age & gender · last 28 days"/>
+            {(gaData.ageGroups || []).length > 0 ? (
+              <>
+                <div className="an-mini-section-label">Age range</div>
+                <AnSegBar
+                  total={(gaData.ageGroups || []).reduce((s, a) => s + a.users, 0) || 1}
+                  items={(gaData.ageGroups || []).map((a, i) => ({ label: a.age, value: a.users, color: ageColors[i % ageColors.length] }))}
+                />
+              </>
+            ) : (
+              <div className="ad-muted" style={{ fontSize: 12, padding: '8px 0 16px' }}>
+                Age data not available — enable Demographics &amp; Interests in GA4 Admin → Data Settings → Data Collection.
+              </div>
+            )}
+            {(gaData.genders || []).length > 0 && (
+              <>
+                <div className="an-mini-section-label" style={{ marginTop: 20 }}>Gender</div>
+                <AnSegBar
+                  total={(gaData.genders || []).reduce((s, g) => s + g.users, 0) || 1}
+                  items={(gaData.genders || []).map((g, i) => ({
+                    label: g.gender.charAt(0).toUpperCase() + g.gender.slice(1),
+                    value: g.users,
+                    color: ['#3a70a8','#c89b3c','#7a7675'][i % 3],
+                  }))}
+                />
+              </>
+            )}
+            {(gaData.ageGroups || []).length === 0 && (gaData.genders || []).length === 0 && (
+              <div className="ad-muted" style={{ fontSize: 11, marginTop: 8 }}>
+                Once Demographics is enabled in GA4, age and gender data will appear here automatically.
+              </div>
+            )}
+          </Card>
 
-      {/* ── Setup instructions (GA4 Data API not yet configured) ── */}
-      {!gaLoading && gaData === false && (
-        <div className="ga-setup-box">
-          {gaError ? (
-            <div className="ga-setup-error">⚠ GA4 API error: {gaError}</div>
-          ) : (
-            <>
-              <div className="ga-setup-title">One more step — add GA4 credentials to the NAS</div>
-              <div className="ga-setup-body">
-                The service account and credentials JSON are already set up. You just need to add three lines to the NAS <code>.env</code> file and rebuild the container.
-              </div>
-              <ol className="ga-setup-steps">
-                <li>SSH into the NAS: <code>ssh aldocarrera@YOUR_NAS_IP</code></li>
-                <li>Copy your credentials JSON to the NAS if not done yet:<br/>
-                  <code>scp ~/Downloads/aldocarrera-analytics-586e5e10dd71.json aldocarrera@YOUR_NAS_IP:/var/services/homes/aldocarrera/ga4-credentials.json</code>
-                </li>
-                <li>Edit the <code>.env</code> file: <code>vi /path/to/aldocarrera/nas-server/.env</code><br/>
-                  Add these three lines:
-                  <pre className="ga-setup-pre">{`GA_PROPERTY_ID=538429297
-GA_CREDENTIALS_FILE=/credentials/ga4.json
-GA_CREDENTIALS_HOST_PATH=/var/services/homes/aldocarrera/ga4-credentials.json`}</pre>
-                </li>
-                <li>Rebuild and restart:<br/>
-                  <code>cd /path/to/nas-server && sudo docker-compose up -d --force-recreate</code>
-                </li>
-              </ol>
-              <div className="ga-setup-body" style={{ marginTop: 10, fontStyle: 'italic' }}>
-                Once the container restarts, refresh this page — live visitor counts will replace this message.
-              </div>
-            </>
-          )}
         </div>
       )}
 
-      {/* Report quick-links grid */}
-      <div style={{ marginTop: gaData ? 20 : 0 }}>
-        <div className="ga-detail-head" style={{ marginBottom: 10 }}>GA Dashboard quick links</div>
+      {/* ── Quick links — always visible ── */}
+      <Card padding="lg" className="an-span-2">
+        <SectionHead eyebrow="GA4 Dashboard" title="Quick links" sub="Jump directly into Google Analytics"/>
         <div className="ga-report-grid">
           {reports.map(r => (
-            <a
-              key={r.label}
-              href={r.href}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={`ga-report-tile ${r.accent ? 'is-accent' : ''}`}
-            >
+            <a key={r.label} href={r.href} target="_blank" rel="noopener noreferrer"
+              className={`ga-report-tile ${r.accent ? 'is-accent' : ''}`}>
               <div className="ga-report-label">{r.label}</div>
               <div className="ga-report-desc">{r.desc}</div>
               <div className="ga-report-arrow">↗</div>
             </a>
           ))}
         </div>
-      </div>
-    </Card>
+      </Card>
+    </>
   );
 }
 

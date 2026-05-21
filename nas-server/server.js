@@ -1212,6 +1212,8 @@ app.get('/api/ga-analytics', async (req, res) => {
       deviceRes,
       countryRes,
       realtimeRes,
+      ageRes,
+      genderRes,
     ] = await Promise.all([
       // 28-day overview
       client.runReport({
@@ -1266,6 +1268,22 @@ app.get('/api/ga-analytics', async (req, res) => {
         property,
         metrics: [{ name: 'activeUsers' }],
       }),
+      // Age brackets (requires Demographics & Interests enabled in GA4)
+      client.runReport({
+        property,
+        dateRanges: [dateRange],
+        dimensions: [{ name: 'userAgeBracket' }],
+        metrics:    [{ name: 'activeUsers' }],
+        orderBys:   [{ metric: { metricName: 'activeUsers' }, desc: true }],
+      }).catch(() => [{ rows: [] }]),
+      // Gender (requires Demographics & Interests enabled in GA4)
+      client.runReport({
+        property,
+        dateRanges: [dateRange],
+        dimensions: [{ name: 'userGender' }],
+        metrics:    [{ name: 'activeUsers' }],
+        orderBys:   [{ metric: { metricName: 'activeUsers' }, desc: true }],
+      }).catch(() => [{ rows: [] }]),
     ]);
 
     const getVal = (row, idx) => row.metricValues?.[idx]?.value    || '0';
@@ -1310,6 +1328,14 @@ app.get('/api/ga-analytics', async (req, res) => {
       10,
     );
 
+    const ageGroups = (ageRes[0].rows || [])
+      .filter(row => getDim(row, 0) && getDim(row, 0) !== '(not set)')
+      .map(row => ({ age: getDim(row, 0), users: parseInt(getVal(row, 0), 10) }));
+
+    const genders = (genderRes[0].rows || [])
+      .filter(row => getDim(row, 0) && getDim(row, 0) !== '(not set)' && getDim(row, 0) !== 'unknown')
+      .map(row => ({ gender: getDim(row, 0), users: parseInt(getVal(row, 0), 10) }));
+
     res.json({
       period:      '28daysAgo to today',
       generatedAt: new Date().toISOString(),
@@ -1319,6 +1345,8 @@ app.get('/api/ga-analytics', async (req, res) => {
       acquisition,
       devices,
       countries,
+      ageGroups,
+      genders,
     });
   } catch (err) {
     console.error('[ga-analytics] API error:', err?.message, err?.code);
