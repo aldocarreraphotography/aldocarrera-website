@@ -1233,6 +1233,15 @@ const INITIAL_WINDOWS = {
 };
 
 function ArchiveApp() {
+  // Re-render (not remount) when live data updates so navigation state
+  // (open project, active tab, photo viewer, etc.) is preserved.
+  const [, _refreshData] = aUseState(0);
+  aUseEffect(() => {
+    const h = () => _refreshData(v => v + 1);
+    window.addEventListener('aldo-data-updated', h);
+    return () => window.removeEventListener('aldo-data-updated', h);
+  }, []);
+
   const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
   const [windows, setWindows] = aUseState(INITIAL_WINDOWS);
   const [order, setOrder] = aUseState(['about', 'clients', 'portfolio']);
@@ -2028,7 +2037,6 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
    ============================================================ */
 function LiveDataProvider() {
   const [ready, setReady] = aUseState(!!window.__aldoReady);
-  const [tick, setTick]   = aUseState(0);
 
   aUseEffect(() => {
     if (ready) return;
@@ -2039,12 +2047,6 @@ function LiveDataProvider() {
     if (window.__aldoReady) setReady(true);
     return () => window.removeEventListener('aldo-ready', onReady);
   }, [ready]);
-
-  aUseEffect(() => {
-    const onUpdate = () => setTick(t => t + 1);
-    window.addEventListener('aldo-data-updated', onUpdate);
-    return () => window.removeEventListener('aldo-data-updated', onUpdate);
-  }, []);
 
   if (!ready) {
     return (
@@ -2078,7 +2080,7 @@ function LiveDataProvider() {
       </div>
     );
   }
-  return <ArchiveApp key={tick}/>;
+  return <ArchiveApp/>;
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(<LiveDataProvider/>);
