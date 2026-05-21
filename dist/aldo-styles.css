@@ -2354,10 +2354,10 @@ input, textarea, select {
 .mobile-shell { display: none; }
 
 @media (max-width: 820px) {
-  body { overflow: auto; }
+  body { overflow-y: auto; overflow-x: hidden; }
   .menubar, .rail, .sidebar, .desktop > .window, .dock { display: none !important; }
   .desktop { position: relative; inset: auto; left: 0; overflow: visible; }
-  .mobile-shell { display: flex; flex-direction: column; min-height: 100vh; background: var(--paper); }
+  .mobile-shell { display: flex !important; flex-direction: column; min-height: 100vh; background: var(--paper); overflow-x: hidden; }
   .mobile-head {
     padding: 28px 20px 14px;
     border-bottom: 1px solid var(--rule);
@@ -2402,7 +2402,7 @@ input, textarea, select {
     cursor: pointer;
   }
   .mobile-tabs .tab.on { color: var(--ink); border-bottom-color: var(--accent); }
-  .mobile-page { padding: 24px 20px 40px; }
+  .mobile-page { padding: 24px 20px 40px; overflow-x: hidden; }
   .mobile-page.portfolio,
   .mobile-page.about,
   .mobile-page.contact,
