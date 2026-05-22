@@ -1399,7 +1399,7 @@ function ArchiveApp() {
         }
         return { title: opts.video ? opts.video.title : 'Video', path: opts.video ? `~/reels/${opts.video.id}` : '~/reels', w, h };
       })(),
-      project:   { title: opts.project ? opts.project.name : 'Project', path: opts.project ? `~/portfolio/${opts.project.id}` : '~/portfolio', w: 760, h: 600 },
+      project:   { title: opts.project ? opts.project.name : 'Project', path: opts.project ? `~/portfolio/${opts.project.id}` : '~/portfolio', w: Math.min(1080, window.innerWidth - 80), h: Math.min(740, window.innerHeight - 120) },
     };
     const p = presets[kind] || { title: kind, w: 500, h: 400 };
     setWindows(ws => ({
