@@ -94,9 +94,9 @@ function AdminSidebar({ route, onLogout }) {
           <SideLink key={item.id} item={item} route={route}/>
         ))}
         <div className="ad-side-section">System</div>
-        <SideLink item={NAV[6]} route={route}/>
-        <SideLink item={NAV[7]} route={route}/>
-        <SideLink item={NAV[8]} route={route}/>
+        {NAV.slice(6).map(item => (
+          <SideLink key={item.id} item={item} route={route}/>
+        ))}
       </nav>
 
       <div className="ad-side-foot">
