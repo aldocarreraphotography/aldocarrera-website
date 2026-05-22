@@ -199,37 +199,128 @@ function ProjectDetail({ project, onOpenPhoto, onOpenVideo }) {
   return (
     <div className="project-detail-shell">
       <div className="project-detail-main">{mainContent}</div>
-      <div className="project-bts-panel">
-        <div className="project-bts-head">
-          BTS / REELS
-          <span className="bts-count">{btsVideos.length}</span>
-        </div>
-        {btsVideos.map(v => {
-          const API_BASE_V = window.API_BASE || '';
-          const posterSrc = v.poster
-            ? (v.poster.startsWith('__vidposters/')
-                ? `${API_BASE_V}/api/videoposters/${v.poster.slice('__vidposters/'.length)}`
-                : v.poster)
-            : null;
-          return (
-            <div key={v.id} className="bts-tile" onClick={() => onOpenVideo && onOpenVideo(v)}>
-              <div className="bts-thumb">
-                {posterSrc
-                  ? <img src={posterSrc} alt={v.title} loading="lazy"/>
-                  : <div className="bts-thumb-placeholder">▶</div>
-                }
-                <div className="bts-play">▶</div>
-              </div>
-              <div className="bts-info">
-                <div className="bts-title">{v.title}</div>
-                <div className="bts-meta">{[v.category, v.year].filter(Boolean).join(' · ')}</div>
+      <BtsPanel videos={btsVideos} onOpenVideo={onOpenVideo}/>
+    </div>
+  );
+}
+
+/* ============================================================
+   BTS / REELS SIDEBAR
+   - Probes each uploaded video's aspect ratio on mount
+   - Vertical videos play INLINE in the sidebar
+   - Horizontal videos open in a properly-sized popup window
+   ============================================================ */
+function BtsPanel({ videos, onOpenVideo }) {
+  const API_BASE_V = window.API_BASE || '';
+  // orientations[videoId] = { orient: 'vertical'|'horizontal', w, h }
+  const [orientations, setOrientations] = vsUseState({});
+  const [playingId, setPlayingId] = vsUseState(null);
+
+  vsUseEffect(() => {
+    let cancelled = false;
+    const probes = [];
+    videos.forEach(v => {
+      // Embeds: assume horizontal (Vimeo/YouTube BTS are almost always 16:9)
+      if (v.embedUrl) {
+        setOrientations(o => ({ ...o, [v.id]: { orient: 'horizontal', w: 16, h: 9 } }));
+        return;
+      }
+      const src = videoSrc(v);
+      if (!src) return;
+      const el = document.createElement('video');
+      el.preload = 'metadata';
+      el.muted = true;
+      el.playsInline = true;
+      el.crossOrigin = 'anonymous';
+      el.src = src;
+      el.onloadedmetadata = () => {
+        if (cancelled) return;
+        const w = el.videoWidth, h = el.videoHeight;
+        const orient = h > w ? 'vertical' : 'horizontal';
+        setOrientations(o => ({ ...o, [v.id]: { orient, w, h } }));
+      };
+      el.onerror = () => {
+        if (cancelled) return;
+        // Fallback: assume horizontal if probe fails
+        setOrientations(o => ({ ...o, [v.id]: { orient: 'horizontal', w: 16, h: 9 } }));
+      };
+      probes.push(el);
+    });
+    return () => {
+      cancelled = true;
+      probes.forEach(el => { el.src = ''; el.removeAttribute('src'); el.load?.(); });
+    };
+  }, [videos.length, videos.map(v => v.id).join('|')]);
+
+  const handleTileClick = (v) => {
+    const meta = orientations[v.id];
+    if (meta && meta.orient === 'vertical') {
+      setPlayingId(playingId === v.id ? null : v.id);
+    } else {
+      // Pass dims so the window can size to the actual aspect ratio (no black bars)
+      onOpenVideo && onOpenVideo(v, meta ? { w: meta.w, h: meta.h } : null);
+    }
+  };
+
+  return (
+    <div className="project-bts-panel">
+      <div className="project-bts-head">
+        BTS / REELS
+        <span className="bts-count">{videos.length}</span>
+      </div>
+      {videos.map(v => {
+        const posterSrc = v.poster
+          ? (v.poster.startsWith('__vidposters/')
+              ? `${API_BASE_V}/api/videoposters/${v.poster.slice('__vidposters/'.length)}`
+              : v.poster)
+          : null;
+        const meta = orientations[v.id];
+        const isVertical = meta?.orient === 'vertical';
+        const isPlaying = playingId === v.id;
+        const fileSrc = v.embedUrl ? null : videoSrc(v);
+
+        return (
+          <div key={v.id} className={`bts-tile ${isPlaying ? 'is-playing' : ''}`}>
+            <div
+              className="bts-thumb"
+              onClick={() => handleTileClick(v)}
+              style={meta ? { aspectRatio: `${meta.w} / ${meta.h}` } : undefined}
+            >
+              {isPlaying && isVertical && fileSrc ? (
+                <video
+                  className="bts-inline-video"
+                  src={fileSrc}
+                  autoPlay
+                  controls
+                  playsInline
+                  loop
+                />
+              ) : posterSrc ? (
+                <>
+                  <img src={posterSrc} alt={v.title} loading="lazy"/>
+                  <div className="bts-play">▶</div>
+                </>
+              ) : (
+                <div className="bts-thumb-placeholder">▶</div>
+              )}
+            </div>
+            <div className="bts-info" onClick={() => handleTileClick(v)}>
+              <div className="bts-title">{v.title}</div>
+              <div className="bts-meta">
+                {[v.category, v.year].filter(Boolean).join(' · ')}
+                {isVertical && <span className="bts-orient-tag"> · vertical</span>}
               </div>
             </div>
-          );
-        })}
-        <div className="project-bts-footer" onClick={() => onOpenVideo && onOpenVideo(btsVideos[0])}>
-          ↗ View all reels
-        </div>
+            {isPlaying && (
+              <button className="bts-close-inline" onClick={() => setPlayingId(null)} aria-label="Stop">
+                ×
+              </button>
+            )}
+          </div>
+        );
+      })}
+      <div className="project-bts-footer" onClick={() => handleTileClick(videos[0])}>
+        ↗ View all reels
       </div>
     </div>
   );

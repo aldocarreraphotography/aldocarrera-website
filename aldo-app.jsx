@@ -1385,7 +1385,20 @@ function ArchiveApp() {
       about:     { title:'about_me.txt',         path: '~/info',                            w: 460, h: 620 },
       contact:   { title:'Inquiry · contact.html', path:'~/contact',                        w: 480, h: 540 },
       reels:     { title:'Reels',                path: '~/reels',                           w: 680, h: 520 },
-      video:     { title: opts.video ? opts.video.title : 'Video', path: opts.video ? `~/reels/${opts.video.id}` : '~/reels', w: 840, h: 560 },
+      video:     (() => {
+        // Size the window to the video's actual aspect ratio — eliminates black bars
+        const CHROME_H = 90; // toolbar + statusbar + title bar
+        const MAX_W = Math.min(960, window.innerWidth - 80);
+        const MAX_H = window.innerHeight - 140;
+        let w = 840, h = 560;
+        if (opts.dims && opts.dims.w && opts.dims.h) {
+          const ar = opts.dims.w / opts.dims.h;
+          w = MAX_W;
+          h = Math.round(w / ar) + CHROME_H;
+          if (h > MAX_H) { h = MAX_H; w = Math.round((h - CHROME_H) * ar); }
+        }
+        return { title: opts.video ? opts.video.title : 'Video', path: opts.video ? `~/reels/${opts.video.id}` : '~/reels', w, h };
+      })(),
       project:   { title: opts.project ? opts.project.name : 'Project', path: opts.project ? `~/portfolio/${opts.project.id}` : '~/portfolio', w: 760, h: 600 },
     };
     const p = presets[kind] || { title: kind, w: 500, h: 400 };
@@ -1483,7 +1496,7 @@ function ArchiveApp() {
             onClose={close} onMinimize={minimize} onMaximize={maximize}
             onOpenPhoto={openPhotoViewer}
             onOpenProject={(p) => openWindow('project', { project: p })}
-            onOpenVideo={(v) => openWindow('video', { video: v })}
+            onOpenVideo={(v, dims) => openWindow('video', { video: v, dims })}
             view={view} setView={setView}
             archiveFilter={archiveFilter}
             setArchiveFilter={setArchiveFilter}
