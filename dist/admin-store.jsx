@@ -334,32 +334,22 @@ async function pushToAPI() {
     ...p,
     images: (p.images || []).filter(img => isServedPath(img.blobPath)),
   }));
-  const payload = JSON.stringify({
-    projects: cleanProjects,
-    about:    s.about,
-    clients:  s.clients,
-    services: s.services,
-    settings: s.settings,
-  });
   try {
     const r = await fetch(getAPI() + '/api/admin/sync', {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: payload,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        projects: cleanProjects,
+        about:    s.about,
+        clients:  s.clients,
+        services: s.services,
+        settings: s.settings,
+      }),
     });
     _lastSync = { at: Date.now(), ok: r.ok };
-
-    // Mirror to Netlify Blobs so gallery portals can read project + image data.
-    // Fire-and-forget — doesn't affect the main sync result.
-    const netlifyToken = localStorage.getItem('aldo_netlify_token');
-    if (netlifyToken) {
-      fetch('/.netlify/functions/admin-sync', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${netlifyToken}` },
-        body: payload,
-      }).catch(() => {});
-    }
-
     return r.ok;
   } catch (_) {
     _lastSync = { at: Date.now(), ok: false };
@@ -434,22 +424,13 @@ const AdminStore = {
         localStorage.setItem(AUTH_KEY, data.token);
         // Also obtain a Netlify-signed token for Netlify Functions (gallery admin,
         // etc.) — the NAS JWT uses a different secret so it won't verify there.
-        // Awaited (not fire-and-forget) so the token is ready before navigation.
-        try {
-          const nr = await fetch('/.netlify/functions/auth-login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ password }),
-          });
-          if (nr.ok) {
-            const nd = await nr.json();
-            if (nd?.token) localStorage.setItem('aldo_netlify_token', nd.token);
-          } else {
-            console.warn('[login] Netlify auth-login returned', nr.status, '— gallery portals may not work until re-login');
-          }
-        } catch (nErr) {
-          console.warn('[login] Netlify auth-login failed:', nErr.message, '— gallery portals may not work until re-login');
-        }
+        fetch('/.netlify/functions/auth-login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password }),
+        }).then(nr => nr.ok ? nr.json() : null).then(nd => {
+          if (nd?.token) localStorage.setItem('aldo_netlify_token', nd.token);
+        }).catch(() => {});
         // Pull any newer state from Blobs and reconcile.
         pullFromAPI().catch(() => {});
         return data;
@@ -478,7 +459,6 @@ const AdminStore = {
     // Best-effort; the server treats logout as a no-op anyway (JWTs are stateless).
     fetch(getAPI() + '/api/auth/logout', { method: 'POST' }).catch(() => {});
     localStorage.removeItem(AUTH_KEY);
-    localStorage.removeItem('aldo_netlify_token'); // clear so re-login fetches a fresh one
     window.dispatchEvent(new CustomEvent('admin-store-changed'));
   },
   isAuthenticated() {
