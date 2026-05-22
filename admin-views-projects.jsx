@@ -892,6 +892,7 @@ function ImageCard({ img, project, showMeta, selected, onToggleSelect, onOpen,
 function ImageViewer({ image, project, onClose, onPrev, onNext }) {
   const url = window.useImageURL(image.blobPath);
   const [notes, setNotes] = vS(image.notes || '');
+  const [focal, setFocal] = vS({ x: image.focalX ?? null, y: image.focalY ?? null });
   const stageRef = vR(null);
   vE(() => {
     const onKey = (e) => {
@@ -903,15 +904,16 @@ function ImageViewer({ image, project, onClose, onPrev, onNext }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose, onPrev, onNext]);
   vE(() => { setNotes(image.notes || ''); }, [image.filename]);
+  vE(() => { setFocal({ x: image.focalX ?? null, y: image.focalY ?? null }); }, [image.filename]);
 
   const saveNotes = () => {
     window.AdminStore.updateImage(project.id, image.filename, { notes });
     toast('Notes saved', 'ok');
   };
 
-  const hasFocal = image.focalX != null && image.focalY != null;
-  const focalX = image.focalX ?? 50;
-  const focalY = image.focalY ?? 50;
+  const hasFocal = focal.x != null && focal.y != null;
+  const focalX = focal.x ?? 50;
+  const focalY = focal.y ?? 50;
 
   const handleStageClick = (e) => {
     // Don't fire if clicking nav buttons
@@ -919,11 +921,13 @@ function ImageViewer({ image, project, onClose, onPrev, onNext }) {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = Math.round(((e.clientX - rect.left) / rect.width)  * 100);
     const y = Math.round(((e.clientY - rect.top)  / rect.height) * 100);
+    setFocal({ x, y });
     window.AdminStore.updateImage(project.id, image.filename, { focalX: x, focalY: y });
     toast('Focal point set', 'ok');
   };
 
   const removeFocal = () => {
+    setFocal({ x: null, y: null });
     window.AdminStore.updateImage(project.id, image.filename, { focalX: null, focalY: null });
     toast('Focal point removed', 'ok');
   };
