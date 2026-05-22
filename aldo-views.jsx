@@ -171,7 +171,7 @@ function ProjectDetail({ project, onOpenPhoto, onOpenVideo }) {
         </div>
       </div>
       {images.length > 0 ? (
-        <div className="thumb-grid">
+        <div className="thumb-grid project-thumb-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', gap: '28px', padding: '24px 28px 34px' }}>
           {images.map(img => {
             const it = toViewerItem(img);
             return (

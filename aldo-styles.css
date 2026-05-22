@@ -1000,25 +1000,21 @@ input, textarea, select {
 /* THUMB GRID (also used by ProjectDetail) */
 .thumb-grid {
   display: grid;
-  /* Fixed column count → items GROW with the project window width
-     (instead of multiplying columns). Container queries size by the
-     project window's actual width, not browser viewport. */
-  grid-template-columns: repeat(3, 1fr) !important;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: 22px;
+  padding: 18px 22px 28px;
+}
+/* Project detail gets its own grid class — inline style sets columns,
+   container queries handle narrow windows */
+.project-thumb-grid {
   gap: 28px;
   padding: 24px 28px 34px;
 }
-.project-detail-main .thumb-grid {
-  grid-template-columns: repeat(3, 1fr) !important;
-}
 @container projectmain (max-width: 720px) {
-  .project-detail-main .thumb-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 22px; padding: 20px 22px 28px; }
+  .project-thumb-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 22px; padding: 20px 22px 28px; }
 }
 @container projectmain (max-width: 440px) {
-  .project-detail-main .thumb-grid { grid-template-columns: 1fr !important; gap: 18px; padding: 18px 20px 26px; }
-}
-/* Archive view keeps its own auto-fill responsive grid (more items, smaller cards) */
-.archive-only > .content .thumb-grid {
-  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)) !important;
+  .project-thumb-grid { grid-template-columns: 1fr !important; gap: 18px; padding: 18px 20px 26px; }
 }
 .archive-table thead th {
   position: sticky; top: 0;
