@@ -2814,9 +2814,7 @@ img {
 .bts-close-inline:hover { background: rgba(20,17,13,1); }
 .bts-tile .bts-thumb img {
   width: 100%; height: 100%; object-fit: cover;
-  opacity: 0.88; transition: opacity 180ms var(--easing);
 }
-.bts-tile:hover .bts-thumb img { opacity: 1; }
 .bts-tile .bts-thumb-placeholder {
   width: 100%; height: 100%;
   display: grid; place-items: center;

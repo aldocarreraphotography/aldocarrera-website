@@ -296,10 +296,7 @@ function BtsPanel({ videos, onOpenVideo }) {
                   loop
                 />
               ) : posterSrc ? (
-                <>
-                  <img src={posterSrc} alt={v.title} loading="lazy"/>
-                  <div className="bts-play">▶</div>
-                </>
+                <img src={posterSrc} alt={v.title} loading="lazy"/>
               ) : (
                 <div className="bts-thumb-placeholder">▶</div>
               )}
