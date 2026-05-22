@@ -848,15 +848,13 @@ function ImageCard({ img, project, showMeta, selected, onToggleSelect, onOpen,
       onDrop={onDrop}
       onDragEnd={onDragEnd}
     >
-      {draggable && (
-        <div className="ad-image-order" title="Drag to reorder">
-          <span className="ad-image-order-grip">⋮⋮</span>
-        </div>
-      )}
       <div className="ad-image-card-top">
-        <label className="ad-image-check" onClick={(e) => e.stopPropagation()}>
-          <input type="checkbox" checked={selected} onChange={onToggleSelect}/>
-        </label>
+        <div className="ad-image-card-left">
+          <label className="ad-image-check" onClick={(e) => e.stopPropagation()}>
+            <input type="checkbox" checked={selected} onChange={onToggleSelect}/>
+          </label>
+          {draggable && <span className="ad-image-order-num" title="Drag to reorder">{position}</span>}
+        </div>
         <div className="ad-image-tag-stack">
           {img.selected && <Pill tone="ok">SELECT</Pill>}
           {img.favorite && <Pill tone="accent">FAV</Pill>}

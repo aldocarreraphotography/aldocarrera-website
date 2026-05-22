@@ -775,14 +775,17 @@ body {
 .ad-sort-hint    { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink-muted); padding: 8px 4px 12px; }
 .ad-image-card-top {
   display: flex; justify-content: space-between; align-items: flex-start;
-  padding: 10px 12px;
+  padding: 8px 10px;
   position: absolute;
   top: 0; left: 0; right: 0;
   z-index: 2;
   pointer-events: none;
 }
-.ad-image-check {
+.ad-image-card-left {
+  display: flex; align-items: center; gap: 5px;
   pointer-events: auto;
+}
+.ad-image-check {
   width: 18px; height: 18px;
   display: inline-grid; place-items: center;
 }
@@ -1262,34 +1265,15 @@ body {
 }
 
 /* Position number + grip in the top-left corner of each draggable card. */
-.ad-image-order {
-  position: absolute;
-  top: 8px;
-  left: 8px;
-  z-index: 2;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 7px 3px 5px;
-  background: rgba(20, 20, 20, 0.78);
-  color: #fff;
-  border-radius: 999px;
-  font-family: var(--mono, "IBM Plex Mono", monospace);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  user-select: none;
-  pointer-events: none; /* drag events still hit the card */
-}
-.ad-image-order-grip {
-  display: inline-block;
-  font-size: 9px;
-  line-height: 1;
-  opacity: 0.7;
-  transform: translateY(-1px) rotate(90deg);
-}
 .ad-image-order-num {
+  font-family: var(--mono, "IBM Plex Mono", monospace);
+  font-size: 10px; font-weight: 600;
+  color: rgba(255,255,255,0.80);
+  text-shadow: 0 1px 3px rgba(0,0,0,0.7);
   font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  user-select: none;
+  cursor: grab;
 }
 
 /* ============================================================
