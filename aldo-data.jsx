@@ -402,6 +402,8 @@ function _aldoToPublicArchive(projects) {
         size: _aldoFmtBytes(img.exif?.fileSize || 0),
         dims: img.exif?.dimensions || '',
         photo: _aldoThumbUrl(img.blobPath, 1400),
+        focalX: img.focalX ?? null,
+        focalY: img.focalY ?? null,
         note: img.favorite ? 'favorite' : (img.selected ? 'select' : ''),
         order: img.order ?? 9999,
       });

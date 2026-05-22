@@ -864,7 +864,7 @@ function ImageCard({ img, project, showMeta, selected, onToggleSelect, onOpen,
         </div>
       </div>
       <div className="ad-image-frame" onClick={onOpen}>
-        <Thumb blobPath={img.blobPath} aspect="4/5"/>
+        <Thumb blobPath={img.blobPath} aspect="4/5" focalX={img.focalX} focalY={img.focalY}/>
       </div>
       {showMeta && (
         <div className="ad-image-meta">
@@ -892,6 +892,7 @@ function ImageCard({ img, project, showMeta, selected, onToggleSelect, onOpen,
 function ImageViewer({ image, project, onClose, onPrev, onNext }) {
   const url = window.useImageURL(image.blobPath);
   const [notes, setNotes] = vS(image.notes || '');
+  const stageRef = vR(null);
   vE(() => {
     const onKey = (e) => {
       if (e.key === 'Escape') onClose();
@@ -908,6 +909,25 @@ function ImageViewer({ image, project, onClose, onPrev, onNext }) {
     toast('Notes saved', 'ok');
   };
 
+  const hasFocal = image.focalX != null && image.focalY != null;
+  const focalX = image.focalX ?? 50;
+  const focalY = image.focalY ?? 50;
+
+  const handleStageClick = (e) => {
+    // Don't fire if clicking nav buttons
+    if (e.target.closest('.ad-viewer-nav')) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = Math.round(((e.clientX - rect.left) / rect.width)  * 100);
+    const y = Math.round(((e.clientY - rect.top)  / rect.height) * 100);
+    window.AdminStore.updateImage(project.id, image.filename, { focalX: x, focalY: y });
+    toast('Focal point set', 'ok');
+  };
+
+  const removeFocal = () => {
+    window.AdminStore.updateImage(project.id, image.filename, { focalX: null, focalY: null });
+    toast('Focal point removed', 'ok');
+  };
+
   return (
     <div className="ad-viewer-scrim" onClick={onClose}>
       <div className="ad-viewer" onClick={(e) => e.stopPropagation()}>
@@ -916,8 +936,15 @@ function ImageViewer({ image, project, onClose, onPrev, onNext }) {
           <button className="ad-modal-close" onClick={onClose}>×</button>
         </header>
         <div className="ad-viewer-body">
-          <div className="ad-viewer-stage">
+          <div className="ad-viewer-stage ad-focal-stage" ref={stageRef} onClick={handleStageClick}>
             {url ? <img src={url} alt={image.filename}/> : <div className="ad-thumb-placeholder">◌</div>}
+            {hasFocal && (
+              <div
+                className="ad-focal-dot"
+                style={{ left: `${focalX}%`, top: `${focalY}%` }}
+              />
+            )}
+            <div className="ad-focal-hint">Click image to set focal point</div>
             <button className="ad-viewer-nav ad-viewer-prev" onClick={onPrev}>‹</button>
             <button className="ad-viewer-nav ad-viewer-next" onClick={onNext}>›</button>
           </div>
@@ -927,6 +954,13 @@ function ImageViewer({ image, project, onClose, onPrev, onNext }) {
               <button className={`ad-img-act ${image.selected ? 'on ok' : ''}`}     onClick={() => window.AdminStore.updateImage(project.id, image.filename, { selected: !image.selected })}>SELECT</button>
               <button className={`ad-img-act ${image.favorite ? 'on accent' : ''}`} onClick={() => window.AdminStore.updateImage(project.id, image.filename, { favorite: !image.favorite })}>FAVORITE</button>
               <button className={`ad-img-act ${image.rejected ? 'on mute' : ''}`}   onClick={() => window.AdminStore.updateImage(project.id, image.filename, { rejected: !image.rejected })}>REJECT</button>
+            </div>
+            <div className="ad-eyebrow ad-mt-md">Focal point</div>
+            <div className="ad-focal-info">
+              {hasFocal
+                ? <><span className="ad-focal-coords">{focalX}% · {focalY}%</span><button className="ad-link ad-link-quiet" onClick={removeFocal}>Remove</button></>
+                : <span className="ad-muted">Click image to set</span>
+              }
             </div>
             <div className="ad-eyebrow ad-mt-md">File</div>
             <dl className="ad-meta-dl">

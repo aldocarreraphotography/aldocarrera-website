@@ -225,12 +225,15 @@ function Dropzone({ onFiles, accept = 'image/*', multiple = true, label, hint })
 /* ------------------------------------------------------------------ */
 /* Image thumb (resolves blobPath → URL via useImageURL hook)         */
 /* ------------------------------------------------------------------ */
-function Thumb({ blobPath, alt, aspect = '4/5', placeholder }) {
+function Thumb({ blobPath, alt, aspect = '4/5', placeholder, focalX, focalY }) {
   const url = window.useImageURL(blobPath);
+  const focalStyle = (focalX != null && focalY != null)
+    ? { objectPosition: `${focalX}% ${focalY}%` }
+    : undefined;
   return (
     <div className="ad-thumb" style={{ aspectRatio: aspect }}>
       {url
-        ? <img src={url} alt={alt || ''} loading="lazy" />
+        ? <img src={url} alt={alt || ''} loading="lazy" style={focalStyle}/>
         : <div className="ad-thumb-placeholder">{placeholder || '◌'}</div>}
     </div>
   );

@@ -176,7 +176,7 @@ function ProjectDetail({ project, onOpenPhoto, onOpenVideo }) {
             const it = toViewerItem(img);
             return (
               <div key={img.filename} className="thumb" onClick={() => onOpenPhoto(it, viewerList)}>
-                <div className="pic"><img src={img.blobPath} alt={img.filename} loading="lazy"/></div>
+                <div className="pic"><img src={img.blobPath} alt={img.filename} loading="lazy" style={img.focalX != null ? { objectPosition: `${img.focalX}% ${img.focalY}%` } : undefined}/></div>
                 <span className="name">{img.filename}</span>
                 <span className="sub">{[it.dims, it.size].filter(Boolean).join(' · ') || 'archive'}</span>
               </div>
@@ -458,7 +458,7 @@ function Archive({ onOpenPhoto, onSetCrumb, initialFilter, onFilterChange, selec
                   }}
                 >
                   <div className="pic">
-                    <img src={it.photo} alt={it.name} loading="lazy"/>
+                    <img src={it.photo} alt={it.name} loading="lazy" style={it.focalX != null ? { objectPosition: `${it.focalX}% ${it.focalY}%` } : undefined}/>
                     {selectionMode && (
                       <span className={`select-mark ${isSelected ? 'on' : ''}`}>
                         {isSelected ? selectedIds.indexOf(it.id) + 1 : ''}
