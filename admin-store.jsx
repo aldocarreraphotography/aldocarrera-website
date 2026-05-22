@@ -853,7 +853,7 @@ const AdminStore = {
   getClients()              { return readStore().clients.slice(); },
   addClient(input) {
     const slug = (input.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-    const c = { name: input.name, slug, yearsActive: input.yearsActive || [] };
+    const c = { name: input.name, slug, yearsActive: input.yearsActive || [], work: input.work || '' };
     patchStore(s => { s.clients.push(c); });
     return c;
   },

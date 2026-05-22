@@ -204,17 +204,17 @@ function ClientsEditorView({ navigate }) {
   const [editing, setEditing] = cS(null);
   const [newYears, setNewYears] = cS('');
 
-  const startNew  = () => { setEditing({ slug: 'new', name: '', yearsActive: [] }); setNewYears(''); };
-  const startEdit = (c) => { setEditing({ ...c }); setNewYears(c.yearsActive.join(', ')); };
+  const startNew  = () => { setEditing({ slug: 'new', name: '', yearsActive: [], work: '' }); setNewYears(''); };
+  const startEdit = (c) => { setEditing({ ...c }); setNewYears((c.yearsActive || []).join(', ')); };
 
   const save = () => {
     if (!editing.name.trim()) { toast('Client name required', 'warn'); return; }
     const years = newYears.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n)).sort((a,b) => a-b);
     if (editing.slug === 'new') {
-      window.AdminStore.addClient({ name: editing.name, yearsActive: years });
+      window.AdminStore.addClient({ name: editing.name, yearsActive: years, work: editing.work || '' });
       toast('Client added', 'ok');
     } else {
-      window.AdminStore.updateClient(editing.slug, { name: editing.name, yearsActive: years });
+      window.AdminStore.updateClient(editing.slug, { name: editing.name, yearsActive: years, work: editing.work || '' });
       toast('Client updated', 'ok');
     }
     setEditing(null);
@@ -248,6 +248,7 @@ function ClientsEditorView({ navigate }) {
                   <th>Name</th>
                   <th>Slug</th>
                   <th>Years active</th>
+                  <th>Work / description</th>
                   <th style={{ width: 1 }}></th>
                 </tr>
               </thead>
@@ -256,7 +257,8 @@ function ClientsEditorView({ navigate }) {
                   <tr key={c.slug}>
                     <td><b>{c.name}</b></td>
                     <td className="ad-mono ad-muted">{c.slug}</td>
-                    <td className="ad-mono">{c.yearsActive.length ? c.yearsActive.join(' · ') : <span className="ad-muted">—</span>}</td>
+                    <td className="ad-mono">{(c.yearsActive || []).length ? (c.yearsActive || []).join(' · ') : <span className="ad-muted">—</span>}</td>
+                    <td className="ad-muted">{c.work || <span className="ad-muted">—</span>}</td>
                     <td>
                       <div className="ad-row-actions">
                         <button className="ad-link" onClick={() => startEdit(c)}>Edit</button>
@@ -291,6 +293,9 @@ function ClientsEditorView({ navigate }) {
             </Field>
             <Field label="Years active" wide hint="Comma-separated, e.g. 2023, 2024">
               <TextInput value={newYears} onChange={setNewYears} placeholder="2024, 2025"/>
+            </Field>
+            <Field label="Work / description" wide hint="Shown on the public Clients page, e.g. FW23 · FW24 editorial">
+              <TextInput value={editing.work || ''} onChange={(v) => setEditing(e => ({ ...e, work: v }))} placeholder="SS25 campaign · lookbook"/>
             </Field>
           </>
         )}
