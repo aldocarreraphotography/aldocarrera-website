@@ -956,8 +956,6 @@ app.put('/api/gallery/:token/select', async (req, res) => {
   const gallery = await findGallery(req.params.token).catch(() => null);
   const errCheck = galleryTokenCheck(gallery, req);
   if (errCheck) return res.status(errCheck.status).json({ error: errCheck.err });
-  if (gallery.status === 'submitted') return res.status(409).json({ error: 'already_submitted' });
-
   const updates = req.body?.updates;
   if (!Array.isArray(updates) || updates.length === 0) {
     return res.status(422).json({ error: 'validation', message: '`updates` array required' });
@@ -986,8 +984,6 @@ app.post('/api/gallery/:token/submit', async (req, res) => {
   const gallery = await findGallery(req.params.token).catch(() => null);
   const errCheck = galleryTokenCheck(gallery, req);
   if (errCheck) return res.status(errCheck.status).json({ error: errCheck.err });
-  if (gallery.status === 'submitted') return res.status(409).json({ error: 'already_submitted' });
-
   const submittedAt = new Date().toISOString();
   await updateGallery(gallery.token, { status: 'submitted', submittedAt });
 
@@ -1246,8 +1242,6 @@ app.post('/api/gallery-portals/:token/submit', async (req, res) => {
 
     const key = req.query.key || req.body?.key || req.headers['x-gallery-key'] || '';
     if (key !== _portalKey(portal.token, portal.pin)) return res.status(403).json({ error: 'forbidden' });
-
-    if (portal.submitted) return res.status(409).json({ error: 'already_submitted', submittedAt: portal.submittedAt });
 
     portal.submitted   = true;
     portal.submittedAt = new Date().toISOString();

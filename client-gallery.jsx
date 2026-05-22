@@ -246,7 +246,7 @@ function GalleryView({ token, sessionKey, title }) {
   }, [token, sessionKey]);
 
   const handleSubmit = useCallback(async () => {
-    if (submitting || submitted) return;
+    if (submitting) return;
     setSubmitting(true);
     try {
       await apiFetch('POST', `/api/gallery-portals/${token}/submit?key=${encodeURIComponent(sessionKey)}`);
@@ -283,6 +283,7 @@ function GalleryView({ token, sessionKey, title }) {
 
   const handleHeart = (filename, val) => {
     patchSelect(filename, { hearted: val });
+    if (submitted) setSubmitted(false); // allow resubmission after changing picks
   };
 
   const saveNote = useCallback((filename, note) => {
