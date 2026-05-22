@@ -126,22 +126,19 @@
     }
     .cg-submit-btn:hover { opacity: 0.82; }
     .cg-submit-btn:disabled { opacity: 0.5; cursor: default; }
-    .cg-submit-btn.loading { opacity: 0.6; }
-    .cg-submitted-pill {
+    /* Toast notification */
+    .cg-toast {
+      position: fixed; top: 56px; left: 24px; z-index: 9999;
+      background: var(--ink); color: var(--paper);
       font-family: "IBM Plex Mono", monospace;
-      font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
-      color: #3a7a3a; background: #e6f2e6;
-      padding: 4px 10px; border-radius: 20px;
+      font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;
+      padding: 8px 16px; pointer-events: none;
+      animation: cg-toast-in 180ms var(--easing);
     }
-    /* Submitted banner */
-    .cg-submitted-banner {
-      display: flex; align-items: center; gap: 10px;
-      background: #e6f2e6; color: #2d6a2d;
-      font-family: "IBM Plex Mono", monospace; font-size: 12px; letter-spacing: 0.05em;
-      padding: 14px 24px;
-      border-bottom: 1px solid #c6e0c6;
+    @keyframes cg-toast-in {
+      from { opacity: 0; transform: translateY(-6px); }
+      to   { opacity: 1; transform: translateY(0); }
     }
-    .cg-submitted-check { font-size: 16px; }
     .cg-grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);

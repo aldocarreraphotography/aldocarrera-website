@@ -224,15 +224,15 @@ function GalleryView({ token, sessionKey, title }) {
   const [selects, setSelects]     = useState({});
   const [loading, setLoading]     = useState(true);
   const [lbIdx, setLbIdx]         = useState(null); // null = closed
-  const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [toast, setToast]           = useState(null); // null | string
 
   useEffect(() => {
     (async () => {
       try {
         const data = await apiFetch('GET', `/api/gallery-portals/${token}/images?key=${encodeURIComponent(sessionKey)}`);
         setImages(data.images || []);
-        if (data.submitted) setSubmitted(true);
+        // (submitted state handled via toast only)
         // hydrate selects map from returned per-image select data
         const sels = {};
         for (const img of (data.images || [])) sels[img.filename] = img.select || {};
@@ -245,20 +245,24 @@ function GalleryView({ token, sessionKey, title }) {
     })();
   }, [token, sessionKey]);
 
+  const showToast = (msg) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3000);
+  };
+
   const handleSubmit = useCallback(async () => {
     if (submitting) return;
     setSubmitting(true);
     try {
       await apiFetch('POST', `/api/gallery-portals/${token}/submit?key=${encodeURIComponent(sessionKey)}`);
-      setSubmitted(true);
+      showToast('Sent ✓');
     } catch (err) {
-      if (err.status === 409) { setSubmitted(true); return; } // already submitted
       console.error('[client-gallery] submit error', err);
-      alert('Something went wrong — please try again or contact the photographer.');
+      showToast('Something went wrong — try again');
     } finally {
       setSubmitting(false);
     }
-  }, [token, sessionKey, submitting, submitted]);
+  }, [token, sessionKey, submitting]);
 
   const heartedCount = useMemo(
     () => Object.values(selects).filter(s => s.hearted).length,
@@ -283,7 +287,6 @@ function GalleryView({ token, sessionKey, title }) {
 
   const handleHeart = (filename, val) => {
     patchSelect(filename, { hearted: val });
-    if (submitted) setSubmitted(false); // allow resubmission after changing picks
   };
 
   const saveNote = useCallback((filename, note) => {
@@ -300,12 +303,7 @@ function GalleryView({ token, sessionKey, title }) {
 
   return (
     <>
-      {submitted && (
-        <div className="cg-submitted-banner">
-          <span className="cg-submitted-check">✓</span>
-          Selections submitted — the photographer has been notified.
-        </div>
-      )}
+      {toast && <div className="cg-toast">{toast}</div>}
       <div className="cg-gallery-wrap">
         <div className="cg-gallery-header">
           <div className="cg-gallery-title">{title}</div>
@@ -313,17 +311,14 @@ function GalleryView({ token, sessionKey, title }) {
             <div className="cg-gallery-count">
               {images.length} images{heartedCount > 0 ? ` · ${heartedCount} hearted` : ''}
             </div>
-            {!submitted && heartedCount > 0 && (
+            {heartedCount > 0 && (
               <button
-                className={`cg-submit-btn ${submitting ? 'loading' : ''}`}
+                className="cg-submit-btn"
                 onClick={handleSubmit}
                 disabled={submitting}
               >
-                {submitting ? 'Sending…' : `Submit ${heartedCount} selection${heartedCount !== 1 ? 's' : ''}`}
+                {`Submit ${heartedCount} selection${heartedCount !== 1 ? 's' : ''}`}
               </button>
-            )}
-            {submitted && (
-              <span className="cg-submitted-pill">✓ Submitted</span>
             )}
           </div>
         </div>
