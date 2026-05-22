@@ -287,7 +287,8 @@ function ProjectsListView({ navigate }) {
 /* ============================================================
    PROJECT EDITOR (new + edit)
    ============================================================ */
-const PROJECT_TYPES = ['Editorial', 'Commercial', 'Lookbook', 'Campaign', 'Portrait'];
+const PROJECT_TYPES = ['Editorial', 'Commercial', 'Lookbook', 'Campaign', 'Portrait', 'Personal', 'Fine Art'];
+const PROJECT_FORMATS = ['Digital', 'Film', '35mm', 'Medium Format', 'Large Format'];
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
 function ProjectEditorView({ projectId, navigate }) {
@@ -300,6 +301,7 @@ function ProjectEditorView({ projectId, navigate }) {
     name: '',
     client: '',
     type: 'Editorial',
+    format: 'Digital',
     year: new Date().getFullYear(),
     month: '',
     description: '',
@@ -379,8 +381,11 @@ function ProjectEditorView({ projectId, navigate }) {
           <Field label="Client" error={err.client}>
             <ClientCombobox value={draft.client} onChange={(v) => set('client', v)} options={clientOptions}/>
           </Field>
-          <Field label="Type">
-            <Select value={draft.type} onChange={(v) => set('type', v)} options={PROJECT_TYPES}/>
+          <Field label="Type" hint={!PROJECT_TYPES.includes(draft.type) && draft.type ? 'Custom value' : ''}>
+            <TypeField value={draft.type} onChange={(v) => set('type', v)}/>
+          </Field>
+          <Field label="Format" hint="Medium / capture format shown on the project page.">
+            <FormatField value={draft.format || ''} onChange={(v) => set('format', v)}/>
           </Field>
           <Field label="Month">
             <Select value={draft.month} onChange={(v) => set('month', v)} options={[{ value: '', label: '— auto (from EXIF) —' }, ...MONTHS]}/>
@@ -426,6 +431,74 @@ function ClientCombobox({ value, onChange, options }) {
           <button key={o} className="ad-combo-item" onClick={() => onChange(o)} type="button">{o}</button>
         ))}
       </div>
+    </div>
+  );
+}
+
+/* Type field: preset dropdown + "Custom…" option that reveals a free-text input */
+function TypeField({ value, onChange }) {
+  const isCustom = value && !PROJECT_TYPES.includes(value);
+  const selectVal = isCustom ? '__custom__' : (value || PROJECT_TYPES[0]);
+
+  const handleSelect = (v) => {
+    if (v === '__custom__') {
+      onChange(''); // blank → user types their own
+    } else {
+      onChange(v);
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+      <Select
+        value={selectVal}
+        onChange={handleSelect}
+        options={[...PROJECT_TYPES, { value: '__custom__', label: 'Custom…' }]}
+      />
+      {(selectVal === '__custom__' || isCustom) && (
+        <TextInput
+          value={isCustom ? value : ''}
+          onChange={onChange}
+          placeholder="e.g. Fine Art, Personal, Test shoot…"
+          autoFocus
+        />
+      )}
+    </div>
+  );
+}
+
+/* Format field: preset dropdown + "Custom…" option that reveals a free-text input */
+function FormatField({ value, onChange }) {
+  const isCustom = value && !PROJECT_FORMATS.includes(value);
+  const selectVal = isCustom ? '__custom__' : (value || '');
+
+  const handleSelect = (v) => {
+    if (v === '__custom__') {
+      onChange('');
+    } else {
+      onChange(v);
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+      <Select
+        value={selectVal}
+        onChange={handleSelect}
+        options={[
+          { value: '', label: '— none —' },
+          ...PROJECT_FORMATS,
+          { value: '__custom__', label: 'Custom…' },
+        ]}
+      />
+      {(selectVal === '__custom__' || isCustom) && (
+        <TextInput
+          value={isCustom ? value : ''}
+          onChange={onChange}
+          placeholder="e.g. Polaroid, Daguerreotype…"
+          autoFocus
+        />
+      )}
     </div>
   );
 }
