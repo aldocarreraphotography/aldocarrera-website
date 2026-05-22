@@ -1,7 +1,7 @@
 /* client-gallery.jsx
  * Standalone React SPA for the client gallery portal.
  * Served at /g/:token  (or /g?token=...)
- * All API calls go to /api/gallery/:token/*
+ * All API calls go to https://api.aldocarrera.com/api/gallery-portals/:token/*
  */
 
 const { useState, useEffect, useRef, useCallback, useMemo } = React;
@@ -22,10 +22,12 @@ function storeKey(token, key) {
   try { sessionStorage.setItem(`cg_key_${token}`, key); } catch (_) {}
 }
 
+const GALLERY_API = (typeof window !== 'undefined' && window.GALLERY_API) ? window.GALLERY_API.replace(/\/$/, '') : '';
+
 async function apiFetch(method, path, body) {
   const opts = { method, headers: { 'Content-Type': 'application/json' } };
   if (body) opts.body = JSON.stringify(body);
-  const res = await fetch(path, opts);
+  const res = await fetch(GALLERY_API + path, opts);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw Object.assign(new Error(err.error || `HTTP ${res.status}`), { status: res.status });
@@ -88,7 +90,7 @@ function PinScreen({ token, onUnlocked }) {
     setLoading(true);
     setError('');
     try {
-      const data = await apiFetch('POST', `/api/gallery/${token}/unlock`, { pin: p });
+      const data = await apiFetch('POST', `/api/gallery-portals/${token}/unlock`, { pin: p });
       storeKey(token, data.key);
       onUnlocked({ key: data.key, title: data.title, imageCount: data.imageCount });
     } catch (err) {
@@ -226,7 +228,7 @@ function GalleryView({ token, sessionKey, title }) {
   useEffect(() => {
     (async () => {
       try {
-        const data = await apiFetch('GET', `/api/gallery/${token}/images?key=${encodeURIComponent(sessionKey)}`);
+        const data = await apiFetch('GET', `/api/gallery-portals/${token}/images?key=${encodeURIComponent(sessionKey)}`);
         setImages(data.images || []);
         // hydrate selects map from returned per-image select data
         const sels = {};
@@ -251,7 +253,7 @@ function GalleryView({ token, sessionKey, title }) {
     try {
       await apiFetch(
         'PATCH',
-        `/api/gallery/${token}/select/${encodeURIComponent(filename)}?key=${encodeURIComponent(sessionKey)}`,
+        `/api/gallery-portals/${token}/select/${encodeURIComponent(filename)}?key=${encodeURIComponent(sessionKey)}`,
         patch
       );
     } catch (err) {

@@ -113,3 +113,6 @@ export const writeServices = (d) => writeJson('services.json', d);
 
 export const readSettings  = () => readJson('settings.json').then(d => d || defaultSettings());
 export const writeSettings = (d) => writeJson('settings.json', d);
+
+export const readGalleryPortals  = () => readJson('gallery-portals.json').then(d => d || { portals: [] });
+export const writeGalleryPortals = (d) => writeJson('gallery-portals.json', d);

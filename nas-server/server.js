@@ -26,6 +26,7 @@ import {
   readSettings, writeSettings,
   readBytes, writeBytes, deleteImage, deleteProjectImages,
   readVideos, writeVideos, readVideoBytes, writeVideoBytes, deleteVideoFile,
+  readGalleryPortals, writeGalleryPortals,
 } from './utils/store.js';
 import {
   createGallery, readGalleries, findGallery, updateGallery, deleteGallery, isExpired,
@@ -1070,6 +1071,160 @@ app.get('/api/deck/:token', async (req, res) => {
     views:     deck.views || 0,
   });
 });
+
+/* ------------------------------------------------------------------ */
+/* Gallery Portals — PIN-gated /g/:token pages (admin + public)       */
+/* ------------------------------------------------------------------ */
+
+function _portalKey(token, pin) {
+  return Buffer.from(`${token}:${pin}`).toString('base64').slice(0, 16);
+}
+function _nextPortalToken() {
+  return Math.random().toString(36).slice(2, 9).toUpperCase();
+}
+
+/* GET /api/gallery-portals  — list all portals (admin) */
+app.get('/api/gallery-portals', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  try {
+    const data = await readGalleryPortals();
+    res.json(data.portals || []);
+  } catch (err) {
+    console.error('[GET /api/gallery-portals]', err?.message);
+    res.status(500).json({ error: 'internal', message: err?.message });
+  }
+});
+
+/* POST /api/gallery-portals  — create a portal (admin) */
+app.post('/api/gallery-portals', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  try {
+    const body = req.body || {};
+    if (!body.projectId) return res.status(422).json({ error: 'validation', message: '`projectId` required' });
+    if (!body.pin || String(body.pin).length !== 4) return res.status(422).json({ error: 'validation', message: '`pin` must be 4 digits' });
+
+    const data = await readGalleryPortals();
+    const portal = {
+      token:     _nextPortalToken(),
+      projectId: body.projectId,
+      title:     body.title || '',
+      pin:       String(body.pin),
+      selects:   {},
+      createdAt: new Date().toISOString(),
+    };
+    data.portals = [portal, ...(data.portals || [])];
+    await writeGalleryPortals(data);
+    res.status(201).json(portal);
+  } catch (err) {
+    console.error('[POST /api/gallery-portals]', err?.message);
+    res.status(500).json({ error: 'internal', message: err?.message });
+  }
+});
+
+/* DELETE /api/gallery-portals/:token  — delete a portal (admin) */
+app.delete('/api/gallery-portals/:token', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  try {
+    const data = await readGalleryPortals();
+    const before = (data.portals || []).length;
+    data.portals = (data.portals || []).filter(p => p.token !== req.params.token);
+    if (data.portals.length === before) return res.status(404).json({ error: 'not_found' });
+    await writeGalleryPortals(data);
+    res.status(204).send();
+  } catch (err) {
+    console.error('[DELETE /api/gallery-portals/:token]', err?.message);
+    res.status(500).json({ error: 'internal', message: err?.message });
+  }
+});
+
+/* POST /api/gallery-portals/:token/unlock  — verify PIN, return session key (public) */
+app.post('/api/gallery-portals/:token/unlock', async (req, res) => {
+  try {
+    const data = await readGalleryPortals();
+    const portal = (data.portals || []).find(p => p.token === req.params.token);
+    if (!portal) return res.status(404).json({ error: 'not_found' });
+
+    const { pin } = req.body || {};
+    if (!pin) return res.status(400).json({ error: 'pin required' });
+    if (String(pin) !== String(portal.pin)) return res.status(403).json({ error: 'wrong_pin' });
+
+    const key = _portalKey(portal.token, portal.pin);
+
+    // Count images from project
+    const projectsData = await readProjects();
+    const project = (projectsData.projects || []).find(p => p.id === portal.projectId);
+    const imageCount = project ? (project.images || []).filter(i => !i.rejected).length : 0;
+
+    res.json({ ok: true, key, title: portal.title, imageCount });
+  } catch (err) {
+    console.error('[POST /api/gallery-portals/:token/unlock]', err?.message);
+    res.status(500).json({ error: 'internal', message: err?.message });
+  }
+});
+
+/* GET /api/gallery-portals/:token/images?key=KEY  — get images (PIN-gated, public) */
+app.get('/api/gallery-portals/:token/images', async (req, res) => {
+  try {
+    const data = await readGalleryPortals();
+    const portal = (data.portals || []).find(p => p.token === req.params.token);
+    if (!portal) return res.status(404).json({ error: 'not_found' });
+
+    const key = req.query.key || req.headers['x-gallery-key'] || '';
+    if (key !== _portalKey(portal.token, portal.pin)) return res.status(403).json({ error: 'forbidden' });
+
+    const projectsData = await readProjects();
+    const project = (projectsData.projects || []).find(p => p.id === portal.projectId);
+    if (!project) return res.status(404).json({ error: 'project_not_found' });
+
+    const images = (project.images || [])
+      .filter(i => !i.rejected)
+      .sort((a, b) => (a.order ?? 9999) - (b.order ?? 9999))
+      .map(img => ({
+        filename: img.filename,
+        src:      img.blobPath,
+        dims:     img.exif?.dimensions || '',
+        size:     img.exif?.fileSize ? _fmtPortalBytes(img.exif.fileSize) : '',
+        select:   portal.selects?.[img.filename] || {},
+      }));
+
+    res.json({ title: portal.title, projectId: portal.projectId, images });
+  } catch (err) {
+    console.error('[GET /api/gallery-portals/:token/images]', err?.message);
+    res.status(500).json({ error: 'internal', message: err?.message });
+  }
+});
+
+/* PATCH /api/gallery-portals/:token/select/:filename?key=KEY  — heart/note (PIN-gated, public) */
+app.patch('/api/gallery-portals/:token/select/:filename', async (req, res) => {
+  try {
+    const data = await readGalleryPortals();
+    const idx = (data.portals || []).findIndex(p => p.token === req.params.token);
+    if (idx === -1) return res.status(404).json({ error: 'not_found' });
+    const portal = data.portals[idx];
+
+    const key = req.query.key || req.headers['x-gallery-key'] || '';
+    if (key !== _portalKey(portal.token, portal.pin)) return res.status(403).json({ error: 'forbidden' });
+
+    const filename = req.params.filename;
+    if (!filename) return res.status(400).json({ error: 'filename required' });
+
+    if (!portal.selects) portal.selects = {};
+    portal.selects[filename] = { ...(portal.selects[filename] || {}), ...(req.body || {}) };
+    data.portals[idx] = portal;
+    await writeGalleryPortals(data);
+    res.json({ ok: true, select: portal.selects[filename] });
+  } catch (err) {
+    console.error('[PATCH /api/gallery-portals/:token/select]', err?.message);
+    res.status(500).json({ error: 'internal', message: err?.message });
+  }
+});
+
+function _fmtPortalBytes(n) {
+  if (!n) return '';
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + ' MB';
+  if (n >= 1_000)     return (n / 1_000).toFixed(0) + ' KB';
+  return n + ' B';
+}
 
 /* ------------------------------------------------------------------ */
 /* Debug endpoint (no auth)                                            */

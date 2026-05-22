@@ -943,32 +943,6 @@ function GalleryDetailView({ token, navigate }) {
    CLIENT GALLERY PORTALS (PIN-gated /g/:token pages)
    ============================================================ */
 
-/* Netlify-function fetch — uses relative URL (NO API_BASE prefix) + admin JWT */
-async function _netlifyFetch(method, path, body) {
-  // Must use the Netlify-signed token — the NAS JWT uses a different secret
-  // and will always return 401 "bad_signature" from Netlify functions.
-  // If the token is missing, the user logged in before this fix was applied;
-  // they should log out and back in to obtain a Netlify token.
-  const token = localStorage.getItem('aldo_netlify_token');
-  if (!token) {
-    throw new Error('Session needs refresh — please log out and log back in to access gallery portals');
-  }
-  const opts = {
-    method,
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-  };
-  if (body) opts.body = JSON.stringify(body);
-  const r = await fetch(path, opts);
-  if (!r.ok) {
-    const b = await r.json().catch(() => ({}));
-    // Clear a stale/expired Netlify token so re-login fetches a fresh one
-    if (r.status === 401) localStorage.removeItem('aldo_netlify_token');
-    throw Object.assign(new Error(b.message || b.error || r.statusText), { status: r.status });
-  }
-  if (r.status === 204) return null;
-  return r.json();
-}
-
 function ClientGalleryPortalsView({ navigate }) {
   window.useStoreSubscribe();
   const projects = window.AdminStore.getProjects();
@@ -977,22 +951,12 @@ function ClientGalleryPortalsView({ navigate }) {
   const [creating, setCreating] = gS(false);
 
   const load = async () => {
-    // Quick pre-check: if the Netlify token is absent the user's session was
-    // established before this fix — direct them to re-login rather than
-    // surfacing a cryptic "bad_signature" from the API.
-    if (!localStorage.getItem('aldo_netlify_token')) {
-      toast('Gallery portals require a fresh login — please log out and log back in.', 'error');
-      setLoading(false);
-      return;
-    }
     setLoading(true);
     try {
-      const data = await _netlifyFetch('GET', '/api/gallery-admin');
+      const data = await window.AdminStore.apiFetch('/api/gallery-portals');
       setPortals(Array.isArray(data) ? data : []);
     } catch (e) {
-      const msg = e.message || 'error';
-      const hint = e.status === 401 ? ' Please log out and log back in.' : '';
-      toast('Failed to load portals: ' + msg + hint, 'error');
+      toast('Failed to load portals: ' + (e.message || 'error'), 'error');
     } finally {
       setLoading(false);
     }
@@ -1010,7 +974,7 @@ function ClientGalleryPortalsView({ navigate }) {
   const deletePortal = async (token, title) => {
     if (!confirm(`Delete gallery portal "${title}"?`)) return;
     try {
-      await _netlifyFetch('DELETE', `/api/gallery-admin/${token}`);
+      await window.AdminStore.apiFetch(`/api/gallery-portals/${token}`, { method: 'DELETE' });
       setPortals(ps => ps.filter(p => p.token !== token));
       toast('Portal deleted', 'ok');
     } catch (e) {
@@ -1122,10 +1086,13 @@ function PortalCreateModal({ projects, onClose, onCreated }) {
     if (form.pin.length !== 4) { setPinError('PIN must be exactly 4 digits'); return; }
     setSaving(true);
     try {
-      const portal = await _netlifyFetch('POST', '/api/gallery-admin', {
-        projectId: form.projectId,
-        title: form.title,
-        pin: form.pin,
+      const portal = await window.AdminStore.apiFetch('/api/gallery-portals', {
+        method: 'POST',
+        body: JSON.stringify({
+          projectId: form.projectId,
+          title: form.title,
+          pin: form.pin,
+        }),
       });
       onCreated(portal);
       setForm({ projectId: '', title: '', pin: '' });
