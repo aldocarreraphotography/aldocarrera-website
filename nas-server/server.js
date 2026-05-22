@@ -1187,7 +1187,13 @@ app.get('/api/gallery-portals/:token/images', async (req, res) => {
         select:   portal.selects?.[img.filename] || {},
       }));
 
-    res.json({ title: portal.title, projectId: portal.projectId, images });
+    res.json({
+      title: portal.title,
+      projectId: portal.projectId,
+      images,
+      submitted: !!portal.submitted,
+      submittedAt: portal.submittedAt || null,
+    });
   } catch (err) {
     console.error('[GET /api/gallery-portals/:token/images]', err?.message);
     res.status(500).json({ error: 'internal', message: err?.message });
@@ -1218,6 +1224,96 @@ app.patch('/api/gallery-portals/:token/select/:filename', async (req, res) => {
     res.status(500).json({ error: 'internal', message: err?.message });
   }
 });
+
+/* POST /api/gallery-portals/:token/submit  — client submits final selections (PIN-gated, public) */
+app.post('/api/gallery-portals/:token/submit', async (req, res) => {
+  try {
+    const data = await readGalleryPortals();
+    const idx = (data.portals || []).findIndex(p => p.token === req.params.token);
+    if (idx === -1) return res.status(404).json({ error: 'not_found' });
+    const portal = data.portals[idx];
+
+    const key = req.query.key || req.body?.key || req.headers['x-gallery-key'] || '';
+    if (key !== _portalKey(portal.token, portal.pin)) return res.status(403).json({ error: 'forbidden' });
+
+    if (portal.submitted) return res.status(409).json({ error: 'already_submitted', submittedAt: portal.submittedAt });
+
+    portal.submitted   = true;
+    portal.submittedAt = new Date().toISOString();
+    data.portals[idx]  = portal;
+    await writeGalleryPortals(data);
+
+    // Fire email — don't let a mail failure block the 200 response
+    const hearted = Object.entries(portal.selects || {})
+      .filter(([, v]) => v.hearted)
+      .map(([filename, v]) => ({ filename, note: (v.note || '').trim() }));
+    _sendSubmitEmail({ portal, hearted }).catch(e => console.error('[email] send failed:', e?.message));
+
+    res.json({ ok: true, submittedAt: portal.submittedAt });
+  } catch (err) {
+    console.error('[POST /api/gallery-portals/:token/submit]', err?.message);
+    res.status(500).json({ error: 'internal', message: err?.message });
+  }
+});
+
+async function _sendSubmitEmail({ portal, hearted }) {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) { console.warn('[email] RESEND_API_KEY not set — skipping notification email'); return; }
+
+  const to      = process.env.NOTIFY_EMAIL || 'aldo@aldocarrera.com';
+  const subject = `Gallery submitted: ${portal.title || portal.token} · ${hearted.length} selected`;
+
+  const imageRows = hearted.length > 0
+    ? hearted.map(h => `
+        <tr>
+          <td style="padding:6px 16px 6px 0; font-size:13px; font-family:monospace; color:#1a1810;">${h.filename}</td>
+          <td style="padding:6px 0; font-size:13px; color:#666;">${h.note || ''}</td>
+        </tr>`).join('')
+    : `<tr><td colspan="2" style="padding:6px 0; color:#999; font-size:13px; font-style:italic;">No images hearted</td></tr>`;
+
+  const html = `<!DOCTYPE html>
+<html><body style="margin:0;padding:0;background:#fafaf8;">
+<div style="max-width:560px;margin:40px auto;padding:32px 28px;background:#fff;border:1px solid #e8e4dc;font-family:'IBM Plex Mono',monospace,sans-serif;">
+  <p style="margin:0 0 4px;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#999;">Aldo Carrera</p>
+  <h1 style="margin:0 0 28px;font-size:18px;font-weight:600;letter-spacing:.04em;color:#1a1810;">Gallery Submitted</h1>
+
+  <table style="border-collapse:collapse;width:100%;margin-bottom:28px;">
+    <tr>
+      <td style="padding:5px 20px 5px 0;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#999;white-space:nowrap;vertical-align:top;">Gallery</td>
+      <td style="padding:5px 0;font-size:14px;color:#1a1810;">${portal.title || '(untitled)'}</td>
+    </tr>
+    <tr>
+      <td style="padding:5px 20px 5px 0;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#999;white-space:nowrap;vertical-align:top;">Project</td>
+      <td style="padding:5px 0;font-size:13px;font-family:monospace;color:#555;">${portal.projectId}</td>
+    </tr>
+    <tr>
+      <td style="padding:5px 20px 5px 0;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#999;white-space:nowrap;vertical-align:top;">Hearted</td>
+      <td style="padding:5px 0;font-size:14px;color:#1a1810;font-weight:600;">${hearted.length} image${hearted.length !== 1 ? 's' : ''}</td>
+    </tr>
+    <tr>
+      <td style="padding:5px 20px 5px 0;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#999;white-space:nowrap;vertical-align:top;">Submitted</td>
+      <td style="padding:5px 0;font-size:13px;color:#555;">${new Date(portal.submittedAt).toLocaleString('en-US', { dateStyle:'long', timeStyle:'short' })}</td>
+    </tr>
+  </table>
+
+  <p style="margin:0 0 10px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#999;">Selected images</p>
+  <table style="border-collapse:collapse;width:100%;border-top:1px solid #e8e4dc;">
+    ${imageRows}
+  </table>
+</div>
+</body></html>`;
+
+  const r = await fetch('https://api.resend.com/emails', {
+    method:  'POST',
+    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ from: 'Aldo Gallery <noreply@aldocarrera.com>', to: [to], subject, html }),
+  });
+  if (!r.ok) {
+    const body = await r.text();
+    throw new Error(`Resend ${r.status}: ${body}`);
+  }
+  console.log(`[email] Submission notification sent to ${to} for portal ${portal.token}`);
+}
 
 function _fmtPortalBytes(n) {
   if (!n) return '';

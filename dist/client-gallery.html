@@ -104,15 +104,44 @@
     /* ── GALLERY GRID ──────────────────────────────────────── */
     .cg-gallery-wrap { padding: 28px 24px 60px; }
     .cg-gallery-header {
-      display: flex; align-items: baseline; gap: 16px;
+      display: flex; align-items: center; justify-content: space-between; gap: 16px;
       margin-bottom: 24px; padding-bottom: 16px;
       border-bottom: 1px solid var(--rule-soft);
+      flex-wrap: wrap;
     }
     .cg-gallery-title { font-size: 20px; font-weight: 500; letter-spacing: -0.016em; }
+    .cg-gallery-header-right { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
     .cg-gallery-count {
       font-family: "IBM Plex Mono", monospace;
       font-size: 10px; color: var(--ink-muted); letter-spacing: 0.08em;
     }
+    /* Submit button */
+    .cg-submit-btn {
+      background: var(--ink); color: var(--paper);
+      border: none; border-radius: 3px;
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 11px; letter-spacing: 0.07em; text-transform: uppercase;
+      padding: 8px 18px; cursor: pointer;
+      transition: opacity 140ms;
+    }
+    .cg-submit-btn:hover { opacity: 0.82; }
+    .cg-submit-btn:disabled { opacity: 0.5; cursor: default; }
+    .cg-submit-btn.loading { opacity: 0.6; }
+    .cg-submitted-pill {
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+      color: #3a7a3a; background: #e6f2e6;
+      padding: 4px 10px; border-radius: 20px;
+    }
+    /* Submitted banner */
+    .cg-submitted-banner {
+      display: flex; align-items: center; gap: 10px;
+      background: #e6f2e6; color: #2d6a2d;
+      font-family: "IBM Plex Mono", monospace; font-size: 12px; letter-spacing: 0.05em;
+      padding: 14px 24px;
+      border-bottom: 1px solid #c6e0c6;
+    }
+    .cg-submitted-check { font-size: 16px; }
     .cg-grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);

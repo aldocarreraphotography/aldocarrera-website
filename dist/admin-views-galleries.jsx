@@ -1012,34 +1012,55 @@ function ClientGalleryPortalsView({ navigate }) {
               <tr>
                 <th>Title</th>
                 <th>Project</th>
-                <th>Token</th>
+                <th>Status</th>
+                <th>Hearts</th>
+                <th>Token · PIN</th>
                 <th>Created</th>
                 <th style={{ width: 1 }}></th>
               </tr>
             </thead>
             <tbody>
-              {portals.map(p => (
-                <tr key={p.token}>
-                  <td><b>{p.title}</b></td>
-                  <td className="ad-mono ad-muted">{p.projectId}</td>
-                  <td>
-                    <code className="ad-mono" style={{ fontSize: 12, background: 'var(--paper-soft)', padding: '2px 6px' }}>
-                      {p.token}
-                    </code>
-                    <span className="ad-mono ad-muted" style={{ marginLeft: 8, fontSize: 11 }}>PIN: {p.pin}</span>
-                  </td>
-                  <td className="ad-mono ad-muted" style={{ fontSize: 12 }}>
-                    {p.createdAt ? new Date(p.createdAt).toLocaleDateString() : '—'}
-                  </td>
-                  <td>
-                    <div className="ad-row-actions">
-                      <button className="ad-link" onClick={() => copyLink(p.token)}>Copy link</button>
-                      <a className="ad-link" href={`/g/${p.token}`} target="_blank" rel="noopener">Open ↗</a>
-                      <button className="ad-link ad-link-quiet" onClick={() => deletePortal(p.token, p.title)}>Delete</button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {portals.map(p => {
+                const heartCount = Object.values(p.selects || {}).filter(s => s.hearted).length;
+                const noteCount  = Object.values(p.selects || {}).filter(s => s.note).length;
+                return (
+                  <tr key={p.token}>
+                    <td><b>{p.title}</b></td>
+                    <td className="ad-mono ad-muted">{p.projectId}</td>
+                    <td>
+                      {p.submitted
+                        ? <span title={p.submittedAt ? new Date(p.submittedAt).toLocaleString() : ''}>
+                            <Pill tone="ok">Submitted</Pill>
+                            {p.submittedAt && <span className="ad-mono ad-muted" style={{ fontSize: 11, marginLeft: 6 }}>{formatRel(p.submittedAt)}</span>}
+                          </span>
+                        : <Pill tone="neutral">Awaiting</Pill>}
+                    </td>
+                    <td className="ad-mono" style={{ fontSize: 13 }}>
+                      {heartCount > 0
+                        ? <span title={noteCount > 0 ? `${noteCount} with notes` : ''}>
+                            ♥ {heartCount}{noteCount > 0 ? <span className="ad-muted"> · {noteCount} notes</span> : null}
+                          </span>
+                        : <span className="ad-muted">—</span>}
+                    </td>
+                    <td>
+                      <code className="ad-mono" style={{ fontSize: 12, background: 'var(--paper-soft)', padding: '2px 6px' }}>
+                        {p.token}
+                      </code>
+                      <span className="ad-mono ad-muted" style={{ marginLeft: 8, fontSize: 11 }}>PIN: {p.pin}</span>
+                    </td>
+                    <td className="ad-mono ad-muted" style={{ fontSize: 12 }}>
+                      {p.createdAt ? new Date(p.createdAt).toLocaleDateString() : '—'}
+                    </td>
+                    <td>
+                      <div className="ad-row-actions">
+                        <button className="ad-link" onClick={() => copyLink(p.token)}>Copy link</button>
+                        <a className="ad-link" href={`/g/${p.token}`} target="_blank" rel="noopener">Open ↗</a>
+                        <button className="ad-link ad-link-quiet" onClick={() => deletePortal(p.token, p.title)}>Delete</button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
