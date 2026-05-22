@@ -1003,15 +1003,22 @@ input, textarea, select {
   /* Fixed column count → items GROW with the project window width
      (instead of multiplying columns). Container queries size by the
      project window's actual width, not browser viewport. */
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, 1fr) !important;
   gap: 28px;
   padding: 24px 28px 34px;
 }
+.project-detail-main .thumb-grid {
+  grid-template-columns: repeat(3, 1fr) !important;
+}
 @container projectmain (max-width: 720px) {
-  .thumb-grid { grid-template-columns: repeat(2, 1fr); gap: 22px; padding: 20px 22px 28px; }
+  .project-detail-main .thumb-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 22px; padding: 20px 22px 28px; }
 }
 @container projectmain (max-width: 440px) {
-  .thumb-grid { grid-template-columns: 1fr; gap: 18px; padding: 18px 20px 26px; }
+  .project-detail-main .thumb-grid { grid-template-columns: 1fr !important; gap: 18px; padding: 18px 20px 26px; }
+}
+/* Archive view keeps its own auto-fill responsive grid (more items, smaller cards) */
+.archive-only > .content .thumb-grid {
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)) !important;
 }
 .archive-table thead th {
   position: sticky; top: 0;
