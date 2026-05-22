@@ -55,10 +55,21 @@ export default async function handler(req) {
     if (!pin) return json({ error: 'pin required' }, 400);
     if (String(pin) !== String(gallery.pin)) return json({ error: 'wrong_pin' }, 403);
     const key = makeKey(token, pin);
-    const data = await readProjects();
-    const project = (data.projects || []).find(p => p.id === gallery.projectId);
-    const imageCount = project
-      ? (project.images || []).filter(i => !i.rejected).length
+    let blobData = await readProjects();
+    let unlockProject = (blobData.projects || []).find(p => p.id === gallery.projectId);
+    if (!unlockProject) {
+      // Fall back to NAS if Blobs doesn't have this project yet
+      const NAS_BASE = process.env.NAS_BASE_URL || 'https://api.aldocarrera.com';
+      try {
+        const nr = await fetch(`${NAS_BASE}/api/public/site`);
+        if (nr.ok) {
+          const nd = await nr.json();
+          unlockProject = (nd.projects || []).find(p => p.id === gallery.projectId);
+        }
+      } catch (_) {}
+    }
+    const imageCount = unlockProject
+      ? (unlockProject.images || []).filter(i => !i.rejected).length
       : 0;
     return json({ ok: true, key, title: gallery.title, imageCount });
   }
@@ -69,8 +80,22 @@ export default async function handler(req) {
 
   // GET /api/gallery/:token/images
   if (action === 'images' && req.method === 'GET') {
-    const data = await readProjects();
-    const project = (data.projects || []).find(p => p.id === gallery.projectId);
+    let data = await readProjects();
+    let project = (data.projects || []).find(p => p.id === gallery.projectId);
+
+    // Fallback: if the project isn't in Netlify Blobs (common when the NAS is the
+    // primary data store and hasn't synced to Blobs yet), fetch from the NAS public API.
+    if (!project) {
+      const NAS_BASE = process.env.NAS_BASE_URL || 'https://api.aldocarrera.com';
+      try {
+        const nasResp = await fetch(`${NAS_BASE}/api/public/site`);
+        if (nasResp.ok) {
+          const nasData = await nasResp.json();
+          project = (nasData.projects || []).find(p => p.id === gallery.projectId);
+        }
+      } catch (_) {}
+    }
+
     if (!project) return json({ error: 'project_not_found' }, 404);
     const images = (project.images || [])
       .filter(i => !i.rejected)

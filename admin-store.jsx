@@ -334,22 +334,32 @@ async function pushToAPI() {
     ...p,
     images: (p.images || []).filter(img => isServedPath(img.blobPath)),
   }));
+  const payload = JSON.stringify({
+    projects: cleanProjects,
+    about:    s.about,
+    clients:  s.clients,
+    services: s.services,
+    settings: s.settings,
+  });
   try {
     const r = await fetch(getAPI() + '/api/admin/sync', {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        projects: cleanProjects,
-        about:    s.about,
-        clients:  s.clients,
-        services: s.services,
-        settings: s.settings,
-      }),
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: payload,
     });
     _lastSync = { at: Date.now(), ok: r.ok };
+
+    // Mirror to Netlify Blobs so gallery portals can read project + image data.
+    // Fire-and-forget — doesn't affect the main sync result.
+    const netlifyToken = localStorage.getItem('aldo_netlify_token');
+    if (netlifyToken) {
+      fetch('/.netlify/functions/admin-sync', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${netlifyToken}` },
+        body: payload,
+      }).catch(() => {});
+    }
+
     return r.ok;
   } catch (_) {
     _lastSync = { at: Date.now(), ok: false };
