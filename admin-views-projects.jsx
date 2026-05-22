@@ -778,7 +778,6 @@ function ImageCard({ img, project, showMeta, selected, onToggleSelect, onOpen,
       {draggable && (
         <div className="ad-image-order" title="Drag to reorder">
           <span className="ad-image-order-grip">⋮⋮</span>
-          <span className="ad-image-order-num">{String(position).padStart(2, '0')}</span>
         </div>
       )}
       <div className="ad-image-card-top">

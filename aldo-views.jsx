@@ -171,7 +171,7 @@ function ProjectDetail({ project, onOpenPhoto, onOpenVideo }) {
         </div>
       </div>
       {images.length > 0 ? (
-        <div className="thumb-grid project-thumb-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', gap: '28px', padding: '24px 28px 34px' }}>
+        <div className="thumb-grid project-thumb-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', gap: '28px', padding: '24px 28px 64px' }}>
           {images.map(img => {
             const it = toViewerItem(img);
             return (
@@ -266,7 +266,6 @@ function BtsPanel({ videos, onOpenVideo }) {
     <div className="project-bts-panel">
       <div className="project-bts-head">
         BTS / REELS
-        <span className="bts-count">{videos.length}</span>
       </div>
       {videos.map(v => {
         const posterSrc = v.poster

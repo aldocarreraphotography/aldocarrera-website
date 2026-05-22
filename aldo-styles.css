@@ -2783,8 +2783,8 @@ img {
 .bts-tile { position: relative; }
 .bts-tile.is-playing { background: var(--paper-soft); }
 .bts-tile .bts-thumb {
-  aspect-ratio: 9/16; background: #14110d;
-  overflow: hidden; border: 1px solid var(--rule);
+  aspect-ratio: 9/16; background: transparent;
+  overflow: hidden;
   position: relative;
   transition: aspect-ratio 200ms var(--easing);
 }
