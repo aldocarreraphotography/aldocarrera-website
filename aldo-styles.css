@@ -1000,12 +1000,18 @@ input, textarea, select {
 /* THUMB GRID (also used by ProjectDetail) */
 .thumb-grid {
   display: grid;
-  /* auto-fit collapses empty tracks so existing items GROW to fill the row.
-     clamp() lets the minimum scale with viewport — items get bigger on wider
-     windows instead of just multiplying columns. */
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, clamp(240px, 22vw, 360px)), 1fr));
+  /* Fixed column count → items GROW with the project window width
+     (instead of multiplying columns). Container queries size by the
+     project window's actual width, not browser viewport. */
+  grid-template-columns: repeat(3, 1fr);
   gap: 28px;
   padding: 24px 28px 34px;
+}
+@container projectmain (max-width: 720px) {
+  .thumb-grid { grid-template-columns: repeat(2, 1fr); gap: 22px; padding: 20px 22px 28px; }
+}
+@container projectmain (max-width: 440px) {
+  .thumb-grid { grid-template-columns: 1fr; gap: 18px; padding: 18px 20px 26px; }
 }
 .archive-table thead th {
   position: sticky; top: 0;
@@ -2735,9 +2741,15 @@ img {
    PROJECT DETAIL + BTS SIDEBAR
    ============================================================ */
 .project-detail-shell { display: flex; height: 100%; min-height: 0; }
-.project-detail-main { flex: 1; min-width: 0; overflow-y: auto; }
+.project-detail-main {
+  flex: 1; min-width: 0; overflow-y: auto;
+  container-type: inline-size;
+  container-name: projectmain;
+}
 .project-bts-panel {
-  width: clamp(280px, 26vw, 380px); flex-shrink: 0;
+  /* width is a percentage of the project shell — scales with the window */
+  width: 28%; min-width: 280px; max-width: 460px;
+  flex-shrink: 0;
   border-left: 1px solid var(--rule);
   overflow-y: auto;
   background: var(--window);
