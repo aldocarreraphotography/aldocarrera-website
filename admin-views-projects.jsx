@@ -919,14 +919,16 @@ function ImageViewer({ image, project, onClose, onPrev, onNext }) {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = Math.round(((e.clientX - rect.left) / rect.width)  * 100);
     const y = Math.round(((e.clientY - rect.top)  / rect.height) * 100);
-    setFocal({ x, y });
-    window.AdminStore.updateImage(project.id, image.filename, { focalX: x, focalY: y });
+    setFocal({ x, y }); // update dot immediately
     toast('Focal point set', 'ok');
+    // Defer store write so it doesn't batch with setFocal and cause
+    // the parent's admin-store-changed re-render to overwrite our local state
+    setTimeout(() => window.AdminStore.updateImage(project.id, image.filename, { focalX: x, focalY: y }), 0);
   };
 
   const removeFocal = () => {
     setFocal({ x: null, y: null });
-    window.AdminStore.updateImage(project.id, image.filename, { focalX: null, focalY: null });
+    setTimeout(() => window.AdminStore.updateImage(project.id, image.filename, { focalX: null, focalY: null }), 0);
     toast('Focal point removed', 'ok');
   };
 
