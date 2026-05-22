@@ -1399,15 +1399,15 @@ function ArchiveApp() {
         }
         return { title: opts.video ? opts.video.title : 'Video', path: opts.video ? `~/reels/${opts.video.id}` : '~/reels', w, h };
       })(),
-      project:   { title: opts.project ? opts.project.name : 'Project', path: opts.project ? `~/portfolio/${opts.project.id}` : '~/portfolio', w: Math.min(1360, window.innerWidth - 40), h: Math.min(820, window.innerHeight - 80) },
+      project:   { title: opts.project ? opts.project.name : 'Project', path: opts.project ? `~/portfolio/${opts.project.id}` : '~/portfolio', w: Math.min(1360, window.innerWidth - 40), h: Math.min(820, window.innerHeight - 80), x: 4, y: 30 },
     };
     const p = presets[kind] || { title: kind, w: 500, h: 400 };
     setWindows(ws => ({
       ...ws,
       [id]: {
         id, kind, mounted: true, minimized: false,
-        x: Math.min(window.innerWidth - p.w - 40, 200 + Object.keys(ws).length * 28),
-        y: Math.min(window.innerHeight - p.h - 60, 70 + Object.keys(ws).length * 28),
+        x: p.x !== undefined ? p.x : Math.min(window.innerWidth - p.w - 40, 200 + Object.keys(ws).length * 28),
+        y: p.y !== undefined ? p.y : Math.min(window.innerHeight - p.h - 60, 70 + Object.keys(ws).length * 28),
         w: p.w, h: p.h, z: 10,
         title: p.title, path: p.path,
         project: opts.project || null,
