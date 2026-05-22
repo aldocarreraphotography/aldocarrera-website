@@ -315,27 +315,30 @@ function VideoCreateModal({ open, onClose, onCreated }) {
       const created = await window.AdminStore.apiFetch('/api/videos', {
         method: 'POST',
         body: JSON.stringify(body),
-      });
+      }).catch(e => { throw Object.assign(e, { step: 'create' }); });
 
       // Upload video file if provided
       if (sourceType === 'file' && form.videoFile) {
         const fd = new FormData();
         fd.append('file', form.videoFile);
-        await window.AdminStore.apiUpload(`/api/videos/${created.id}/upload`, fd);
+        await window.AdminStore.apiUpload(`/api/videos/${created.id}/upload`, fd)
+          .catch(e => { throw Object.assign(e, { step: 'upload' }); });
       }
 
       // Upload poster if provided
       if (form.posterFile) {
         const fd = new FormData();
         fd.append('file', form.posterFile);
-        await window.AdminStore.apiUpload(`/api/videos/${created.id}/poster`, fd);
+        await window.AdminStore.apiUpload(`/api/videos/${created.id}/poster`, fd)
+          .catch(e => { throw Object.assign(e, { step: 'poster' }); });
       }
 
       toast('Video created', 'ok');
       onCreated(created);
       reset();
     } catch (e) {
-      toast('Error: ' + (e.message || 'failed'), 'error');
+      const prefix = e.step === 'upload' ? 'File upload failed' : e.step === 'poster' ? 'Poster upload failed' : 'Could not create video';
+      toast(`${prefix}: ${e.message || 'unknown error'}`, 'error');
     } finally {
       setSaving(false);
     }
@@ -417,26 +420,29 @@ function VideoEditModal({ open, video, onClose, onSaved }) {
       const updated = await window.AdminStore.apiFetch(`/api/videos/${video.id}`, {
         method: 'PUT',
         body: JSON.stringify(body),
-      });
+      }).catch(e => { throw Object.assign(e, { step: 'save' }); });
 
       // Upload new video file if provided
       if (sourceType === 'file' && form.videoFile) {
         const fd = new FormData();
         fd.append('file', form.videoFile);
-        await window.AdminStore.apiUpload(`/api/videos/${video.id}/upload`, fd);
+        await window.AdminStore.apiUpload(`/api/videos/${video.id}/upload`, fd)
+          .catch(e => { throw Object.assign(e, { step: 'upload' }); });
       }
 
       // Upload new poster if provided
       if (form.posterFile) {
         const fd = new FormData();
         fd.append('file', form.posterFile);
-        await window.AdminStore.apiUpload(`/api/videos/${video.id}/poster`, fd);
+        await window.AdminStore.apiUpload(`/api/videos/${video.id}/poster`, fd)
+          .catch(e => { throw Object.assign(e, { step: 'poster' }); });
       }
 
       toast('Video saved', 'ok');
       onSaved(updated);
     } catch (e) {
-      toast('Error: ' + (e.message || 'failed'), 'error');
+      const prefix = e.step === 'upload' ? 'File upload failed' : e.step === 'poster' ? 'Poster upload failed' : 'Could not save video';
+      toast(`${prefix}: ${e.message || 'unknown error'}`, 'error');
     } finally {
       setSaving(false);
     }

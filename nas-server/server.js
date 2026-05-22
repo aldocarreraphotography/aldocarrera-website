@@ -587,86 +587,129 @@ const videoUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize
 
 function nextVideoId() { return 'VID_' + Date.now(); }
 
+/* Multer error handler — catches LIMIT_FILE_SIZE before it silently
+   hangs the connection (which Safari reports as "Load failed"). */
+function handleMulterError(err, req, res, next) {
+  if (err?.code === 'LIMIT_FILE_SIZE') {
+    return res.status(413).json({ error: 'file_too_large', message: 'File exceeds the 500 MB limit.' });
+  }
+  next(err);
+}
+
 app.get('/api/videos', async (req, res) => {
   if (!requireAuth(req, res)) return;
-  res.json(await readVideos());
+  try {
+    res.json(await readVideos());
+  } catch (err) {
+    console.error('[GET /api/videos]', err?.message);
+    res.status(500).json({ error: 'internal', message: err?.message || 'Failed to read videos' });
+  }
 });
 
 app.post('/api/videos', async (req, res) => {
   if (!requireAuth(req, res)) return;
-  const body = req.body || {};
-  if (!body.title) return res.status(422).json({ error: 'validation', message: '`title` required' });
-  const data  = await readVideos();
-  const video = {
-    id:          (body.id || nextVideoId()).toUpperCase().replace(/[^A-Z0-9_]+/g, '_'),
-    title:       body.title,
-    client:      body.client      || '',
-    year:        body.year        || new Date().getFullYear(),
-    category:    body.category    || 'Reel',
-    description: body.description || '',
-    embedUrl:    body.embedUrl    || '',
-    blobPath:    '',
-    poster:      body.poster      || '',
-    public:      body.public !== false,
-    order:       body.order       ?? data.videos.length,
-    createdAt:   new Date().toISOString(),
-    updatedAt:   new Date().toISOString(),
-  };
-  data.videos.unshift(video);
-  await writeVideos(data);
-  res.status(201).json(video);
+  try {
+    const body = req.body || {};
+    if (!body.title) return res.status(422).json({ error: 'validation', message: '`title` required' });
+    const data  = await readVideos();
+    const video = {
+      id:          (body.id || nextVideoId()).toUpperCase().replace(/[^A-Z0-9_]+/g, '_'),
+      title:       body.title,
+      client:      body.client      || '',
+      year:        body.year        || new Date().getFullYear(),
+      category:    body.category    || 'Reel',
+      description: body.description || '',
+      embedUrl:    body.embedUrl    || '',
+      blobPath:    '',
+      poster:      body.poster      || '',
+      public:      body.public !== false,
+      projectId:   body.projectId   || null,    // BTS link — which project this reel belongs to
+      order:       body.order       ?? data.videos.length,
+      createdAt:   new Date().toISOString(),
+      updatedAt:   new Date().toISOString(),
+    };
+    data.videos.unshift(video);
+    await writeVideos(data);
+    res.status(201).json(video);
+  } catch (err) {
+    console.error('[POST /api/videos]', err?.message);
+    res.status(500).json({ error: 'internal', message: err?.message || 'Failed to create video' });
+  }
 });
 
 app.put('/api/videos/:id', async (req, res) => {
   if (!requireAuth(req, res)) return;
-  const data  = await readVideos();
-  const idx   = data.videos.findIndex(v => v.id === req.params.id);
-  if (idx === -1) return res.status(404).json({ error: 'not_found' });
-  data.videos[idx] = { ...data.videos[idx], ...req.body, id: data.videos[idx].id, updatedAt: new Date().toISOString() };
-  await writeVideos(data);
-  res.json(data.videos[idx]);
+  try {
+    const data  = await readVideos();
+    const idx   = data.videos.findIndex(v => v.id === req.params.id);
+    if (idx === -1) return res.status(404).json({ error: 'not_found' });
+    const allowed = ['title','client','year','category','description','embedUrl','public','projectId','order'];
+    const patch = {};
+    for (const k of allowed) if (k in req.body) patch[k] = req.body[k];
+    data.videos[idx] = { ...data.videos[idx], ...patch, id: data.videos[idx].id, updatedAt: new Date().toISOString() };
+    await writeVideos(data);
+    res.json(data.videos[idx]);
+  } catch (err) {
+    console.error('[PUT /api/videos/:id]', err?.message);
+    res.status(500).json({ error: 'internal', message: err?.message || 'Failed to update video' });
+  }
 });
 
 app.delete('/api/videos/:id', async (req, res) => {
   if (!requireAuth(req, res)) return;
-  const data   = await readVideos();
-  const video  = data.videos.find(v => v.id === req.params.id);
-  if (!video) return res.status(404).json({ error: 'not_found' });
-  if (video.blobPath) {
-    const [, vidId, filename] = video.blobPath.split('/');
-    await deleteVideoFile(vidId, filename).catch(() => {});
+  try {
+    const data   = await readVideos();
+    const video  = data.videos.find(v => v.id === req.params.id);
+    if (!video) return res.status(404).json({ error: 'not_found' });
+    if (video.blobPath) {
+      const [, vidId, filename] = video.blobPath.split('/');
+      await deleteVideoFile(vidId, filename).catch(() => {});
+    }
+    data.videos = data.videos.filter(v => v.id !== req.params.id);
+    await writeVideos(data);
+    res.status(204).send();
+  } catch (err) {
+    console.error('[DELETE /api/videos/:id]', err?.message);
+    res.status(500).json({ error: 'internal', message: err?.message || 'Failed to delete video' });
   }
-  data.videos = data.videos.filter(v => v.id !== req.params.id);
-  await writeVideos(data);
-  res.status(204).send();
 });
 
-app.post('/api/videos/:id/upload', videoUpload.single('file'), async (req, res) => {
+app.post('/api/videos/:id/upload', videoUpload.single('file'), handleMulterError, async (req, res) => {
   if (!requireAuth(req, res)) return;
-  const data  = await readVideos();
-  const video = data.videos.find(v => v.id === req.params.id);
-  if (!video) return res.status(404).json({ error: 'not_found' });
-  if (!req.file) return res.status(400).json({ error: 'missing_file' });
-  const safeName = (req.file.originalname || `video_${Date.now()}.mp4`).replace(/[^A-Za-z0-9._-]+/g, '_');
-  await writeVideoBytes(video.id, safeName, req.file.buffer);
-  video.blobPath = `__videos/${video.id}/${safeName}`;
-  video.updatedAt = new Date().toISOString();
-  await writeVideos(data);
-  res.json({ blobPath: video.blobPath });
+  try {
+    const data  = await readVideos();
+    const video = data.videos.find(v => v.id === req.params.id);
+    if (!video) return res.status(404).json({ error: 'not_found' });
+    if (!req.file) return res.status(400).json({ error: 'missing_file' });
+    const safeName = (req.file.originalname || `video_${Date.now()}.mp4`).replace(/[^A-Za-z0-9._-]+/g, '_');
+    await writeVideoBytes(video.id, safeName, req.file.buffer);
+    video.blobPath = `__videos/${video.id}/${safeName}`;
+    video.updatedAt = new Date().toISOString();
+    await writeVideos(data);
+    res.json({ blobPath: video.blobPath });
+  } catch (err) {
+    console.error('[POST /api/videos/:id/upload]', err?.message);
+    res.status(500).json({ error: 'internal', message: err?.message || 'Upload failed' });
+  }
 });
 
-app.post('/api/videos/:id/poster', upload.single('file'), async (req, res) => {
+app.post('/api/videos/:id/poster', upload.single('file'), handleMulterError, async (req, res) => {
   if (!requireAuth(req, res)) return;
-  const data  = await readVideos();
-  const video = data.videos.find(v => v.id === req.params.id);
-  if (!video) return res.status(404).json({ error: 'not_found' });
-  if (!req.file) return res.status(400).json({ error: 'missing_file' });
-  const safeName = `poster_${Date.now()}_${(req.file.originalname || 'poster.jpg').replace(/[^A-Za-z0-9._-]+/g, '_')}`;
-  await writeBytes(`__vidposters/${video.id}`, safeName, req.file.buffer);
-  video.poster = `__vidposters/${video.id}/${safeName}`;
-  video.updatedAt = new Date().toISOString();
-  await writeVideos(data);
-  res.json({ poster: video.poster });
+  try {
+    const data  = await readVideos();
+    const video = data.videos.find(v => v.id === req.params.id);
+    if (!video) return res.status(404).json({ error: 'not_found' });
+    if (!req.file) return res.status(400).json({ error: 'missing_file' });
+    const safeName = `poster_${Date.now()}_${(req.file.originalname || 'poster.jpg').replace(/[^A-Za-z0-9._-]+/g, '_')}`;
+    await writeBytes(`__vidposters/${video.id}`, safeName, req.file.buffer);
+    video.poster = `__vidposters/${video.id}/${safeName}`;
+    video.updatedAt = new Date().toISOString();
+    await writeVideos(data);
+    res.json({ poster: video.poster });
+  } catch (err) {
+    console.error('[POST /api/videos/:id/poster]', err?.message);
+    res.status(500).json({ error: 'internal', message: err?.message || 'Poster upload failed' });
+  }
 });
 
 app.get('/api/videoposters/:videoId/:filename', async (req, res) => {
