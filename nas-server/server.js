@@ -18,6 +18,7 @@ import fs       from 'node:fs';
 import sharp    from 'sharp';
 
 import { issueToken, verifyToken, authMiddleware, requireAuth } from './utils/auth.js';
+import { Resend } from 'resend';
 import {
   readProjects, writeProjects,
   readAbout,    writeAbout,
@@ -1260,23 +1261,23 @@ async function _sendSubmitEmail({ portal, hearted }) {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) { console.warn('[email] RESEND_API_KEY not set — skipping notification email'); return; }
 
+  const resend  = new Resend(apiKey);
   const to      = process.env.NOTIFY_EMAIL || 'aldo@aldocarrera.com';
   const subject = `Gallery submitted: ${portal.title || portal.token} · ${hearted.length} selected`;
 
   const imageRows = hearted.length > 0
     ? hearted.map(h => `
         <tr>
-          <td style="padding:6px 16px 6px 0; font-size:13px; font-family:monospace; color:#1a1810;">${h.filename}</td>
-          <td style="padding:6px 0; font-size:13px; color:#666;">${h.note || ''}</td>
+          <td style="padding:6px 16px 6px 0;font-size:13px;font-family:monospace;color:#1a1810;">${h.filename}</td>
+          <td style="padding:6px 0;font-size:13px;color:#666;">${h.note || ''}</td>
         </tr>`).join('')
-    : `<tr><td colspan="2" style="padding:6px 0; color:#999; font-size:13px; font-style:italic;">No images hearted</td></tr>`;
+    : `<tr><td colspan="2" style="padding:6px 0;color:#999;font-size:13px;font-style:italic;">No images hearted</td></tr>`;
 
   const html = `<!DOCTYPE html>
 <html><body style="margin:0;padding:0;background:#fafaf8;">
 <div style="max-width:560px;margin:40px auto;padding:32px 28px;background:#fff;border:1px solid #e8e4dc;font-family:'IBM Plex Mono',monospace,sans-serif;">
   <p style="margin:0 0 4px;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#999;">Aldo Carrera</p>
   <h1 style="margin:0 0 28px;font-size:18px;font-weight:600;letter-spacing:.04em;color:#1a1810;">Gallery Submitted</h1>
-
   <table style="border-collapse:collapse;width:100%;margin-bottom:28px;">
     <tr>
       <td style="padding:5px 20px 5px 0;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#999;white-space:nowrap;vertical-align:top;">Gallery</td>
@@ -1295,7 +1296,6 @@ async function _sendSubmitEmail({ portal, hearted }) {
       <td style="padding:5px 0;font-size:13px;color:#555;">${new Date(portal.submittedAt).toLocaleString('en-US', { dateStyle:'long', timeStyle:'short' })}</td>
     </tr>
   </table>
-
   <p style="margin:0 0 10px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#999;">Selected images</p>
   <table style="border-collapse:collapse;width:100%;border-top:1px solid #e8e4dc;">
     ${imageRows}
@@ -1303,15 +1303,13 @@ async function _sendSubmitEmail({ portal, hearted }) {
 </div>
 </body></html>`;
 
-  const r = await fetch('https://api.resend.com/emails', {
-    method:  'POST',
-    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ from: 'Aldo Gallery <noreply@aldocarrera.com>', to: [to], subject, html }),
+  const { error } = await resend.emails.send({
+    from:    'Aldo Gallery <onboarding@resend.dev>',
+    to:      [to],
+    subject,
+    html,
   });
-  if (!r.ok) {
-    const body = await r.text();
-    throw new Error(`Resend ${r.status}: ${body}`);
-  }
+  if (error) throw new Error(error.message);
   console.log(`[email] Submission notification sent to ${to} for portal ${portal.token}`);
 }
 
