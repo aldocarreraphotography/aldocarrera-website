@@ -988,7 +988,17 @@ app.post('/api/gallery/:token/submit', async (req, res) => {
   if (errCheck) return res.status(errCheck.status).json({ error: errCheck.err });
   if (gallery.status === 'submitted') return res.status(409).json({ error: 'already_submitted' });
 
-  await updateGallery(gallery.token, { status: 'submitted', submittedAt: new Date().toISOString() });
+  const submittedAt = new Date().toISOString();
+  await updateGallery(gallery.token, { status: 'submitted', submittedAt });
+
+  // Fire email notification
+  const sels = gallery.selections || {};
+  const selected = Object.entries(sels)
+    .filter(([, s]) => s.label === 'SELECT' || s.label === 'ALT')
+    .map(([filename, s]) => ({ filename, label: s.label, note: (s.note || '').trim() }))
+    .sort((a, b) => (a.label === 'SELECT' ? -1 : 1));
+  _sendGallerySubmitEmail({ gallery, selected, submittedAt }).catch(e => console.error('[email] gallery submit failed:', e?.message));
+
   res.json({ ok: true });
 });
 
@@ -1311,6 +1321,61 @@ async function _sendSubmitEmail({ portal, hearted }) {
   });
   if (error) throw new Error(error.message);
   console.log(`[email] Submission notification sent to ${to} for portal ${portal.token}`);
+}
+
+async function _sendGallerySubmitEmail({ gallery, selected, submittedAt }) {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) { console.warn('[email] RESEND_API_KEY not set — skipping gallery notification'); return; }
+
+  const resend  = new Resend(apiKey);
+  const to      = process.env.NOTIFY_EMAIL || 'aldo@aldocarrera.com';
+  const selCount = selected.filter(s => s.label === 'SELECT').length;
+  const altCount = selected.filter(s => s.label === 'ALT').length;
+  const subject = `Gallery submitted: ${gallery.name || gallery.token} · ${selCount} select${altCount > 0 ? `, ${altCount} alt` : ''}`;
+
+  const imageRows = selected.length > 0
+    ? selected.map(s => `
+        <tr>
+          <td style="padding:6px 16px 6px 0;font-size:11px;font-weight:600;letter-spacing:.06em;color:${s.label === 'SELECT' ? '#1a6a1a' : '#555'};white-space:nowrap;">${s.label}</td>
+          <td style="padding:6px 16px 6px 0;font-size:13px;font-family:monospace;color:#1a1810;">${s.filename}</td>
+          <td style="padding:6px 0;font-size:13px;color:#666;">${s.note || ''}</td>
+        </tr>`).join('')
+    : `<tr><td colspan="3" style="padding:6px 0;color:#999;font-size:13px;font-style:italic;">No images selected</td></tr>`;
+
+  const html = `<!DOCTYPE html>
+<html><body style="margin:0;padding:0;background:#fafaf8;">
+<div style="max-width:560px;margin:40px auto;padding:32px 28px;background:#fff;border:1px solid #e8e4dc;font-family:'IBM Plex Mono',monospace,sans-serif;">
+  <p style="margin:0 0 4px;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#999;">Aldo Carrera</p>
+  <h1 style="margin:0 0 28px;font-size:18px;font-weight:600;letter-spacing:.04em;color:#1a1810;">Gallery Submitted</h1>
+  <table style="border-collapse:collapse;width:100%;margin-bottom:28px;">
+    <tr>
+      <td style="padding:5px 20px 5px 0;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#999;white-space:nowrap;">Gallery</td>
+      <td style="padding:5px 0;font-size:14px;color:#1a1810;">${gallery.name || '(untitled)'}</td>
+    </tr>
+    <tr>
+      <td style="padding:5px 20px 5px 0;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#999;white-space:nowrap;">Selected</td>
+      <td style="padding:5px 0;font-size:14px;color:#1a1810;font-weight:600;">${selCount} select · ${altCount} alt</td>
+    </tr>
+    <tr>
+      <td style="padding:5px 20px 5px 0;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#999;white-space:nowrap;">Submitted</td>
+      <td style="padding:5px 0;font-size:13px;color:#555;">${new Date(submittedAt).toLocaleString('en-US', { dateStyle:'long', timeStyle:'short' })}</td>
+    </tr>
+  </table>
+  <p style="margin:0 0 10px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#999;">Selections</p>
+  <table style="border-collapse:collapse;width:100%;border-top:1px solid #e8e4dc;">
+    ${imageRows}
+  </table>
+</div>
+</body></html>`;
+
+  const { error } = await resend.emails.send({
+    from:    'Aldo Gallery <onboarding@resend.dev>',
+    to:      [to],
+    subject,
+    html,
+  });
+  if (error) throw new Error(error.message);
+  console.log(`[email] Gallery submit notification sent to ${to} for gallery ${gallery.token}`);
 }
 
 function _fmtPortalBytes(n) {
