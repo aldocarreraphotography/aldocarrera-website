@@ -54,19 +54,38 @@ async function main() {
       const ex = img.exif || {};
       const needsDims = !ex.dimensions;
       const needsSize = !ex.fileSize;
-      if (!needsDims && !needsSize) continue;
+      const needsBlur = !img.blurDataURL;
+      if (!needsDims && !needsSize && !needsBlur) continue;
 
       const filePath = path.join(IMAGES_DIR, project.id, img.filename);
       try {
-        const read = await readExif(filePath);
-        const patch = {};
-        if (needsDims && read.dimensions) patch.dimensions = read.dimensions;
-        if (needsSize && read.fileSize)   patch.fileSize   = read.fileSize;
-        if (Object.keys(patch).length === 0) continue;
+        let patchedSomething = false;
 
-        img.exif = { ...ex, ...patch };
-        touched++;
-        console.log(`✓ ${project.id}/${img.filename}  →  ${patch.dimensions || ex.dimensions || '?'}  ·  ${fmtBytes(patch.fileSize || ex.fileSize)}`);
+        if (needsDims || needsSize) {
+          const read = await readExif(filePath);
+          const patch = {};
+          if (needsDims && read.dimensions) patch.dimensions = read.dimensions;
+          if (needsSize && read.fileSize)   patch.fileSize   = read.fileSize;
+          if (Object.keys(patch).length > 0) {
+            img.exif = { ...ex, ...patch };
+            patchedSomething = true;
+          }
+        }
+
+        if (needsBlur) {
+          const blur = await sharp(filePath)
+            .rotate()
+            .resize({ width: 24 })
+            .jpeg({ quality: 40 })
+            .toBuffer();
+          img.blurDataURL = `data:image/jpeg;base64,${blur.toString('base64')}`;
+          patchedSomething = true;
+        }
+
+        if (patchedSomething) {
+          touched++;
+          console.log(`✓ ${project.id}/${img.filename}  →  ${img.exif?.dimensions || '?'}  ·  ${fmtBytes(img.exif?.fileSize)}  ·  blur ${img.blurDataURL ? 'ok' : '—'}`);
+        }
       } catch (err) {
         missing++;
         console.warn(`✗ ${project.id}/${img.filename}  →  ${err.code || err.message}`);

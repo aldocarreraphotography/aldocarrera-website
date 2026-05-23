@@ -219,6 +219,24 @@ app.post('/api/projects/:id/images/upload', upload.single('file'), async (req, r
 
     await writeBytes(projectId, finalName, req.file.buffer);
 
+    // Generate a tiny base64 blur placeholder + capture real dimensions in one sharp pass.
+    // Best-effort; failure here must not block the upload.
+    let blurDataURL = '';
+    let realDims    = dimensions || '';
+    try {
+      const pipe  = sharp(req.file.buffer).rotate();
+      const meta  = await pipe.metadata();
+      if (meta.width && meta.height && !realDims) realDims = `${meta.width}×${meta.height}`;
+      const blur  = await sharp(req.file.buffer)
+        .rotate()
+        .resize({ width: 24 })
+        .jpeg({ quality: 40 })
+        .toBuffer();
+      blurDataURL = `data:image/jpeg;base64,${blur.toString('base64')}`;
+    } catch (e) {
+      console.warn('[upload] blur/meta gen failed:', e?.message);
+    }
+
     const order  = (project.images.reduce((m, i) => Math.max(m, i.order || 0), 0) || 0) + 1;
     const record = {
       filename: finalName,
@@ -228,9 +246,10 @@ app.post('/api/projects/:id/images/upload', upload.single('file'), async (req, r
       favorite:  false,
       rejected:  false,
       notes:     '',
+      blurDataURL,
       exif: {
         dateTaken:  dateTaken || null,
-        dimensions: dimensions || '',
+        dimensions: realDims,
         fileSize:   req.file.buffer.length,
       },
     };

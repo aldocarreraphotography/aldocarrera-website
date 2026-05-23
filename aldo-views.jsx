@@ -4,6 +4,24 @@ const { useState: vsUseState, useEffect: vsUseEffect, useMemo: vsUseMemo, useRef
 
 const { PROJECTS, ARCHIVE, CLIENTS, PHOTOS, SERVICES, ABOUT, SETTINGS } = window.ALDO;
 
+/* Merge focal-point + blurDataURL placeholder into one inline style object.
+   Accepts either { focalX, focalY, blurDataURL } from an image record or
+   the cover-shape { coverFocalX, coverFocalY, coverBlurDataURL } from a project. */
+function imgStyle(src) {
+  if (!src) return undefined;
+  const fx = src.focalX ?? src.coverFocalX;
+  const fy = src.focalY ?? src.coverFocalY;
+  const blur = src.blurDataURL ?? src.coverBlurDataURL;
+  const s = {};
+  if (fx != null && fy != null) s.objectPosition = `${fx}% ${fy}%`;
+  if (blur) {
+    s.backgroundImage    = `url(${blur})`;
+    s.backgroundSize     = 'cover';
+    s.backgroundPosition = s.objectPosition || 'center';
+  }
+  return Object.keys(s).length ? s : undefined;
+}
+
 /* ============================================================
    PORTFOLIO
    ============================================================ */
@@ -43,6 +61,10 @@ function FeaturedStrip({ onOpenProject }) {
             src={s.blobPath}
             alt={s.projectName}
             className={i === idx ? 'on' : ''}
+            fetchpriority={i === 0 ? 'high' : 'low'}
+            loading={i === 0 ? 'eager' : 'lazy'}
+            decoding="async"
+            style={imgStyle(s)}
           />
         ))}
       </button>
@@ -93,7 +115,7 @@ function Portfolio({ view, onSetView, onOpenProject, onSetCrumb }) {
             onClick={() => onOpenProject(p)}
           >
             <div className="photo">
-              <img src={p.photo} alt={p.name} loading="lazy" style={p.coverFocalX != null ? { objectPosition: `${p.coverFocalX}% ${p.coverFocalY}%` } : undefined}/>
+              <img src={p.photo} alt={p.name} loading="lazy" style={imgStyle(p)}/>
               <span className="tag">{p.type}</span>
             </div>
             {view === 'grid' ? (
@@ -181,7 +203,7 @@ function ProjectDetail({ project, onOpenPhoto, onOpenVideo }) {
             const it = toViewerItem(img);
             return (
               <div key={img.filename} className="thumb" onClick={() => onOpenPhoto(it, viewerList)}>
-                <div className="pic"><img src={img.blobPath} alt={img.filename} loading="lazy" style={img.focalX != null ? { objectPosition: `${img.focalX}% ${img.focalY}%` } : undefined}/></div>
+                <div className="pic"><img src={img.blobPath} alt={img.filename} loading="lazy" style={imgStyle(img)}/></div>
                 <span className="name">{img.filename}</span>
                 <span className="sub">{[it.dims, it.size].filter(Boolean).join(' · ') || 'archive'}</span>
               </div>
@@ -463,7 +485,7 @@ function Archive({ onOpenPhoto, onSetCrumb, initialFilter, onFilterChange, selec
                   }}
                 >
                   <div className="pic">
-                    <img src={it.photo} alt={it.name} loading="lazy" style={it.focalX != null ? { objectPosition: `${it.focalX}% ${it.focalY}%` } : undefined}/>
+                    <img src={it.photo} alt={it.name} loading="lazy" style={imgStyle(it)}/>
                     {selectionMode && (
                       <span className={`select-mark ${isSelected ? 'on' : ''}`}>
                         {isSelected ? selectedIds.indexOf(it.id) + 1 : ''}

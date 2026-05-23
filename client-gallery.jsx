@@ -255,6 +255,7 @@ function GalleryView({ token, sessionKey, title }) {
     setSubmitting(true);
     try {
       await apiFetch('POST', `/api/gallery-portals/${token}/submit?key=${encodeURIComponent(sessionKey)}`);
+      try { window.plausible && window.plausible('Gallery Submit', { props: { gallery: token || '' } }); } catch (_) {}
       showToast('Sent ✓');
     } catch (err) {
       console.error('[client-gallery] submit error', err);

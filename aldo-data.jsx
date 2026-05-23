@@ -377,6 +377,7 @@ function _aldoToPublicProject(p) {
     photo: cover ? _aldoThumbUrl(cover.blobPath, 800) : PHOTOS[0],
     coverFocalX: cover?.focalX ?? null,
     coverFocalY: cover?.focalY ?? null,
+    coverBlurDataURL: cover?.blurDataURL || null,
     count: sorted.length,
     note: p.description || '',
     crew: p.crew || '',
@@ -406,6 +407,7 @@ function _aldoToPublicArchive(projects) {
         photo: _aldoThumbUrl(img.blobPath, 1400),
         focalX: img.focalX ?? null,
         focalY: img.focalY ?? null,
+        blurDataURL: img.blurDataURL || null,
         note: img.favorite ? 'favorite' : (img.selected ? 'select' : ''),
         order: img.order ?? 9999,
       });

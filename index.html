@@ -5,6 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>Aldo Carrera — Photography</title>
 
+<!--
+  PLAUSIBLE — self-hosted on the NAS at analytics.aldocarrera.com.
+  Uncomment the two lines below once the Plausible container is live and the
+  site has been added in the Plausible dashboard. See nas-server/plausible/README.md.
+-->
+<!--
+<script defer data-domain="aldocarrera.com" src="https://analytics.aldocarrera.com/js/script.tagged-events.js"></script>
+<script>window.plausible = window.plausible || function () { (window.plausible.q = window.plausible.q || []).push(arguments) }</script>
+-->
+
 <!-- Google Analytics 4 — aldocarrera.com (G-EJNJGESZT6) -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-EJNJGESZT6"></script>
 <script>
@@ -55,6 +65,43 @@
 <link rel="stylesheet" href="aldo-styles.css"/>
 <!-- NAS API base URL. Set to your NAS server address. Empty string = use relative /api/ paths. -->
 <script>window.API_BASE = 'https://api.aldocarrera.com';</script>
+<!-- Preconnect to the NAS API so the featured-image preload below resolves DNS/TLS in parallel with the page. -->
+<link rel="preconnect" href="https://api.aldocarrera.com" crossorigin/>
+
+<!--
+  Featured-image preload: fetch /api/projects ASAP (in parallel with React/Babel),
+  find the first highlighted image, inject a <link rel="preload"> so the browser
+  starts downloading the hero before the React app mounts. Best-effort only;
+  silently no-ops if anything fails.
+-->
+<script>
+(function preloadFeatured() {
+  try {
+    fetch('https://api.aldocarrera.com/api/projects', { credentials: 'omit' })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data) return;
+        var projects = Array.isArray(data) ? data : (data.projects || []);
+        for (var p = 0; p < projects.length; p++) {
+          var imgs = projects[p].images || [];
+          for (var i = 0; i < imgs.length; i++) {
+            if (imgs[i].highlighted && imgs[i].blobPath) {
+              var link = document.createElement('link');
+              link.rel = 'preload';
+              link.as = 'image';
+              link.href = imgs[i].blobPath;
+              link.setAttribute('fetchpriority', 'high');
+              document.head.appendChild(link);
+              return;
+            }
+          }
+        }
+      })
+      .catch(function () {});
+  } catch (e) {}
+})();
+</script>
+
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap"/>
