@@ -265,6 +265,159 @@ app.post('/api/projects/:id/images/upload', upload.single('file'), async (req, r
 });
 
 /* ------------------------------------------------------------------ */
+/* AI: generate project description variants (Claude vision)            */
+/* ------------------------------------------------------------------ */
+
+const AC_VOICE_SYSTEM = `You write project descriptions in the exact voice of Aldo Carrera, a fashion and editorial photographer in Los Angeles. Study these examples — they ARE the voice:
+
+— "Rylee Stumpf navigates DTLA's spiritual underbelly for Praying... getting her nails done, seeking fortunes, acting feral on chrome. A study in duality: the edge and the tenderness, the reckless and the devoted."
+— "2025. What Carly does when there's no actual resort. (Spoiler: better than most vacations.)"
+— "Thomas Wylde campaign, featured in Vogue Japan. The work here is about contradiction: studded jackets, vulnerable bodies, the precise moment between armor and exposure. Monochrome & color pulling you in and out of tension."
+— "9dcc. Luxury built on the blockchain. The clothes were the entry point, the NFC chip was the conversation. Shot for a brand that was always two steps ahead."
+— "Transformers x Dim Mak for Hasbro. The graphics we memorized as kids, shot in the parts of LA that never sleep. Something between memory and now."
+— "Sveta at Penthouse 211, 35mm. Tables as furniture, cats as props, stuffies as emotional support. Semi-undone, fully committed. Just a girl and her afternoon chaos."
+— "Christian Cowan x Powerpuff Girls. Backstage. 35mm. Sugar, spice, and everything unhinged."
+— "Melancholic botanicals sourced from the Downtown LA flower district, rendered in Rembrandt light with a whisper of Japanese restraint. Each bloom hand-picked for its imperfection becomes an ornament, a meditation on decay and beauty. Ephemeral. Rendered as pins adorning leather."
+— "Sheena Liam. Shot on film, medium format and 35mm. A model who embroiders self-portraits in her spare time."
+
+Voice rules — non-negotiable:
+- Fragments allowed. Short sentences encouraged. Not every sentence needs a verb.
+- Specific concrete nouns over abstractions. Real places (DTLA, Penthouse 211), real formats (35mm, medium format), real names when given.
+- BANNED words/phrases: stunning, captivating, showcases, explores, delves into, vibrant tapestry, boasts, evocative, breathtaking, mesmerizing, ethereal (unless ironic), journey, embark.
+- Often a colon or em-dash splits the sentence. Parenthetical asides work.
+- Lead with a person, brand, place, or contradiction. Never with abstractions or commentary.
+- Embrace duality and tension. Armor and exposure. Reckless and devoted.
+- Present-tense bias when describing action.
+- Length range: 1 sentence to 4. Never longer than 4.
+- Do NOT invent facts. If model name, brand, or location isn't given, don't make one up — describe what's visible instead.
+- No emoji. No hashtags. No quotation marks around the description itself.
+
+Output strictly valid JSON only — no preamble, no markdown fences, no commentary:
+
+[
+  {"tone": "sparse",        "text": "..."},
+  {"tone": "narrative",     "text": "..."},
+  {"tone": "duality",       "text": "..."},
+  {"tone": "witty",         "text": "..."},
+  {"tone": "brand-forward", "text": "..."},
+  {"tone": "atmospheric",   "text": "..."}
+]
+
+Tone definitions:
+- sparse: minimal, fragmentary, almost stage directions. 1-2 sentences.
+- narrative: threads a small story, 3-4 sentences.
+- duality: leads with a contradiction or tension.
+- witty: includes a playful aside or parenthetical.
+- brand-forward: leads with the client or collab as a statement.
+- atmospheric: leans into light, mood, palette, texture.
+
+Every variant must be DISTINCT in tone. Same project, six different angles.`;
+
+app.post('/api/projects/:id/generate-descriptions', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  try {
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return res.status(503).json({ error: 'api_key_missing', message: 'ANTHROPIC_API_KEY not set on the NAS .env' });
+    }
+
+    const projectId = req.params.id;
+    const data = await readProjects();
+    const project = data.projects.find(p => p.id === projectId);
+    if (!project) return res.status(404).json({ error: 'project_not_found' });
+
+    const brief = (req.body?.brief || '').toString().slice(0, 600);
+
+    // Pick up to 5 images: cover first, then favorites, then selected, then top-ordered.
+    const candidates = (project.images || []).filter(i => !i.rejected);
+    if (candidates.length === 0) return res.status(400).json({ error: 'no_images' });
+
+    const picks = [];
+    const push = (img) => { if (img && !picks.find(p => p.filename === img.filename)) picks.push(img); };
+    push(candidates.find(i => i.cover));
+    candidates.filter(i => i.favorite).forEach(push);
+    candidates.filter(i => i.selected).forEach(push);
+    candidates.forEach(push);
+    const finalPicks = picks.slice(0, 5);
+
+    // Read + downsize to ~1024px to keep token use sane.
+    const imageBlocks = await Promise.all(finalPicks.map(async (img) => {
+      const bytes = await readBytes(projectId, img.filename);
+      if (!bytes) return null;
+      const resized = await sharp(bytes)
+        .rotate()
+        .resize({ width: 1024, withoutEnlargement: true })
+        .jpeg({ quality: 80 })
+        .toBuffer();
+      return {
+        type: 'image',
+        source: { type: 'base64', media_type: 'image/jpeg', data: resized.toString('base64') },
+      };
+    }));
+    const cleanImages = imageBlocks.filter(Boolean);
+    if (cleanImages.length === 0) return res.status(400).json({ error: 'no_readable_images' });
+
+    const userText = [
+      `Project: ${project.name}`,
+      `Client: ${project.client || '—'}`,
+      `Year: ${project.year || '—'}`,
+      `Type: ${project.type || '—'}`,
+      project.location ? `Location: ${project.location}` : null,
+      project.format   ? `Format: ${project.format}`     : null,
+      brief ? `\nPhotographer's brief (use this — it's the steer): ${brief}` : null,
+      `\nGenerate 6 distinct description variants per the system prompt. Return JSON only.`,
+    ].filter(Boolean).join('\n');
+
+    const anthropicReq = {
+      model: 'claude-sonnet-4-5-20250929',
+      max_tokens: 2000,
+      system: AC_VOICE_SYSTEM,
+      messages: [{
+        role: 'user',
+        content: [...cleanImages, { type: 'text', text: userText }],
+      }],
+    };
+
+    const aRes = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': process.env.ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(anthropicReq),
+    });
+
+    if (!aRes.ok) {
+      const txt = await aRes.text();
+      console.error('[anthropic]', aRes.status, txt.slice(0, 500));
+      return res.status(502).json({ error: 'anthropic_error', status: aRes.status, message: txt.slice(0, 500) });
+    }
+
+    const aData = await aRes.json();
+    const raw = aData.content?.[0]?.text || '';
+
+    let variants;
+    try {
+      const match = raw.match(/\[[\s\S]*\]/);
+      variants = JSON.parse(match ? match[0] : raw);
+      if (!Array.isArray(variants)) throw new Error('not an array');
+      variants = variants.filter(v => v && typeof v.text === 'string' && v.text.trim());
+    } catch (e) {
+      console.error('[anthropic parse]', e.message, raw.slice(0, 400));
+      return res.status(502).json({ error: 'parse_failed', raw: raw.slice(0, 400) });
+    }
+
+    res.json({
+      variants,
+      meta: { imagesAnalyzed: cleanImages.length, usage: aData.usage || null },
+    });
+  } catch (err) {
+    console.error('[generate-descriptions] FATAL:', err?.message, err?.stack);
+    res.status(500).json({ error: 'internal', message: err?.message || 'Unknown error' });
+  }
+});
+
+/* ------------------------------------------------------------------ */
 /* Image serve / patch / delete                                        */
 /* ------------------------------------------------------------------ */
 

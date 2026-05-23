@@ -291,6 +291,96 @@ const PROJECT_TYPES = ['Editorial', 'Commercial', 'Lookbook', 'Campaign', 'Portr
 const PROJECT_FORMATS = ['Digital', 'Film', '35mm', 'Medium Format', 'Large Format'];
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
+/* AI-generated project description panel — six variants from Claude vision.
+   Sits under the description textarea on the project edit page.
+   - Optional brief textarea steers the AI.
+   - Click "Generate" → modal with 6 tone variants.
+   - "Use this" copies the variant back into the parent description field.
+   - "Regenerate" calls the API again (same brief). */
+function DescriptionAIPanel({ project, onPick }) {
+  const [brief, setBrief]       = vS('');
+  const [open, setOpen]         = vS(false);
+  const [loading, setLoading]   = vS(false);
+  const [variants, setVariants] = vS([]);
+  const [err, setErr]           = vS(null);
+
+  const generate = async () => {
+    setLoading(true);
+    setErr(null);
+    try {
+      const out = await window.AdminStore.generateDescriptions(project.id, brief);
+      setVariants(out?.variants || []);
+      setOpen(true);
+    } catch (e) {
+      const msg = e?.body?.error === 'api_key_missing'
+        ? 'ANTHROPIC_API_KEY not set on the NAS — add to nas-server/.env and rebuild.'
+        : (e?.message || 'Generation failed');
+      setErr(msg);
+      toast(msg, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const pick = (text) => {
+    onPick(text);
+    setOpen(false);
+    toast('Description updated', 'ok');
+  };
+
+  return (
+    <>
+      <div style={{ marginTop: 10, padding: '12px 14px', background: 'var(--panel-2, #f7f6f3)', border: '1px solid var(--rule)', borderRadius: 6 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--ink-muted)', marginBottom: 8 }}>
+          ✨ AI description — 6 variants from your images
+        </div>
+        <TextArea
+          value={brief}
+          onChange={setBrief}
+          rows={2}
+          placeholder="Optional brief — what's the shoot about? Models, location, vibe. (Steers the AI; you can leave blank.)"
+        />
+        <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
+          <Btn size="sm" onClick={generate} disabled={loading}>
+            {loading ? 'Analyzing images…' : 'Generate descriptions'}
+          </Btn>
+          <span className="ad-muted" style={{ fontSize: 12 }}>
+            Uses up to 5 images (cover, favorites, selected). ~$0.05 / run.
+          </span>
+        </div>
+      </div>
+
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        eyebrow="AI"
+        title="Pick a description"
+        width={680}
+        footer={
+          <>
+            <Btn variant="ghost" onClick={() => setOpen(false)}>Close</Btn>
+            <Btn onClick={generate} disabled={loading}>{loading ? 'Regenerating…' : 'Regenerate'}</Btn>
+          </>
+        }
+      >
+        {err && <div className="ad-error" style={{ marginBottom: 12 }}>{err}</div>}
+        {variants.length === 0 && !loading && <div className="ad-muted">No variants yet.</div>}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {variants.map((v, i) => (
+            <div key={i} style={{ border: '1px solid var(--rule)', borderRadius: 6, padding: '12px 14px', background: '#fff' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--ink-muted)' }}>{v.tone}</span>
+                <button className="ad-link" onClick={() => pick(v.text)}>Use this →</button>
+              </div>
+              <div style={{ fontSize: 14, lineHeight: 1.5 }}>{v.text}</div>
+            </div>
+          ))}
+        </div>
+      </Modal>
+    </>
+  );
+}
+
 function ProjectEditorView({ projectId, navigate }) {
   window.useStoreSubscribe();
   const existing = projectId && projectId !== 'new' ? window.AdminStore.getProject(projectId) : null;
@@ -407,8 +497,14 @@ function ProjectEditorView({ projectId, navigate }) {
               </button>
             </div>
           </Field>
-          <Field label="Description" wide hint="Internal notes + the blurb that appears on the project page.">
+          <Field label="Description" wide hint="The blurb that appears on the project page.">
             <TextArea value={draft.description} onChange={(v) => set('description', v)} rows={4}/>
+            {!isNew && (existing.images || []).filter(i => !i.rejected).length > 0 && (
+              <DescriptionAIPanel
+                project={existing}
+                onPick={(text) => set('description', text)}
+              />
+            )}
           </Field>
         </div>
 

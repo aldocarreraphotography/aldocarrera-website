@@ -890,6 +890,16 @@ const AdminStore = {
     return r.json();
   },
 
+  /* Generate 6 project description variants from images via Claude vision.
+     Returns { variants: [{tone, text}], meta: {imagesAnalyzed, usage} }.
+     Throws on auth/server/parse failure — caller shows toast. */
+  async generateDescriptions(projectId, brief = '') {
+    return this.apiFetch(`/api/projects/${encodeURIComponent(projectId)}/generate-descriptions`, {
+      method: 'POST',
+      body: JSON.stringify({ brief }),
+    });
+  },
+
   /* Multipart upload — does NOT set Content-Type (browser sets the boundary).
      Authenticated via Bearer token like apiFetch. */
   async apiUpload(path, formData) {
