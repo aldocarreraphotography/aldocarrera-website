@@ -31,7 +31,12 @@ function FeaturedStrip({ onOpenProject }) {
 
   return (
     <div className="featured-strip">
-      <div className="featured-strip-img">
+      <button
+        type="button"
+        className="featured-strip-img"
+        onClick={() => onOpenProject && onOpenProject(cur.project)}
+        aria-label={`Open project: ${cur.projectName}`}
+      >
         {stars.map((s, i) => (
           <img
             key={s.blobPath || i}
@@ -40,7 +45,7 @@ function FeaturedStrip({ onOpenProject }) {
             className={i === idx ? 'on' : ''}
           />
         ))}
-      </div>
+      </button>
       <div className="featured-strip-info">
         <div className="featured-strip-label">Featured</div>
         <div className="featured-strip-name">{cur.projectName}</div>
