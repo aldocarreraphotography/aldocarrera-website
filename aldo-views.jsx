@@ -93,7 +93,7 @@ function Portfolio({ view, onSetView, onOpenProject, onSetCrumb }) {
             onClick={() => onOpenProject(p)}
           >
             <div className="photo">
-              <img src={p.photo} alt={p.name} loading="lazy"/>
+              <img src={p.photo} alt={p.name} loading="lazy" style={p.coverFocalX != null ? { objectPosition: `${p.coverFocalX}% ${p.coverFocalY}%` } : undefined}/>
               <span className="tag">{p.type}</span>
             </div>
             {view === 'grid' ? (

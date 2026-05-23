@@ -1854,7 +1854,7 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
         {project.note && <p style={{fontSize:14, color:'var(--ink-soft)', marginBottom:18, fontStyle:'italic'}}>"{project.note}"</p>}
         {projectImages.map((img) => (
           <div key={img.id} className="mp-project" onClick={() => setOpenPhoto({ photo: img, list: projectImages })}>
-            <div className="photo"><img src={img.photo} alt={img.name}/></div>
+            <div className="photo"><img src={img.photo} alt={img.name} style={img.focalX != null ? { objectPosition: `${img.focalX}% ${img.focalY}%` } : undefined}/></div>
             <div className="info"><div className="name">{img.name}</div><div className="year">{img.date ? img.date.slice(0,7) : project.month}</div></div>
           </div>
         ))}
@@ -1865,7 +1865,7 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
       <div className="mobile-page portfolio">
         {PROJECTS.map(p => (
           <div key={p.id} className="mp-project" onClick={() => openProject(p)}>
-            <div className="photo"><img src={p.photo} alt={p.name}/></div>
+            <div className="photo"><img src={p.photo} alt={p.name} style={p.coverFocalX != null ? { objectPosition: `${p.coverFocalX}% ${p.coverFocalY}%` } : undefined}/></div>
             <div className="info">
               <div className="name">{p.name}</div>
               <div className="year">{p.year}</div>
@@ -1890,7 +1890,7 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
               <div className="fbody">
                 {items.map(it => (
                   <div key={it.id} className="thumb" onClick={() => setOpenPhoto({ photo: it, list: items })}>
-                    <div className="pic"><img src={it.photo} alt={it.name}/></div>
+                    <div className="pic"><img src={it.photo} alt={it.name} style={it.focalX != null ? { objectPosition: `${it.focalX}% ${it.focalY}%` } : undefined}/></div>
                     <span className="name">{it.name}</span>
                     <span className="sub">{it.client} · {it.size}</span>
                   </div>

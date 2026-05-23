@@ -375,6 +375,8 @@ function _aldoToPublicProject(p) {
     type: (p.type || 'EDITORIAL').toUpperCase(),
     format: p.format || 'Digital',
     photo: cover ? _aldoThumbUrl(cover.blobPath, 800) : PHOTOS[0],
+    coverFocalX: cover?.focalX ?? null,
+    coverFocalY: cover?.focalY ?? null,
     count: sorted.length,
     note: p.description || '',
     crew: p.crew || '',
