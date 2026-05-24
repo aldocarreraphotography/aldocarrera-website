@@ -1170,10 +1170,14 @@ app.put('/api/gallery/:token/select', async (req, res) => {
     if (!validLabels.has(u.label)) continue;
     const existing = selections[u.filename] || {};
     selections[u.filename] = {
-      label:   u.label ?? null,
-      stars:   Math.min(5, Math.max(0, parseInt(u.stars ?? 0, 10))),
-      note:    String(u.note ?? '').slice(0, 500),
-      markups: Array.isArray(u.markups) ? u.markups.slice(0, 100) : (existing.markups || []),
+      label:        u.label ?? null,
+      stars:        Math.min(5, Math.max(0, parseInt(u.stars ?? 0, 10))),
+      note:         String(u.note ?? '').slice(0, 500),
+      markups:      Array.isArray(u.markups)      ? u.markups.slice(0, 100)      : (existing.markups      || []),
+      voiceMarkups: Array.isArray(u.voiceMarkups) ? u.voiceMarkups.slice(0, 50)  : (existing.voiceMarkups || []),
+      // Preserve server-written voice fields
+      voiceNote:      existing.voiceNote      || undefined,
+      adminVoiceNote: existing.adminVoiceNote || undefined,
     };
   }
 
@@ -1697,6 +1701,75 @@ app.delete('/api/gallery/:token/images/:filename/voice', async (req, res) => {
     delete selections[filename].voiceNote;
     await updateGallery(gallery.token, { selections });
   }
+  res.json({ ok: true });
+});
+
+/* ── Positioned voice markups for client markup galleries ──────────────────
+   POST   /api/gallery/:token/images/:filename/voice-markup   — record at x,y
+   GET    /api/gallery/:token/images/:filename/voice-markup/:id  — serve audio
+   DELETE /api/gallery/:token/images/:filename/voice-markup/:id  — remove
+   Audio stored in __gallery-voice-mk/{token}/; metadata in selections[fn].voiceMarkups[]
+   ─────────────────────────────────────────────────────────────────────────── */
+
+app.post('/api/gallery/:token/images/:filename/voice-markup', upload.single('audio'), async (req, res) => {
+  const gallery = await findGallery(req.params.token).catch(() => null);
+  const check   = galleryTokenCheck(gallery, req);
+  if (check) return res.status(check.status).json({ error: check.err });
+  if (!req.file) return res.status(400).json({ error: 'no_file' });
+
+  const filename  = req.params.filename;
+  const x         = parseFloat(req.body?.x ?? 0.5);
+  const y         = parseFloat(req.body?.y ?? 0.5);
+  const ext       = _audioExt(req.file.mimetype);
+  const audioFile = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}.${ext}`;
+
+  await writeBytes(`__gallery-voice-mk/${gallery.token}`, audioFile, req.file.buffer);
+
+  const transcript = await _transcribeAudio(req.file.buffer, req.file.mimetype);
+
+  const id = 'vm_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const selections = { ...(gallery.selections || {}) };
+  if (!selections[filename]) selections[filename] = {};
+  if (!selections[filename].voiceMarkups) selections[filename].voiceMarkups = [];
+  selections[filename].voiceMarkups.push({
+    id, x, y,
+    file:       audioFile,
+    mime:       req.file.mimetype,
+    transcript: transcript || '',
+    size:       req.file.size,
+    recordedAt: new Date().toISOString(),
+  });
+  await updateGallery(gallery.token, { selections });
+  res.json({ ok: true, voiceMarkup: selections[filename].voiceMarkups.at(-1) });
+});
+
+app.get('/api/gallery/:token/images/:filename/voice-markup/:id', async (req, res) => {
+  const gallery = await findGallery(req.params.token).catch(() => null);
+  const check   = galleryTokenCheck(gallery, req);
+  if (check) return res.status(check.status).end();
+  const vm = (gallery.selections?.[req.params.filename]?.voiceMarkups || [])
+    .find(v => v.id === req.params.id);
+  if (!vm) return res.status(404).end();
+  const bytes = await readBytes(`__gallery-voice-mk/${gallery.token}`, vm.file);
+  if (!bytes) return res.status(404).end();
+  res.setHeader('Content-Type', vm.mime || 'audio/webm');
+  res.send(bytes);
+});
+
+app.delete('/api/gallery/:token/images/:filename/voice-markup/:id', async (req, res) => {
+  const gallery = await findGallery(req.params.token).catch(() => null);
+  const check   = galleryTokenCheck(gallery, req);
+  if (check) return res.status(check.status).json({ error: check.err });
+  const filename = req.params.filename;
+  const id       = req.params.id;
+  const selections = { ...(gallery.selections || {}) };
+  if (!selections[filename]?.voiceMarkups) return res.json({ ok: true });
+  const vm = selections[filename].voiceMarkups.find(v => v.id === id);
+  if (vm?.file) {
+    try { await deleteImage(`__gallery-voice-mk/${gallery.token}`, vm.file); } catch (_) {}
+  }
+  selections[filename].voiceMarkups = selections[filename].voiceMarkups.filter(v => v.id !== id);
+  await updateGallery(gallery.token, { selections });
   res.json({ ok: true });
 });
 

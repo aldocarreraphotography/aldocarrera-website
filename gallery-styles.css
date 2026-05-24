@@ -462,3 +462,14 @@ svg.star-svg    { width: 14px; height: 14px; display: block; }
 .gl-voice-del { color: rgba(255,255,255,0.4); }
 .gl-voice-del:hover { border-color: rgba(232,154,170,0.45); color: #f0c5d0; }
 .gl-voice-err { font-size: 10px; color: #e89aaa; font-family: 'IBM Plex Mono', monospace; }
+
+/* ── Voice markup list (panel right-side) ───────────────────────── */
+.gl-voice-status { min-height: 0; margin-bottom: 4px; }
+.gl-vm-list { display: flex; flex-direction: column; gap: 2px; }
+.gl-vm-row {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 7px 8px; border-radius: 3px; cursor: pointer;
+  transition: background 120ms;
+}
+.gl-vm-row:hover { background: rgba(255,255,255,0.04); }
+.gl-vm-row.active { background: rgba(246,194,207,0.08); }

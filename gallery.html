@@ -101,6 +101,10 @@ const state = {
 
 const COLORS = ['#d63e5a','#e85d5d','#4fca7e','#f5c842','#ffffff'];
 
+// Voice markup recording state (module-level, one at a time)
+let _voiceRec = null; // { x, y, filename, mr, chunks } | null
+let _voiceRecPanel = null; // DOM node to update during recording
+
 /* ------------------------------------------------------------------ */
 /* API                                                                 */
 /* ------------------------------------------------------------------ */
@@ -124,8 +128,9 @@ async function loadGallery() {
   state.images = data.images;
   state.selections = {};
   for (const img of data.images) {
-    state.selections[img.filename] = img.selection || { label: null, stars: 0, note: '', markups: [] };
-    if (!state.selections[img.filename].markups) state.selections[img.filename].markups = [];
+    state.selections[img.filename] = img.selection || { label: null, stars: 0, note: '', markups: [], voiceMarkups: [] };
+    if (!state.selections[img.filename].markups)      state.selections[img.filename].markups = [];
+    if (!state.selections[img.filename].voiceMarkups) state.selections[img.filename].voiceMarkups = [];
   }
 }
 
@@ -142,7 +147,18 @@ async function flushSave() {
   if (!saveQueue.size) return;
   const batch = [...saveQueue];
   saveQueue.clear();
-  const updates = batch.map(fn => ({ filename: fn, ...state.selections[fn] }));
+  const updates = batch.map(fn => {
+    const s = state.selections[fn] || {};
+    return {
+      filename:     fn,
+      label:        s.label,
+      stars:        s.stars,
+      note:         s.note,
+      markups:      s.markups,
+      voiceMarkups: (s.voiceMarkups || []).map(({ id, x, y, transcript, recordedAt, file, mime, size }) =>
+        ({ id, x, y, transcript, recordedAt, file, mime, size })),
+    };
+  });
   try {
     await apiFetch(`/api/gallery/${state.token}/select`, {
       method: 'PUT',
@@ -164,8 +180,9 @@ async function submitGallery() {
 /* Selection helpers                                                   */
 /* ------------------------------------------------------------------ */
 function getOrInit(filename) {
-  if (!state.selections[filename]) state.selections[filename] = { label: null, stars: 0, note: '', markups: [] };
-  if (!state.selections[filename].markups) state.selections[filename].markups = [];
+  if (!state.selections[filename]) state.selections[filename] = { label: null, stars: 0, note: '', markups: [], voiceMarkups: [] };
+  if (!state.selections[filename].markups)      state.selections[filename].markups = [];
+  if (!state.selections[filename].voiceMarkups) state.selections[filename].voiceMarkups = [];
   return state.selections[filename];
 }
 
@@ -273,7 +290,41 @@ function normToCanvas(nx, ny, b) {
 /* ------------------------------------------------------------------ */
 /* Canvas — draw all markups                                            */
 /* ------------------------------------------------------------------ */
-function redrawCanvas(canvas, imgEl, markups, activeId, previewShape) {
+function drawVoicePins(ctx, b, voiceMarkups, activeId, pendingPt) {
+  const items = [...(voiceMarkups || [])];
+  if (pendingPt) items.push({ id: '__pending__', x: pendingPt.x, y: pendingPt.y, _pending: true });
+  for (const vm of items) {
+    const pt = normToCanvas(vm.x, vm.y, b);
+    const isActive  = vm.id === activeId;
+    const isPending = !!vm._pending;
+    const r = isActive ? 14 : 11;
+    ctx.save();
+    // Outer glow for active
+    if (isActive || isPending) {
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, r + 4, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(246,194,207,0.25)';
+      ctx.fill();
+    }
+    // Circle background
+    ctx.beginPath();
+    ctx.arc(pt.x, pt.y, r, 0, Math.PI * 2);
+    ctx.fillStyle = isPending ? 'rgba(232,154,170,0.95)' : isActive ? 'rgba(246,194,207,0.95)' : 'rgba(246,194,207,0.80)';
+    ctx.fill();
+    ctx.strokeStyle = isPending ? '#c84a6a' : '#e89aaa';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    // Mic icon
+    ctx.font = `${isActive ? 12 : 10}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#1a1714';
+    ctx.fillText('🎤', pt.x, pt.y);
+    ctx.restore();
+  }
+}
+
+function redrawCanvas(canvas, imgEl, markups, activeId, previewShape, voiceMarkups, activeVoiceId, pendingVoicePt) {
   const dpr = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
   if (canvas.width !== rect.width * dpr || canvas.height !== rect.height * dpr) {
@@ -294,6 +345,7 @@ function redrawCanvas(canvas, imgEl, markups, activeId, previewShape) {
     const isActive = mk.id === activeId || mk.id === '__preview__';
     drawShape(ctx, b, mk.tool, mk.shape, mk.color, isActive);
   }
+  drawVoicePins(ctx, b, voiceMarkups, activeVoiceId, pendingVoicePt);
 }
 
 function drawShape(ctx, b, tool, shape, color, highlight) {
@@ -348,11 +400,9 @@ function drawShape(ctx, b, tool, shape, color, highlight) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Voice note recorder (gallery right-panel)                          */
+/* (Voice note recorder moved to positioned voice markup tool above)  */
 /* ------------------------------------------------------------------ */
-const GALLERY_VOICE_MAX = 120; // seconds
-
-function buildVoiceSection(wrap, filename, existingVoice) {
+function buildVoiceSection_REMOVED(wrap, filename, existingVoice) {
   let mr = null, chunks = [], timerInterval = null, timerSecs = 0, localBlob = null, localUrl = null;
 
   function render(phase, voiceNote, errMsg) {
@@ -516,6 +566,7 @@ function buildLightbox() {
       { id: 'ellipse',  label: '⬭', title: 'Circle' },
       { id: 'arrow',    label: '↗', title: 'Arrow' },
       { id: 'rect',     label: '▭', title: 'Rectangle' },
+      { id: 'voice',    label: '🎤', title: 'Voice note — click image to record' },
     ];
     for (const t of TOOLS) {
       const btn = el('button', {
@@ -672,14 +723,90 @@ function buildLightbox() {
   rebuildMarkupList();
   panel.appendChild(mkList);
 
-  /* ---- voice note section ---- */
+  /* ---- voice markup list ---- */
   panel.appendChild(el('div', { className: 'gl-panel-divider' }));
-  const voiceHead = el('div', { className: 'gl-panel-section-head' }, 'Voice note');
-  panel.appendChild(voiceHead);
+  const vmHead = el('div', { className: 'gl-panel-section-head' }, 'Voice notes');
+  panel.appendChild(vmHead);
 
-  const voiceWrap = el('div', { className: 'gl-voice-wrap' });
-  buildVoiceSection(voiceWrap, img.filename, sel.voiceNote || null);
-  panel.appendChild(voiceWrap);
+  const vmStatus = el('div', { className: 'gl-voice-status', id: 'gl-vm-status' });
+  panel.appendChild(vmStatus);
+  _voiceRecPanel = vmStatus;
+
+  const vmList = el('div', { id: 'vm-list', className: 'gl-vm-list' });
+  const rebuildVmList = (activeVmId) => {
+    vmList.innerHTML = '';
+    const vms = getOrInit(img.filename).voiceMarkups;
+    if (!vms.length) {
+      vmList.appendChild(el('div', { className: 'gl-markup-empty' },
+        _voiceRec ? '' : 'Select 🎤 then click image to record.'
+      ));
+      return;
+    }
+    for (const vm of vms) {
+      const isActive = vm.id === activeVmId;
+      const row = el('div', {
+        className: `gl-vm-row ${isActive ? 'active' : ''}`,
+        'data-vmid': vm.id,
+        onClick: () => {
+          state.activeVoiceMarkup = state.activeVoiceMarkup === vm.id ? null : vm.id;
+          rebuildVmList(state.activeVoiceMarkup);
+          redrawCanvas(canvas, imgEl, getOrInit(img.filename).markups, state.activeMarkup, null,
+            getOrInit(img.filename).voiceMarkups, state.activeVoiceMarkup);
+          // Play audio
+          if (state.activeVoiceMarkup === vm.id) {
+            const audioEl = qs(`#gl-vm-audio-${CSS.escape(vm.id)}`);
+            if (audioEl) audioEl.play();
+          }
+        },
+      });
+      const dot = el('span', { className: 'gl-markup-dot', style: { background: '#f6c2cf' } });
+      const body2 = el('div', { className: 'gl-markup-body', style: { flex: 1, minWidth: 0 } });
+
+      const audioUrl = `${API_BASE}/api/gallery/${state.token}/images/${encodeURIComponent(img.filename)}/voice-markup/${vm.id}`;
+      // Fetch with auth → blob URL
+      const audioEl = el('audio', { id: `gl-vm-audio-${vm.id}`, controls: '' });
+      audioEl.style.cssText = 'height:28px;width:100%;max-width:240px;filter:invert(0.85);margin-bottom:4px';
+      const headers = {};
+      if (state.password) headers['x-gallery-password'] = state.password;
+      fetch(audioUrl, { headers })
+        .then(r => r.blob())
+        .then(b => { audioEl.src = URL.createObjectURL(b); })
+        .catch(() => {});
+      body2.appendChild(audioEl);
+
+      if (vm.transcript) {
+        body2.appendChild(el('div', { className: 'gl-markup-comment' }, vm.transcript));
+      }
+      body2.appendChild(el('span', { className: 'gl-markup-time muted' },
+        vm.recordedAt ? formatMarkupTime(vm.recordedAt) : ''
+      ));
+      row.appendChild(dot);
+      row.appendChild(body2);
+      const del = el('button', {
+        className: 'gl-markup-del',
+        title: 'Delete',
+        onClick: async (e) => {
+          e.stopPropagation();
+          const headers2 = {};
+          if (state.password) headers2['x-gallery-password'] = state.password;
+          await fetch(`${API_BASE}/api/gallery/${state.token}/images/${encodeURIComponent(img.filename)}/voice-markup/${vm.id}`, {
+            method: 'DELETE',
+            headers: headers2,
+          }).catch(() => {});
+          const s = getOrInit(img.filename);
+          s.voiceMarkups = s.voiceMarkups.filter(v => v.id !== vm.id);
+          if (state.activeVoiceMarkup === vm.id) state.activeVoiceMarkup = null;
+          rebuildVmList(state.activeVoiceMarkup);
+          redrawCanvas(canvas, imgEl, getOrInit(img.filename).markups, state.activeMarkup, null,
+            getOrInit(img.filename).voiceMarkups, state.activeVoiceMarkup);
+        },
+      }, '×');
+      row.appendChild(del);
+      vmList.appendChild(row);
+    }
+  };
+  rebuildVmList(state.activeVoiceMarkup);
+  panel.appendChild(vmList);
 
   body.appendChild(panel);
   lb.appendChild(body);
@@ -693,25 +820,121 @@ function buildLightbox() {
   }
 
   /* ---- canvas drawing logic ---- */
-  function setupCanvas() {
-    redrawCanvas(canvas, imgEl, sel.markups, state.activeMarkup, null);
+  function fullRedraw(pendingVoicePt) {
+    redrawCanvas(canvas, imgEl,
+      getOrInit(img.filename).markups, state.activeMarkup, null,
+      getOrInit(img.filename).voiceMarkups, state.activeVoiceMarkup, pendingVoicePt || null);
   }
 
+  function setupCanvas() { fullRedraw(); }
   imgEl.addEventListener('load', setupCanvas);
   if (imgEl.complete && imgEl.naturalWidth) setupCanvas();
 
-  const ro = new ResizeObserver(() => {
-    redrawCanvas(canvas, imgEl, getOrInit(img.filename).markups, state.activeMarkup, null);
-  });
+  const ro = new ResizeObserver(() => fullRedraw());
   ro.observe(imgWrap);
 
-  if (!readOnly) {
-    const getEvtPt = (e) => {
-      const pt = clientToNorm(e, canvas, imgEl);
-      return pt;
-    };
+  // Keep cursor in sync with tool
+  function updateCursor() {
+    canvas.style.cursor = state.tool === 'voice' ? 'crosshair' : 'crosshair';
+  }
+  updateCursor();
+  canvas.addEventListener('mousemove', () => updateCursor());
 
+  if (!readOnly) {
+    const getEvtPt = (e) => clientToNorm(e, canvas, imgEl);
+
+    /* ---- voice tool mousedown ---- */
     canvas.addEventListener('mousedown', (e) => {
+      if (state.tool !== 'voice') return;
+      const pt = getEvtPt(e);
+      if (!pt) return;
+      e.preventDefault();
+
+      // Stop any previous recording
+      if (_voiceRec?.mr?.state === 'recording') _voiceRec.mr.stop();
+
+      // Show pending pin immediately
+      fullRedraw(pt);
+
+      // Update panel status
+      if (_voiceRecPanel) {
+        _voiceRecPanel.innerHTML = '';
+        const dot  = el('span', { className: 'gl-voice-dot' });
+        const txt  = el('span', { className: 'gl-voice-timer', id: 'gl-vt' }, '0:00');
+        const stop = el('button', { className: 'gl-voice-btn gl-voice-stop',
+          onClick: () => { if (_voiceRec?.mr?.state === 'recording') _voiceRec.mr.stop(); }
+        }, 'Stop');
+        _voiceRecPanel.appendChild(el('div', { className: 'gl-voice-recording-row' }, dot, txt, stop));
+      }
+
+      navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+        const mime = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4';
+        const mr = new MediaRecorder(stream, { mimeType: mime });
+        const chunks = [];
+        _voiceRec = { x: pt.x, y: pt.y, filename: img.filename, mr, chunks };
+
+        let secs = 0;
+        const timerID = setInterval(() => {
+          secs++;
+          const el2 = document.getElementById('gl-vt');
+          if (el2) el2.textContent = `${Math.floor(secs/60)}:${String(secs%60).padStart(2,'0')}`;
+          if (secs >= 120) mr.stop();
+        }, 1000);
+
+        mr.ondataavailable = ev => { if (ev.data.size) chunks.push(ev.data); };
+        mr.onstop = async () => {
+          clearInterval(timerID);
+          stream.getTracks().forEach(t => t.stop());
+          const rec = _voiceRec;
+          _voiceRec = null;
+
+          if (_voiceRecPanel) {
+            _voiceRecPanel.innerHTML = '';
+            _voiceRecPanel.appendChild(el('span', { className: 'gl-voice-state' }, 'Uploading…'));
+          }
+
+          try {
+            const blob = new Blob(chunks, { type: mr.mimeType || mime });
+            const fd = new FormData();
+            fd.append('audio', blob, `note.${mime.includes('mp4') ? 'm4a' : 'webm'}`);
+            fd.append('x', String(rec.x));
+            fd.append('y', String(rec.y));
+            const headers = {};
+            if (state.password) headers['x-gallery-password'] = state.password;
+            const r = await fetch(
+              `${API_BASE}/api/gallery/${state.token}/images/${encodeURIComponent(rec.filename)}/voice-markup`,
+              { method: 'POST', headers, body: fd }
+            );
+            if (!r.ok) throw new Error(`${r.status}`);
+            const { voiceMarkup } = await r.json();
+            getOrInit(rec.filename).voiceMarkups.push(voiceMarkup);
+            state.activeVoiceMarkup = voiceMarkup.id;
+            if (_voiceRecPanel) _voiceRecPanel.innerHTML = '';
+            rebuildVmList(voiceMarkup.id);
+            fullRedraw();
+          } catch (err2) {
+            if (_voiceRecPanel) {
+              _voiceRecPanel.innerHTML = '';
+              _voiceRecPanel.appendChild(el('span', { className: 'gl-voice-err' }, 'Upload failed: ' + err2.message));
+            }
+            fullRedraw(); // remove pending pin
+          }
+        };
+
+        mr.start();
+      }).catch(() => {
+        _voiceRec = null;
+        if (_voiceRecPanel) {
+          _voiceRecPanel.innerHTML = '';
+          _voiceRecPanel.appendChild(el('span', { className: 'gl-voice-err' }, 'Microphone access denied'));
+        }
+        fullRedraw();
+      });
+    });
+
+    /* ---- drawing tools mousedown (skip voice tool) ---- */
+    canvas.addEventListener('mousedown', (e) => {
+      if (state.tool === 'voice') return;
       const pt = getEvtPt(e);
       if (!pt) return;
       state.drawing = true;
@@ -721,25 +944,26 @@ function buildLightbox() {
     });
 
     canvas.addEventListener('mousemove', (e) => {
-      if (!state.drawing) return;
+      if (!state.drawing || state.tool === 'voice') return;
       const pt = getEvtPt(e);
       if (!pt) return;
       state.drawCurrent.push(pt);
       const preview = buildPreviewShape(pt);
-      redrawCanvas(canvas, imgEl, getOrInit(img.filename).markups, state.activeMarkup, preview);
+      redrawCanvas(canvas, imgEl, getOrInit(img.filename).markups, state.activeMarkup, preview,
+        getOrInit(img.filename).voiceMarkups, state.activeVoiceMarkup);
     });
 
     const finishDraw = (e) => {
-      if (!state.drawing) return;
+      if (!state.drawing || state.tool === 'voice') return;
       state.drawing = false;
       const pt = getEvtPt(e) || state.drawCurrent[state.drawCurrent.length - 1];
       if (!pt) return;
 
       const shape = finalizeShape(pt);
-      if (!shape) { redrawCanvas(canvas, imgEl, getOrInit(img.filename).markups, state.activeMarkup, null); return; }
+      if (!shape) { fullRedraw(); return; }
 
       addMarkup(img.filename, shape, '');
-      redrawCanvas(canvas, imgEl, getOrInit(img.filename).markups, state.activeMarkup, null);
+      fullRedraw();
       rebuildMarkupList();
     };
 
