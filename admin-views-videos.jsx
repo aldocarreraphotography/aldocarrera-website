@@ -135,6 +135,9 @@ function VideosView({ navigate }) {
    SHARED FORM FIELDS FRAGMENT
    ============================================================ */
 function VideoFormFields({ form, set, sourceType, setSourceType }) {
+  /* Same client list the project form uses — matches names across both
+     so a video and its parent project share the canonical spelling. */
+  const clientOptions = useMemoClients();
   const projects = window.AdminStore.getProjects();
   return (
     <>
@@ -161,10 +164,10 @@ function VideoFormFields({ form, set, sourceType, setSourceType }) {
 
       <div className="ad-form-grid">
         <Field label="Client">
-          <TextInput
+          <ClientCombobox
             value={form.client}
             onChange={v => set('client', v)}
-            placeholder="e.g. BAPE Studio"
+            options={clientOptions}
           />
         </Field>
         <Field label="Year">

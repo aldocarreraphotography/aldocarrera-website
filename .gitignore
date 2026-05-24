@@ -1,1 +1,22 @@
+# macOS Finder metadata
 .DS_Store
+
+# Node
+node_modules/
+
+# Build output — Netlify rebuilds dist/ on every deploy via
+# `npm run build` (see scripts/build.mjs + netlify.toml).
+# Local dist/ is a transient artifact; never commit it.
+dist/
+
+# Env files — never commit. Examples (.env.example) are committed.
+.env
+.env.local
+nas-server/.env
+nas-server/plausible/plausible-conf.env
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*~

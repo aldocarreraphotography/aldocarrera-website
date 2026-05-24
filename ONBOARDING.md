@@ -32,8 +32,11 @@ git add <files>
 git commit -m "..."
 git push origin main      # Netlify auto-deploys in ~60s
 ```
-If a file is also referenced from `dist/`, copy it there too. Netlify serves
-from the repo root — `dist/` is a legacy mirror that some routes still hit.
+Netlify serves from `dist/` (per `netlify.toml` → `publish = "dist"`).
+`scripts/build.mjs` copies the right source files into `dist/` on every
+build via `npm run build`. **`dist/` is gitignored** — it's a build
+artifact. Your local `dist/` may be stale; Netlify rebuilds it fresh on
+every deploy. Don't edit `dist/` directly; edit the root sources.
 
 ### NAS changes (`nas-server/**`)
 ```bash
