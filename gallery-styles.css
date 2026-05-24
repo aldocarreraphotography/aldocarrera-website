@@ -421,3 +421,44 @@ svg.star-svg    { width: 14px; height: 14px; display: block; }
   .gl-lb-panel { width: 180px; }
   .gl-lb-label-btn { font-size: 10px; padding: 5px 2px; }
 }
+
+/* ── Gallery voice recorder ─────────────────────────────────────── */
+.gl-voice-wrap { display: flex; flex-direction: column; gap: 8px; }
+.gl-voice-btn {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.14);
+  color: rgba(255,255,255,0.8);
+  padding: 6px 11px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px; letter-spacing: 0.07em; text-transform: uppercase;
+  cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px;
+  transition: background 130ms, border-color 130ms;
+}
+.gl-voice-btn:hover { background: rgba(255,255,255,0.11); border-color: rgba(255,255,255,0.25); }
+.gl-voice-mic { color: #f0c5d0; }
+.gl-voice-stop {
+  background: rgba(232,154,170,0.12);
+  border-color: rgba(232,154,170,0.45);
+  color: #f0c5d0;
+}
+.gl-voice-recording-row { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.gl-voice-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #e89aaa; flex-shrink: 0;
+  animation: gl-voice-pulse 1.2s ease-in-out infinite;
+}
+@keyframes gl-voice-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+.gl-voice-timer {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px; color: rgba(255,255,255,0.6); min-width: 34px;
+}
+.gl-voice-hint { font-size: 10px; color: rgba(255,255,255,0.35); font-family: 'IBM Plex Mono', monospace; }
+.gl-voice-state { font-size: 10px; color: rgba(255,255,255,0.45); font-family: 'IBM Plex Mono', monospace; letter-spacing: 0.06em; }
+.gl-voice-transcript {
+  font-size: 11px; color: rgba(255,255,255,0.5); font-style: italic; line-height: 1.5;
+}
+.gl-voice-actions { display: flex; gap: 7px; }
+.gl-voice-del { color: rgba(255,255,255,0.4); }
+.gl-voice-del:hover { border-color: rgba(232,154,170,0.45); color: #f0c5d0; }
+.gl-voice-err { font-size: 10px; color: #e89aaa; font-family: 'IBM Plex Mono', monospace; }

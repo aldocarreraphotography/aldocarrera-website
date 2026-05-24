@@ -334,7 +334,7 @@ function GalleryLightbox({ img, sel, allImages, allSels, onClose, token, onVoice
             <AdminVoiceRecorder
               token={token}
               filename={current.filename}
-              initialVoice={curSel.voiceNote || null}
+              initialVoice={curSel.adminVoiceNote || null}
               onSaved={vn => onVoiceSaved && onVoiceSaved(current.filename, vn)}
               onDeleted={() => onVoiceSaved && onVoiceSaved(current.filename, null)}
             />
@@ -369,7 +369,7 @@ function GalleryImageCard({ img, sel, onClick }) {
           <div style={{ fontSize: 11, color: '#5a6fa8', marginTop: 2 }}>✎ {markups.length} markup{markups.length === 1 ? '' : 's'}</div>
         )}
         {sel?.note && <div style={{ fontSize: 11, color: 'var(--ink-muted)', marginTop: 2 }}>{sel.note}</div>}
-        {sel?.voiceNote && (
+        {sel?.adminVoiceNote && (
           <div style={{ fontSize: 11, color: '#c89b3c', marginTop: 2 }}>🎤 voice note</div>
         )}
       </div>
@@ -981,8 +981,8 @@ function GalleryDetailView({ token, navigate }) {
           onVoiceSaved={(filename, vn) => {
             setGallery(g => {
               const selections = { ...(g.selections || {}), [filename]: { ...(g.selections?.[filename] || {}) } };
-              if (vn) selections[filename].voiceNote = vn;
-              else delete selections[filename].voiceNote;
+              if (vn) selections[filename].adminVoiceNote = vn;
+              else delete selections[filename].adminVoiceNote;
               return { ...g, selections };
             });
           }}

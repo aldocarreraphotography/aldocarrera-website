@@ -1571,7 +1571,8 @@ app.get('/api/admin/gallery-portals/:token/voice/:filename', async (req, res) =>
    GET    /api/admin/galleries/:token/images/:filename/voice  — serve audio
    DELETE /api/admin/galleries/:token/images/:filename/voice  — remove
    All JWT-auth (admin only).
-   Audio stored in images/__gallery-voice/{token}/; metadata in selections[filename].voiceNote
+   Audio stored in __gallery-voice-admin/{token}/; metadata in selections[filename].adminVoiceNote
+   (Kept separate from the client voiceNote so they don't overwrite each other.)
    ─────────────────────────────────────────────────────────────────────────── */
 
 app.post('/api/admin/galleries/:token/images/:filename/voice', upload.single('audio'), async (req, res) => {
@@ -1584,13 +1585,78 @@ app.post('/api/admin/galleries/:token/images/:filename/voice', upload.single('au
   const ext      = _audioExt(req.file.mimetype);
   const audioFile = `${Date.now()}_${filename.replace(/\.[^.]+$/, '')}.${ext}`;
 
+  await writeBytes(`__gallery-voice-admin/${gallery.token}`, audioFile, req.file.buffer);
+
+  const transcript = await _transcribeAudio(req.file.buffer, req.file.mimetype);
+
+  const selections = { ...(gallery.selections || {}) };
+  if (!selections[filename]) selections[filename] = {};
+  if (selections[filename].adminVoiceNote?.file) {
+    try { await deleteImage(`__gallery-voice-admin/${gallery.token}`, selections[filename].adminVoiceNote.file); } catch (_) {}
+  }
+  selections[filename].adminVoiceNote = {
+    file:       audioFile,
+    mime:       req.file.mimetype,
+    transcript: transcript || '',
+    size:       req.file.size,
+    recordedAt: new Date().toISOString(),
+  };
+  await updateGallery(gallery.token, { selections });
+  res.json({ ok: true, voiceNote: selections[filename].adminVoiceNote });
+});
+
+app.get('/api/admin/galleries/:token/images/:filename/voice', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  const gallery = await findGallery(req.params.token);
+  if (!gallery) return res.status(404).end();
+  const voice = gallery.selections?.[req.params.filename]?.adminVoiceNote;
+  if (!voice) return res.status(404).end();
+  const bytes = await readBytes(`__gallery-voice-admin/${gallery.token}`, voice.file);
+  if (!bytes) return res.status(404).end();
+  res.setHeader('Content-Type', voice.mime || 'audio/webm');
+  res.send(bytes);
+});
+
+app.delete('/api/admin/galleries/:token/images/:filename/voice', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  const gallery  = await findGallery(req.params.token);
+  if (!gallery) return res.status(404).json({ error: 'not_found' });
+  const filename = req.params.filename;
+  const voice    = gallery.selections?.[filename]?.adminVoiceNote;
+  if (voice?.file) {
+    try { await deleteImage(`__gallery-voice-admin/${gallery.token}`, voice.file); } catch (_) {}
+  }
+  const selections = { ...(gallery.selections || {}) };
+  if (selections[filename]) {
+    delete selections[filename].adminVoiceNote;
+    await updateGallery(gallery.token, { selections });
+  }
+  res.json({ ok: true });
+});
+
+/* ── Client voice notes for galleries (markup/selects system) ──────────────
+   POST   /api/gallery/:token/images/:filename/voice  — upload + transcribe (password-gated)
+   GET    /api/gallery/:token/images/:filename/voice  — serve audio (password-gated)
+   DELETE /api/gallery/:token/images/:filename/voice  — remove (password-gated)
+   Audio stored in __gallery-voice/{token}/; metadata in selections[filename].voiceNote
+   ─────────────────────────────────────────────────────────────────────────── */
+
+app.post('/api/gallery/:token/images/:filename/voice', upload.single('audio'), async (req, res) => {
+  const gallery = await findGallery(req.params.token).catch(() => null);
+  const check   = galleryTokenCheck(gallery, req);
+  if (check) return res.status(check.status).json({ error: check.err });
+  if (!req.file) return res.status(400).json({ error: 'no_file' });
+
+  const filename  = req.params.filename;
+  const ext       = _audioExt(req.file.mimetype);
+  const audioFile = `${Date.now()}_${filename.replace(/\.[^.]+$/, '')}.${ext}`;
+
   await writeBytes(`__gallery-voice/${gallery.token}`, audioFile, req.file.buffer);
 
   const transcript = await _transcribeAudio(req.file.buffer, req.file.mimetype);
 
   const selections = { ...(gallery.selections || {}) };
   if (!selections[filename]) selections[filename] = {};
-  // Remove old voice file if present
   if (selections[filename].voiceNote?.file) {
     try { await deleteImage(`__gallery-voice/${gallery.token}`, selections[filename].voiceNote.file); } catch (_) {}
   }
@@ -1605,10 +1671,10 @@ app.post('/api/admin/galleries/:token/images/:filename/voice', upload.single('au
   res.json({ ok: true, voiceNote: selections[filename].voiceNote });
 });
 
-app.get('/api/admin/galleries/:token/images/:filename/voice', async (req, res) => {
-  if (!requireAuth(req, res)) return;
-  const gallery = await findGallery(req.params.token);
-  if (!gallery) return res.status(404).end();
+app.get('/api/gallery/:token/images/:filename/voice', async (req, res) => {
+  const gallery = await findGallery(req.params.token).catch(() => null);
+  const check   = galleryTokenCheck(gallery, req);
+  if (check) return res.status(check.status).end();
   const voice = gallery.selections?.[req.params.filename]?.voiceNote;
   if (!voice) return res.status(404).end();
   const bytes = await readBytes(`__gallery-voice/${gallery.token}`, voice.file);
@@ -1617,10 +1683,10 @@ app.get('/api/admin/galleries/:token/images/:filename/voice', async (req, res) =
   res.send(bytes);
 });
 
-app.delete('/api/admin/galleries/:token/images/:filename/voice', async (req, res) => {
-  if (!requireAuth(req, res)) return;
-  const gallery  = await findGallery(req.params.token);
-  if (!gallery) return res.status(404).json({ error: 'not_found' });
+app.delete('/api/gallery/:token/images/:filename/voice', async (req, res) => {
+  const gallery = await findGallery(req.params.token).catch(() => null);
+  const check   = galleryTokenCheck(gallery, req);
+  if (check) return res.status(check.status).json({ error: check.err });
   const filename = req.params.filename;
   const voice    = gallery.selections?.[filename]?.voiceNote;
   if (voice?.file) {

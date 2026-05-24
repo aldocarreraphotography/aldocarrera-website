@@ -348,6 +348,143 @@ function drawShape(ctx, b, tool, shape, color, highlight) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Voice note recorder (gallery right-panel)                          */
+/* ------------------------------------------------------------------ */
+const GALLERY_VOICE_MAX = 120; // seconds
+
+function buildVoiceSection(wrap, filename, existingVoice) {
+  let mr = null, chunks = [], timerInterval = null, timerSecs = 0, localBlob = null, localUrl = null;
+
+  function render(phase, voiceNote, errMsg) {
+    wrap.innerHTML = '';
+
+    if (phase === 'idle') {
+      const btn = el('button', { className: 'gl-voice-btn gl-voice-record', onClick: startRecording },
+        el('span', { className: 'gl-voice-mic' }, '🎤'), ' Record voice note'
+      );
+      wrap.appendChild(btn);
+
+    } else if (phase === 'recording') {
+      const row = el('div', { className: 'gl-voice-recording-row' },
+        el('span', { className: 'gl-voice-dot' }),
+        el('span', { className: 'gl-voice-timer', id: 'gl-voice-timer-' + CSS.escape(filename) }, '0:00'),
+        el('button', { className: 'gl-voice-btn gl-voice-stop', onClick: stopRecording }, 'Stop'),
+        el('span', { className: 'gl-voice-hint' }, `max ${GALLERY_VOICE_MAX / 60} min`),
+      );
+      wrap.appendChild(row);
+
+    } else if (phase === 'uploading') {
+      wrap.appendChild(el('span', { className: 'gl-voice-state' }, 'Uploading…'));
+
+    } else if (phase === 'has' && voiceNote) {
+      const audioSrc = localUrl ||
+        `${API_BASE}/api/gallery/${state.token}/images/${encodeURIComponent(filename)}/voice`;
+      const headers = {};
+      if (state.password) headers['x-gallery-password'] = state.password;
+
+      // Fetch audio with auth header → blob URL (since audio element can't send custom headers)
+      const audioEl = el('audio', { controls: '' });
+      audioEl.style.cssText = 'height:32px;width:100%;max-width:340px;filter:invert(0.85)';
+      if (localUrl) {
+        audioEl.src = localUrl;
+      } else {
+        fetch(audioSrc, { headers }).then(r => r.blob()).then(b => {
+          if (localUrl) URL.revokeObjectURL(localUrl);
+          localUrl = URL.createObjectURL(b);
+          audioEl.src = localUrl;
+        }).catch(() => {});
+      }
+      wrap.appendChild(audioEl);
+
+      if (voiceNote.transcript) {
+        wrap.appendChild(el('div', { className: 'gl-voice-transcript' }, `"${voiceNote.transcript}"`));
+      }
+
+      const actions = el('div', { className: 'gl-voice-actions' });
+      actions.appendChild(el('button', { className: 'gl-voice-btn gl-voice-re', onClick: startRecording }, 'Re-record'));
+      actions.appendChild(el('button', { className: 'gl-voice-btn gl-voice-del', onClick: deleteNote }, 'Delete'));
+      wrap.appendChild(actions);
+    }
+
+    if (errMsg) wrap.appendChild(el('div', { className: 'gl-voice-err' }, errMsg));
+  }
+
+  async function startRecording() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mime   = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4';
+      mr     = new MediaRecorder(stream, { mimeType: mime });
+      chunks = [];
+      mr.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+      mr.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        clearInterval(timerInterval);
+        const blob = new Blob(chunks, { type: mr.mimeType || mime });
+        localBlob  = blob;
+        render('uploading', null, '');
+        try {
+          const fd = new FormData();
+          fd.append('audio', blob, `note.${mime.includes('mp4') ? 'm4a' : 'webm'}`);
+          const headers = {};
+          if (state.password) headers['x-gallery-password'] = state.password;
+          const r = await fetch(`${API_BASE}/api/gallery/${state.token}/images/${encodeURIComponent(filename)}/voice`, {
+            method: 'POST',
+            headers,
+            body: fd,
+          });
+          if (!r.ok) throw new Error(`Upload failed (${r.status})`);
+          const { voiceNote } = await r.json();
+          if (localUrl) URL.revokeObjectURL(localUrl);
+          localUrl = URL.createObjectURL(blob);
+          voiceNote._localUrl = localUrl;
+          // Update state so next open of this lightbox picks it up
+          getOrInit(filename).voiceNote = voiceNote;
+          render('has', voiceNote, '');
+        } catch (e2) {
+          render('idle', null, e2.message || 'Upload failed');
+        }
+      };
+      mr.start();
+      timerSecs = 0;
+      render('recording', null, '');
+      timerInterval = setInterval(() => {
+        timerSecs++;
+        const timerEl = document.getElementById('gl-voice-timer-' + CSS.escape(filename));
+        if (timerEl) timerEl.textContent = `${Math.floor(timerSecs / 60)}:${String(timerSecs % 60).padStart(2, '0')}`;
+        if (timerSecs >= GALLERY_VOICE_MAX) stopRecording();
+      }, 1000);
+    } catch (e) {
+      render('idle', null, 'Microphone access denied');
+    }
+  }
+
+  function stopRecording() {
+    if (mr && mr.state === 'recording') mr.stop();
+  }
+
+  async function deleteNote() {
+    try {
+      const headers = {};
+      if (state.password) headers['x-gallery-password'] = state.password;
+      await fetch(`${API_BASE}/api/gallery/${state.token}/images/${encodeURIComponent(filename)}/voice`, {
+        method: 'DELETE',
+        headers,
+      });
+      if (localUrl) { URL.revokeObjectURL(localUrl); localUrl = null; }
+      const s = getOrInit(filename);
+      delete s.voiceNote;
+      render('idle', null, '');
+    } catch (e) {
+      render('has', getOrInit(filename).voiceNote, 'Delete failed: ' + e.message);
+    }
+  }
+
+  // Initial render
+  const init = existingVoice;
+  render(init ? 'has' : 'idle', init, '');
+}
+
+/* ------------------------------------------------------------------ */
 /* Lightbox — build                                                    */
 /* ------------------------------------------------------------------ */
 function buildLightbox() {
@@ -534,6 +671,15 @@ function buildLightbox() {
   };
   rebuildMarkupList();
   panel.appendChild(mkList);
+
+  /* ---- voice note section ---- */
+  panel.appendChild(el('div', { className: 'gl-panel-divider' }));
+  const voiceHead = el('div', { className: 'gl-panel-section-head' }, 'Voice note');
+  panel.appendChild(voiceHead);
+
+  const voiceWrap = el('div', { className: 'gl-voice-wrap' });
+  buildVoiceSection(voiceWrap, img.filename, sel.voiceNote || null);
+  panel.appendChild(voiceWrap);
 
   body.appendChild(panel);
   lb.appendChild(body);
