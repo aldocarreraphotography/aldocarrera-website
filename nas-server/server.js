@@ -44,6 +44,33 @@ const IMAGES_DIR = process.env.IMAGES_DIR || path.join(process.cwd(), 'images');
 if (!process.env.ADMIN_PASSWORD) throw new Error('ADMIN_PASSWORD env var is required');
 
 /* ------------------------------------------------------------------ */
+/* Defensive: auto-catch async errors from route handlers              */
+/* ------------------------------------------------------------------ */
+/* Express 4 doesn't catch rejected promises returned from async route
+   handlers, so an unguarded `throw` or `await` rejection leaves the
+   response open and the client sees "Load failed" (CLAUDE.md Rule 5).
+   We monkey-patch the route methods once here to auto-wrap every
+   handler in a catch-and-forward, then add a global error middleware
+   later (before app.listen) that turns the error into a clean 500.
+   Existing try/catch blocks in routes still work — they catch first
+   and never reach the wrapper. */
+for (const method of ['get', 'post', 'put', 'patch', 'delete', 'all', 'use']) {
+  const orig = app[method].bind(app);
+  app[method] = (...args) => {
+    const wrapped = args.map(h => {
+      if (typeof h !== 'function' || h.length === 4) return h; // skip non-fns and error middleware
+      return function _safeRouteHandler(req, res, next) {
+        try {
+          const out = h(req, res, next);
+          if (out && typeof out.catch === 'function') out.catch(next);
+        } catch (err) { next(err); }
+      };
+    });
+    return orig(...wrapped);
+  };
+}
+
+/* ------------------------------------------------------------------ */
 /* Middleware                                                          */
 /* ------------------------------------------------------------------ */
 
@@ -1948,6 +1975,19 @@ app.get('/api/ga-analytics', async (req, res) => {
       code:    err?.code,
     });
   }
+});
+
+/* ------------------------------------------------------------------ */
+/* Global error handler — catches anything the route wrappers forward  */
+/* ------------------------------------------------------------------ */
+/* Paired with the safeRoute monkey-patch near `const app = express()`.
+   Any async rejection in any handler ends up here as a clean 500
+   instead of a hung connection. Routes with their own try/catch +
+   res.status(...).json(...) short-circuit before this fires. */
+app.use((err, req, res, next) => {
+  console.error('[express-error]', req.method, req.path, err?.stack || err?.message || err);
+  if (res.headersSent) return next(err);
+  res.status(500).json({ error: 'internal', message: err?.message || 'Unknown error' });
 });
 
 /* ------------------------------------------------------------------ */

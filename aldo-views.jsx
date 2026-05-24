@@ -6,7 +6,11 @@ const { PROJECTS, ARCHIVE, CLIENTS, PHOTOS, SERVICES, ABOUT, SETTINGS } = window
 
 /* Pixelated lazy-load placeholder (SHOWstudio-style) + focal point.
    `placeholderStyle()` returns inline bg style for the IMAGE WRAPPER —
-     a 20px PNG that renders as chunky pixel blocks via .has-placeholder CSS.
+     a 20px PNG that renders as chunky pixel blocks via image-rendering:
+     pixelated. Bg-size/repeat/image-rendering live INLINE (not in a CSS
+     class) so they beat more-specific rules like .portfolio .project
+     .photo { background: var(--paper-soft) } which would otherwise
+     reset bg-size to auto and tile the placeholder.
    `focalImgStyle()` returns objectPosition only — applied to the <img>
      itself so the real photo isn't pixelated.
    Accepts either { focalX, focalY, blurDataURL } from an image record or
@@ -18,14 +22,18 @@ function placeholderStyle(src) {
   const fy = src.focalY ?? src.coverFocalY;
   /* Inline ALL placeholder bg properties — existing rules like
      `.portfolio .project .photo { background: var(--paper-soft) }`
-     are more specific than `.has-placeholder` and reset bg-size/repeat
-     to defaults (auto + repeat) which tiles the 20px PNG. Inline wins. */
+     are more specific than a single placeholder class would be, and the
+     `background` shorthand resets bg-size/repeat to defaults (auto +
+     repeat) which tiled the 20px PNG. Inline always wins. */
   return {
-    backgroundImage: `url(${blur})`,
-    backgroundSize: 'cover',
-    backgroundRepeat: 'no-repeat',
+    backgroundImage:    `url(${blur})`,
+    backgroundSize:     'cover',
+    backgroundRepeat:   'no-repeat',
     backgroundPosition: (fx != null && fy != null) ? `${fx}% ${fy}%` : 'center',
-    imageRendering: 'pixelated',
+    imageRendering:     'pixelated',
+    /* crisp-edges fallback handled via the duplicate keyword in CSS — not
+       representable in a single React style object, but Safari/Chrome/FF
+       all recognize `pixelated` so this is fine in practice. */
   };
 }
 function focalImgStyle(src) {
@@ -68,7 +76,7 @@ function FeaturedStrip({ onOpenProject }) {
     <div className="featured-strip">
       <button
         type="button"
-        className={`featured-strip-img ${cur?.blurDataURL ? 'has-placeholder' : ''}`}
+        className="featured-strip-img"
         onClick={() => onOpenProject && onOpenProject(cur.project)}
         aria-label={`Open project: ${cur.projectName}`}
         style={placeholderStyle(cur)}
@@ -136,7 +144,7 @@ function Portfolio({ view, onSetView, onOpenProject, onSetCrumb }) {
             className="project"
             onClick={() => onOpenProject(p)}
           >
-            <div className={`photo ${p.coverBlurDataURL ? 'has-placeholder' : ''}`} style={placeholderStyle(p)}>
+            <div className="photo" style={placeholderStyle(p)}>
               <img
                 src={p.photo}
                 alt={p.name}
@@ -234,7 +242,7 @@ function ProjectDetail({ project, onOpenPhoto, onOpenVideo }) {
             const it = toViewerItem(img);
             return (
               <div key={img.filename} className="thumb" onClick={() => onOpenPhoto(it, viewerList)}>
-                <div className={`pic ${img.blurDataURL ? 'has-placeholder' : ''}`} style={placeholderStyle(img)}>
+                <div className="pic" style={placeholderStyle(img)}>
                   <img src={img.blobPath} alt={img.filename} loading="lazy" className="lazy-img" style={focalImgStyle(img)} onLoad={_markLoaded} ref={_onImgRef}/>
                 </div>
                 <span className="name">{img.filename}</span>
@@ -517,7 +525,7 @@ function Archive({ onOpenPhoto, onSetCrumb, initialFilter, onFilterChange, selec
                     }
                   }}
                 >
-                  <div className={`pic ${it.blurDataURL ? 'has-placeholder' : ''}`} style={placeholderStyle(it)}>
+                  <div className="pic" style={placeholderStyle(it)}>
                     <img src={it.photo} alt={it.name} loading="lazy" className="lazy-img" style={focalImgStyle(it)} onLoad={_markLoaded} ref={_onImgRef}/>
                     {selectionMode && (
                       <span className={`select-mark ${isSelected ? 'on' : ''}`}>

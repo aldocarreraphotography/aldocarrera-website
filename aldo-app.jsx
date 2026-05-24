@@ -1858,7 +1858,7 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
         {project.note && <p style={{fontSize:14, color:'var(--ink-soft)', marginBottom:18, fontStyle:'italic'}}>"{project.note}"</p>}
         {projectImages.map((img) => (
           <div key={img.id} className="mp-project" onClick={() => setOpenPhoto({ photo: img, list: projectImages })}>
-            <div className={`photo ${img.blurDataURL ? 'has-placeholder' : ''}`} style={placeholderStyle(img)}>
+            <div className="photo" style={placeholderStyle(img)}>
               <img src={img.photo} alt={img.name} className="lazy-img" style={focalImgStyle(img)} onLoad={_markLoaded} ref={_onImgRef}/>
             </div>
             <div className="info"><div className="name">{img.name}</div><div className="year">{img.date ? img.date.slice(0,7) : project.month}</div></div>
@@ -1871,7 +1871,7 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
       <div className="mobile-page portfolio">
         {PROJECTS.map(p => (
           <div key={p.id} className="mp-project" onClick={() => openProject(p)}>
-            <div className={`photo ${p.coverBlurDataURL ? 'has-placeholder' : ''}`} style={placeholderStyle(p)}>
+            <div className="photo" style={placeholderStyle(p)}>
               <img src={p.photo} alt={p.name} className="lazy-img" style={focalImgStyle(p)} onLoad={_markLoaded} ref={_onImgRef}/>
             </div>
             <div className="info">
@@ -1898,7 +1898,7 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
               <div className="fbody">
                 {items.map(it => (
                   <div key={it.id} className="thumb" onClick={() => setOpenPhoto({ photo: it, list: items })}>
-                    <div className={`pic ${it.blurDataURL ? 'has-placeholder' : ''}`} style={placeholderStyle(it)}>
+                    <div className="pic" style={placeholderStyle(it)}>
                       <img src={it.photo} alt={it.name} className="lazy-img" style={focalImgStyle(it)} onLoad={_markLoaded} ref={_onImgRef}/>
                     </div>
                     <span className="name">{it.name}</span>

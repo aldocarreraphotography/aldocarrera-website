@@ -524,22 +524,39 @@ function ClientCombobox({ value, onChange, options }) {
       <TextInput value={value} onChange={onChange} placeholder="BAPE"/>
       <div className="ad-combo-list">
         {options.filter(o => !value || o.toLowerCase().includes(value.toLowerCase())).slice(0, 6).map(o => (
-          <button key={o} className="ad-combo-item" onClick={() => onChange(o)} type="button">{o}</button>
+          /* onMouseDown + preventDefault — clicking an item used to lose focus
+             from the input before onClick fired, collapsing the list (via
+             `:focus-within`) and dropping the click. preventDefault on
+             mousedown keeps the input focused, so the list stays open and
+             the selection registers. */
+          <button
+            key={o}
+            className="ad-combo-item"
+            type="button"
+            onMouseDown={(e) => { e.preventDefault(); onChange(o); }}
+          >{o}</button>
         ))}
       </div>
     </div>
   );
 }
 
-/* Type field: preset dropdown + "Custom…" option that reveals a free-text input */
+/* Type field: preset dropdown + "Custom…" option that reveals a free-text input.
+   Uses local `customMode` state because clearing `value` to '' on Custom select
+   made isCustom evaluate false, which snapped the dropdown back to Editorial
+   and prevented the TextInput from rendering. */
 function TypeField({ value, onChange }) {
-  const isCustom = value && !PROJECT_TYPES.includes(value);
-  const selectVal = isCustom ? '__custom__' : (value || PROJECT_TYPES[0]);
+  const isCustomValue = value && !PROJECT_TYPES.includes(value);
+  const [customMode, setCustomMode] = vS(isCustomValue);
+  const showCustom = customMode || isCustomValue;
+  const selectVal  = showCustom ? '__custom__' : (value || PROJECT_TYPES[0]);
 
   const handleSelect = (v) => {
     if (v === '__custom__') {
-      onChange(''); // blank → user types their own
+      setCustomMode(true);
+      // Keep existing value (if any) so user can edit, or stays blank to type fresh
     } else {
+      setCustomMode(false);
       onChange(v);
     }
   };
@@ -551,9 +568,9 @@ function TypeField({ value, onChange }) {
         onChange={handleSelect}
         options={[...PROJECT_TYPES, { value: '__custom__', label: 'Custom…' }]}
       />
-      {(selectVal === '__custom__' || isCustom) && (
+      {showCustom && (
         <TextInput
-          value={isCustom ? value : ''}
+          value={isCustomValue ? value : ''}
           onChange={onChange}
           placeholder="e.g. Fine Art, Personal, Test shoot…"
           autoFocus
@@ -563,15 +580,18 @@ function TypeField({ value, onChange }) {
   );
 }
 
-/* Format field: preset dropdown + "Custom…" option that reveals a free-text input */
+/* Format field: same shape as TypeField — see comments there. */
 function FormatField({ value, onChange }) {
-  const isCustom = value && !PROJECT_FORMATS.includes(value);
-  const selectVal = isCustom ? '__custom__' : (value || '');
+  const isCustomValue = value && !PROJECT_FORMATS.includes(value);
+  const [customMode, setCustomMode] = vS(isCustomValue);
+  const showCustom = customMode || isCustomValue;
+  const selectVal  = showCustom ? '__custom__' : (value || '');
 
   const handleSelect = (v) => {
     if (v === '__custom__') {
-      onChange('');
+      setCustomMode(true);
     } else {
+      setCustomMode(false);
       onChange(v);
     }
   };
@@ -587,9 +607,9 @@ function FormatField({ value, onChange }) {
           { value: '__custom__', label: 'Custom…' },
         ]}
       />
-      {(selectVal === '__custom__' || isCustom) && (
+      {showCustom && (
         <TextInput
-          value={isCustom ? value : ''}
+          value={isCustomValue ? value : ''}
           onChange={onChange}
           placeholder="e.g. Polaroid, Daguerreotype…"
           autoFocus
@@ -1093,8 +1113,11 @@ function useMemoGroup(items, keyFn) {
   }, [items, keyFn]);
 }
 function useMemoClients() {
+  /* Subscribe to store changes so the dropdown picks up newly-added
+     clients between project saves. The previous version cached the list
+     with `[]` deps and never recomputed — new clients never showed. */
   window.useStoreSubscribe();
-  return vM(() => window.AdminStore.getClients().map(c => c.name), []);
+  return window.AdminStore.getClients().map(c => c.name);
 }
 
 /* ============================================================

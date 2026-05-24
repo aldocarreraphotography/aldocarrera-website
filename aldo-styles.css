@@ -2923,17 +2923,13 @@ img {
 
 
 /* ── Pixelated lazy-load placeholder (SHOWstudio aesthetic) ──
-   Container wrapper carries the low-res placeholder via `.has-placeholder`.
-   `image-rendering: pixelated` keeps blocky edges when the 20px source
-   is scaled up. The <img> on top fades in via the .lazy-img / .loaded
-   opacity transition, dissolving the pixel grid into the real image. */
-.has-placeholder {
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-  image-rendering: pixelated;
-  image-rendering: crisp-edges; /* firefox */
-}
+   The placeholder bg-image lives INLINE on each wrapper element (see
+   placeholderStyle() in aldo-views.jsx) — not in a CSS class — so it
+   beats more-specific element rules like `.portfolio .project .photo
+   { background: var(--paper-soft) }` that would otherwise reset
+   bg-size to auto and tile the 20px source. The <img> on top fades in
+   via the .lazy-img / .loaded keyframe below, dissolving the pixel grid
+   into the real image. */
 img.lazy-img { opacity: 0; }
 img.lazy-img.loaded {
   /* Animation (not transition) — sidesteps specificity conflicts with
