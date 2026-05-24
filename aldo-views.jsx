@@ -164,6 +164,7 @@ function Portfolio({ view, onSetView, onOpenProject, onSetCrumb }) {
               <>
                 <div className="name">{p.name}</div>
                 <div className="client">{p.client}</div>
+                <div className="type">{p.type}</div>
                 <div className="format">{p.format}</div>
                 <div className="year">{p.year}</div>
               </>

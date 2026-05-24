@@ -711,7 +711,7 @@ input, textarea, select {
 }
 .portfolio.list .project {
   display: grid;
-  grid-template-columns: 64px 1fr 140px 100px 80px;
+  grid-template-columns: 80px 1fr 140px 110px 100px 80px;
   gap: 18px;
   padding: 12px 0;
   border-bottom: 1px solid var(--rule);
@@ -720,13 +720,18 @@ input, textarea, select {
 .portfolio.list .project:hover { background: rgba(124, 42, 42, 0.04); }
 .portfolio.list .project .photo {
   aspect-ratio: 4/5;
-  width: 50px;
+  width: 64px;
 }
+/* In list view the tag overlay clips on the small thumb — type shows as
+   its own column instead. */
+.portfolio.list .project .photo .tag { display: none; }
 .portfolio.list .project .name { font-size: 14px; }
 .portfolio.list .project .info, .portfolio.list .project .meta { display: contents; }
 .portfolio.list .project .client,
+.portfolio.list .project .type,
 .portfolio.list .project .format,
 .portfolio.list .project .year { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--ink-soft); letter-spacing: 0.02em; }
+.portfolio.list .project .type { text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-muted); }
 
 /* ============================================================
    PHOTO VIEWER
