@@ -4,23 +4,33 @@ const { useState: vsUseState, useEffect: vsUseEffect, useMemo: vsUseMemo, useRef
 
 const { PROJECTS, ARCHIVE, CLIENTS, PHOTOS, SERVICES, ABOUT, SETTINGS } = window.ALDO;
 
-/* Merge focal-point + blurDataURL placeholder into one inline style object.
+/* Pixelated lazy-load placeholder (SHOWstudio-style) + focal point.
+   `placeholderStyle()` returns inline bg style for the IMAGE WRAPPER —
+     a 20px PNG that renders as chunky pixel blocks via .has-placeholder CSS.
+   `focalImgStyle()` returns objectPosition only — applied to the <img>
+     itself so the real photo isn't pixelated.
    Accepts either { focalX, focalY, blurDataURL } from an image record or
-   the cover-shape { coverFocalX, coverFocalY, coverBlurDataURL } from a project. */
-function imgStyle(src) {
-  if (!src) return undefined;
+   the cover-shape { coverFocalX, coverFocalY, coverBlurDataURL }. */
+function placeholderStyle(src) {
+  const blur = src?.blurDataURL ?? src?.coverBlurDataURL;
+  if (!blur) return undefined;
   const fx = src.focalX ?? src.coverFocalX;
   const fy = src.focalY ?? src.coverFocalY;
-  const blur = src.blurDataURL ?? src.coverBlurDataURL;
-  const s = {};
-  if (fx != null && fy != null) s.objectPosition = `${fx}% ${fy}%`;
-  if (blur) {
-    s.backgroundImage    = `url(${blur})`;
-    s.backgroundSize     = 'cover';
-    s.backgroundPosition = s.objectPosition || 'center';
-  }
-  return Object.keys(s).length ? s : undefined;
+  return {
+    backgroundImage: `url(${blur})`,
+    backgroundPosition: (fx != null && fy != null) ? `${fx}% ${fy}%` : 'center',
+  };
 }
+function focalImgStyle(src) {
+  const fx = src?.focalX ?? src?.coverFocalX;
+  const fy = src?.focalY ?? src?.coverFocalY;
+  if (fx == null || fy == null) return undefined;
+  return { objectPosition: `${fx}% ${fy}%` };
+}
+/* `onLoad` handler — fades the img in once decoded. Also handles cached
+   images (browser may have already fired `load` before this attached). */
+function _markLoaded(e) { e.currentTarget.classList.add('loaded'); }
+function _onImgRef(el) { if (el && el.complete && el.naturalWidth > 0) el.classList.add('loaded'); }
 
 /* ============================================================
    PORTFOLIO
@@ -51,11 +61,16 @@ function FeaturedStrip({ onOpenProject }) {
     <div className="featured-strip">
       <button
         type="button"
-        className="featured-strip-img"
+        className={`featured-strip-img ${cur?.blurDataURL ? 'has-placeholder' : ''}`}
         onClick={() => onOpenProject && onOpenProject(cur.project)}
         aria-label={`Open project: ${cur.projectName}`}
+        style={placeholderStyle(cur)}
       >
         {stars.map((s, i) => (
+          /* No lazy-img here — FeaturedStrip has its own opacity crossfade
+             via the `.on` class; adding lazy-img would override that.
+             The pixel placeholder on the wrapper button still shows during
+             the initial paint until the first img decodes. */
           <img
             key={s.blobPath || i}
             src={s.blobPath}
@@ -64,7 +79,7 @@ function FeaturedStrip({ onOpenProject }) {
             fetchpriority={i === 0 ? 'high' : 'low'}
             loading={i === 0 ? 'eager' : 'lazy'}
             decoding="async"
-            style={imgStyle(s)}
+            style={focalImgStyle(s)}
           />
         ))}
       </button>
@@ -114,8 +129,16 @@ function Portfolio({ view, onSetView, onOpenProject, onSetCrumb }) {
             className="project"
             onClick={() => onOpenProject(p)}
           >
-            <div className="photo">
-              <img src={p.photo} alt={p.name} loading="lazy" style={imgStyle(p)}/>
+            <div className={`photo ${p.coverBlurDataURL ? 'has-placeholder' : ''}`} style={placeholderStyle(p)}>
+              <img
+                src={p.photo}
+                alt={p.name}
+                loading="lazy"
+                className="lazy-img"
+                style={focalImgStyle(p)}
+                onLoad={_markLoaded}
+                ref={_onImgRef}
+              />
               <span className="tag">{p.type}</span>
             </div>
             {view === 'grid' ? (
@@ -203,7 +226,9 @@ function ProjectDetail({ project, onOpenPhoto, onOpenVideo }) {
             const it = toViewerItem(img);
             return (
               <div key={img.filename} className="thumb" onClick={() => onOpenPhoto(it, viewerList)}>
-                <div className="pic"><img src={img.blobPath} alt={img.filename} loading="lazy" style={imgStyle(img)}/></div>
+                <div className={`pic ${img.blurDataURL ? 'has-placeholder' : ''}`} style={placeholderStyle(img)}>
+                  <img src={img.blobPath} alt={img.filename} loading="lazy" className="lazy-img" style={focalImgStyle(img)} onLoad={_markLoaded} ref={_onImgRef}/>
+                </div>
                 <span className="name">{img.filename}</span>
                 <span className="sub">{[it.dims, it.size].filter(Boolean).join(' · ') || 'archive'}</span>
               </div>
@@ -484,8 +509,8 @@ function Archive({ onOpenPhoto, onSetCrumb, initialFilter, onFilterChange, selec
                     }
                   }}
                 >
-                  <div className="pic">
-                    <img src={it.photo} alt={it.name} loading="lazy" style={imgStyle(it)}/>
+                  <div className={`pic ${it.blurDataURL ? 'has-placeholder' : ''}`} style={placeholderStyle(it)}>
+                    <img src={it.photo} alt={it.name} loading="lazy" className="lazy-img" style={focalImgStyle(it)} onLoad={_markLoaded} ref={_onImgRef}/>
                     {selectionMode && (
                       <span className={`select-mark ${isSelected ? 'on' : ''}`}>
                         {isSelected ? selectedIds.indexOf(it.id) + 1 : ''}

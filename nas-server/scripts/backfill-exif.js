@@ -73,12 +73,13 @@ async function main() {
         }
 
         if (needsBlur) {
+          // 20px PNG — preserves pixel edges when scaled with image-rendering: pixelated.
           const blur = await sharp(filePath)
             .rotate()
-            .resize({ width: 24 })
-            .jpeg({ quality: 40 })
+            .resize({ width: 20 })
+            .png()
             .toBuffer();
-          img.blurDataURL = `data:image/jpeg;base64,${blur.toString('base64')}`;
+          img.blurDataURL = `data:image/png;base64,${blur.toString('base64')}`;
           patchedSomething = true;
         }
 

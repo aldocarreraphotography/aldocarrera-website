@@ -227,12 +227,14 @@ app.post('/api/projects/:id/images/upload', upload.single('file'), async (req, r
       const pipe  = sharp(req.file.buffer).rotate();
       const meta  = await pipe.metadata();
       if (meta.width && meta.height && !realDims) realDims = `${meta.width}×${meta.height}`;
+      // 20px PNG — keeps hard pixel edges when scaled up with image-rendering: pixelated.
+      // (JPEG at this size gets mushy from compression; PNG preserves the blocky SHOWstudio look.)
       const blur  = await sharp(req.file.buffer)
         .rotate()
-        .resize({ width: 24 })
-        .jpeg({ quality: 40 })
+        .resize({ width: 20 })
+        .png()
         .toBuffer();
-      blurDataURL = `data:image/jpeg;base64,${blur.toString('base64')}`;
+      blurDataURL = `data:image/png;base64,${blur.toString('base64')}`;
     } catch (e) {
       console.warn('[upload] blur/meta gen failed:', e?.message);
     }

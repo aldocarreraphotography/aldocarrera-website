@@ -2917,6 +2917,34 @@ img {
 .featured-strip-dot.on { background: #fff; transform: scale(1.4); }
 
 
+/* ── Pixelated lazy-load placeholder (SHOWstudio aesthetic) ──
+   Container wrapper carries the low-res placeholder via `.has-placeholder`.
+   `image-rendering: pixelated` keeps blocky edges when the 20px source
+   is scaled up. The <img> on top fades in via the .lazy-img / .loaded
+   opacity transition, dissolving the pixel grid into the real image. */
+.has-placeholder {
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges; /* firefox */
+}
+img.lazy-img { opacity: 0; }
+img.lazy-img.loaded {
+  /* Animation (not transition) — sidesteps specificity conflicts with
+     existing `.photo img` / `.pic img` rules that already declare their own
+     `transition` for hover filter/transform. */
+  animation: lazyFadeIn 0.45s ease forwards;
+}
+@keyframes lazyFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+/* Respect reduced-motion: no fade, snap in instantly. */
+@media (prefers-reduced-motion: reduce) {
+  img.lazy-img.loaded { animation: none; opacity: 1; }
+}
+
 /* ── Touch devices: disable hover transforms to prevent double-tap flicker ── */
 @media (hover: none) {
   .portfolio .project:hover .photo { border-color: var(--rule); }
