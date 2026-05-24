@@ -20,7 +20,8 @@ import sharp from 'sharp';
 import { readProjects, writeProjects } from '../utils/store.js';
 
 const IMAGES_DIR = process.env.IMAGES_DIR || path.join(process.cwd(), 'images');
-const WRITE = process.argv.includes('--write');
+const WRITE      = process.argv.includes('--write');
+const FORCE_BLUR = process.argv.includes('--force-blur'); // regenerate blurDataURL even when one exists
 
 function fmtBytes(n) {
   if (!n) return '—';
@@ -54,7 +55,7 @@ async function main() {
       const ex = img.exif || {};
       const needsDims = !ex.dimensions;
       const needsSize = !ex.fileSize;
-      const needsBlur = !img.blurDataURL;
+      const needsBlur = !img.blurDataURL || FORCE_BLUR;
       if (!needsDims && !needsSize && !needsBlur) continue;
 
       const filePath = path.join(IMAGES_DIR, project.id, img.filename);
