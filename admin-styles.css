@@ -2279,3 +2279,47 @@ body {
   opacity: 0.7;
 }
 
+
+/* ── Admin Voice Recorder (AdminVoiceRecorder component) ─────── */
+.avr-wrap { display: flex; flex-direction: column; gap: 8px; }
+.avr-btn {
+  background: var(--paper-soft);
+  border: 1px solid var(--rule);
+  color: var(--ink-soft);
+  padding: 6px 12px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase;
+  cursor: pointer;
+  transition: background 140ms, border-color 140ms;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.avr-btn:hover { background: var(--paper); border-color: var(--ink-soft); }
+.avr-record .avr-mic { color: #c89b3c; }
+.avr-stop {
+  background: rgba(232,154,170,0.12);
+  border-color: rgba(232,154,170,0.5);
+  color: #c84a6a;
+}
+.avr-recording-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.avr-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #e89aaa;
+  animation: avr-pulse 1.2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+@keyframes avr-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+.avr-timer {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px; color: var(--ink-soft); min-width: 36px;
+}
+.avr-hint { font-size: 11px; color: var(--ink-muted); font-family: 'IBM Plex Mono', monospace; }
+.avr-state { font-size: 11px; color: var(--ink-muted); font-family: 'IBM Plex Mono', monospace; letter-spacing: 0.06em; }
+.avr-has { display: flex; flex-direction: column; gap: 8px; }
+.avr-transcript {
+  font-size: 12px; color: var(--ink-muted); font-style: italic; line-height: 1.5;
+  max-width: 480px;
+}
+.avr-actions { display: flex; gap: 8px; }
+.avr-del { color: var(--ink-muted); }
+.avr-del:hover { border-color: rgba(200,74,106,0.4); color: #c84a6a; }
+.avr-err { font-size: 11px; color: #c84a6a; font-family: 'IBM Plex Mono', monospace; }

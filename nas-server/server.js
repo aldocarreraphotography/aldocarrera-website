@@ -1566,6 +1566,74 @@ app.get('/api/admin/gallery-portals/:token/voice/:filename', async (req, res) =>
   res.send(bytes);
 });
 
+/* ── Admin voice notes for galleries (markup/selects system) ───────────────
+   POST   /api/admin/galleries/:token/images/:filename/voice  — upload + transcribe
+   GET    /api/admin/galleries/:token/images/:filename/voice  — serve audio
+   DELETE /api/admin/galleries/:token/images/:filename/voice  — remove
+   All JWT-auth (admin only).
+   Audio stored in images/__gallery-voice/{token}/; metadata in selections[filename].voiceNote
+   ─────────────────────────────────────────────────────────────────────────── */
+
+app.post('/api/admin/galleries/:token/images/:filename/voice', upload.single('audio'), async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  const gallery = await findGallery(req.params.token);
+  if (!gallery) return res.status(404).json({ error: 'not_found' });
+  if (!req.file) return res.status(400).json({ error: 'no_file' });
+
+  const filename = req.params.filename;
+  const ext      = _audioExt(req.file.mimetype);
+  const audioFile = `${Date.now()}_${filename.replace(/\.[^.]+$/, '')}.${ext}`;
+
+  await writeBytes(`__gallery-voice/${gallery.token}`, audioFile, req.file.buffer);
+
+  const transcript = await _transcribeAudio(req.file.buffer, req.file.mimetype);
+
+  const selections = { ...(gallery.selections || {}) };
+  if (!selections[filename]) selections[filename] = {};
+  // Remove old voice file if present
+  if (selections[filename].voiceNote?.file) {
+    try { await deleteImage(`__gallery-voice/${gallery.token}`, selections[filename].voiceNote.file); } catch (_) {}
+  }
+  selections[filename].voiceNote = {
+    file:       audioFile,
+    mime:       req.file.mimetype,
+    transcript: transcript || '',
+    size:       req.file.size,
+    recordedAt: new Date().toISOString(),
+  };
+  await updateGallery(gallery.token, { selections });
+  res.json({ ok: true, voiceNote: selections[filename].voiceNote });
+});
+
+app.get('/api/admin/galleries/:token/images/:filename/voice', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  const gallery = await findGallery(req.params.token);
+  if (!gallery) return res.status(404).end();
+  const voice = gallery.selections?.[req.params.filename]?.voiceNote;
+  if (!voice) return res.status(404).end();
+  const bytes = await readBytes(`__gallery-voice/${gallery.token}`, voice.file);
+  if (!bytes) return res.status(404).end();
+  res.setHeader('Content-Type', voice.mime || 'audio/webm');
+  res.send(bytes);
+});
+
+app.delete('/api/admin/galleries/:token/images/:filename/voice', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  const gallery  = await findGallery(req.params.token);
+  if (!gallery) return res.status(404).json({ error: 'not_found' });
+  const filename = req.params.filename;
+  const voice    = gallery.selections?.[filename]?.voiceNote;
+  if (voice?.file) {
+    try { await deleteImage(`__gallery-voice/${gallery.token}`, voice.file); } catch (_) {}
+  }
+  const selections = { ...(gallery.selections || {}) };
+  if (selections[filename]) {
+    delete selections[filename].voiceNote;
+    await updateGallery(gallery.token, { selections });
+  }
+  res.json({ ok: true });
+});
+
 /* POST /api/gallery-portals/:token/submit  — client submits final selections (PIN-gated, public) */
 app.post('/api/gallery-portals/:token/submit', async (req, res) => {
   try {

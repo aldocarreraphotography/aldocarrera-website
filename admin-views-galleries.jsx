@@ -3,6 +3,139 @@
 const { useState: gS, useEffect: gE, useMemo: gM, useRef: gRef, useCallback: gCB } = React;
 
 /* ============================================================
+   ADMIN VOICE RECORDER
+   Records a voice note for a specific gallery image. Uses JWT auth.
+   ============================================================ */
+const ADMIN_VOICE_MAX_SECONDS = 120;
+
+function AdminVoiceRecorder({ token, filename, initialVoice, onSaved, onDeleted }) {
+  const [phase,      setPhase]      = gS(initialVoice ? 'has' : 'idle'); // idle|recording|uploading|has
+  const [voiceNote,  setVoiceNote]  = gS(initialVoice || null);
+  const [timer,      setTimer]      = gS(0);
+  const [err,        setErr]        = gS('');
+  const mrRef   = gRef(null);
+  const chunks  = gRef([]);
+  const timerID = gRef(null);
+  const audioUrl = gRef(null);
+
+  // Revoke old object-URL when voice changes
+  gE(() => {
+    return () => { if (audioUrl.current) URL.revokeObjectURL(audioUrl.current); };
+  }, []);
+
+  const startRecording = async () => {
+    setErr('');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream, { mimeType: MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4' });
+      mrRef.current = mr;
+      chunks.current = [];
+      mr.ondataavailable = e => { if (e.data.size) chunks.current.push(e.data); };
+      mr.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        clearInterval(timerID.current);
+        const mime = mr.mimeType || 'audio/webm';
+        const blob = new Blob(chunks.current, { type: mime });
+        setPhase('uploading');
+        try {
+          const baseUrl = window.API_BASE || '';
+          const authTok = localStorage.getItem('aldo_admin_token');
+          const fd = new FormData();
+          fd.append('audio', blob, `note.${mime.includes('mp4') ? 'm4a' : 'webm'}`);
+          const r = await fetch(`${baseUrl}/api/admin/galleries/${token}/images/${encodeURIComponent(filename)}/voice`, {
+            method:  'POST',
+            headers: { 'Authorization': `Bearer ${authTok}` },
+            body:    fd,
+          });
+          if (!r.ok) throw new Error(`Upload failed (${r.status})`);
+          const { voiceNote: vn } = await r.json();
+          // Build local playback URL
+          if (audioUrl.current) URL.revokeObjectURL(audioUrl.current);
+          audioUrl.current = URL.createObjectURL(blob);
+          vn._localUrl = audioUrl.current;
+          setVoiceNote(vn);
+          setPhase('has');
+          onSaved && onSaved(vn);
+        } catch (e2) {
+          setErr(e2.message || 'Upload failed');
+          setPhase('idle');
+        }
+      };
+      mr.start();
+      setPhase('recording');
+      setTimer(0);
+      timerID.current = setInterval(() => {
+        setTimer(t => {
+          if (t + 1 >= ADMIN_VOICE_MAX_SECONDS) { mr.stop(); return t + 1; }
+          return t + 1;
+        });
+      }, 1000);
+    } catch (e) {
+      setErr('Microphone access denied');
+    }
+  };
+
+  const stopRecording = () => {
+    if (mrRef.current && mrRef.current.state === 'recording') mrRef.current.stop();
+  };
+
+  const deleteNote = async () => {
+    try {
+      const baseUrl = window.API_BASE || '';
+      const authTok = localStorage.getItem('aldo_admin_token');
+      await fetch(`${baseUrl}/api/admin/galleries/${token}/images/${encodeURIComponent(filename)}/voice`, {
+        method:  'DELETE',
+        headers: { 'Authorization': `Bearer ${authTok}` },
+      });
+      if (audioUrl.current) { URL.revokeObjectURL(audioUrl.current); audioUrl.current = null; }
+      setVoiceNote(null);
+      setPhase('idle');
+      onDeleted && onDeleted();
+    } catch (e) {
+      setErr('Delete failed: ' + e.message);
+    }
+  };
+
+  const fmtTime = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  const audioSrc = voiceNote?._localUrl
+    || (voiceNote?.file ? `${window.API_BASE || ''}/api/admin/galleries/${token}/images/${encodeURIComponent(filename)}/voice` : null);
+
+  return (
+    <div className="avr-wrap">
+      {phase === 'idle' && (
+        <button className="avr-btn avr-record" onClick={startRecording}>
+          <span className="avr-mic">🎤</span> Record voice note
+        </button>
+      )}
+      {phase === 'recording' && (
+        <div className="avr-recording-row">
+          <span className="avr-dot"/>
+          <span className="avr-timer">{fmtTime(timer)}</span>
+          <button className="avr-btn avr-stop" onClick={stopRecording}>Stop</button>
+          <span className="avr-hint">max {ADMIN_VOICE_MAX_SECONDS / 60} min</span>
+        </div>
+      )}
+      {phase === 'uploading' && (
+        <span className="avr-state">Uploading…</span>
+      )}
+      {phase === 'has' && voiceNote && (
+        <div className="avr-has">
+          {audioSrc && <audio controls src={audioSrc} style={{ height: 32, width: '100%', maxWidth: 340 }}/>}
+          {voiceNote.transcript && (
+            <div className="avr-transcript">"{voiceNote.transcript}"</div>
+          )}
+          <div className="avr-actions">
+            <button className="avr-btn avr-re" onClick={startRecording}>Re-record</button>
+            <button className="avr-btn avr-del" onClick={deleteNote}>Delete</button>
+          </div>
+        </div>
+      )}
+      {err && <div className="avr-err">{err}</div>}
+    </div>
+  );
+}
+
+/* ============================================================
    MARKUP DRAWING — ported from gallery.html
    ============================================================ */
 function _normToCanvas(nx, ny, b) {
@@ -102,7 +235,7 @@ function MarkupOverlay({ markups, imgRef, canvasRef }) {
 }
 
 /* Full-size image lightbox with markup canvas */
-function GalleryLightbox({ img, sel, allImages, allSels, onClose }) {
+function GalleryLightbox({ img, sel, allImages, allSels, onClose, token, onVoiceSaved }) {
   const [current, setCurrent] = gS(img);
   const imgRef    = gRef(null);
   const canvasRef = gRef(null);
@@ -195,6 +328,18 @@ function GalleryLightbox({ img, sel, allImages, allSels, onClose }) {
             ))}
           </div>
         )}
+        {token && (
+          <div style={{ padding: '10px 16px', borderTop: '1px solid var(--ad-rule)' }}>
+            <div className="ad-eyebrow" style={{ fontSize: 9, marginBottom: 8 }}>Voice note</div>
+            <AdminVoiceRecorder
+              token={token}
+              filename={current.filename}
+              initialVoice={curSel.voiceNote || null}
+              onSaved={vn => onVoiceSaved && onVoiceSaved(current.filename, vn)}
+              onDeleted={() => onVoiceSaved && onVoiceSaved(current.filename, null)}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -224,6 +369,9 @@ function GalleryImageCard({ img, sel, onClick }) {
           <div style={{ fontSize: 11, color: '#5a6fa8', marginTop: 2 }}>✎ {markups.length} markup{markups.length === 1 ? '' : 's'}</div>
         )}
         {sel?.note && <div style={{ fontSize: 11, color: 'var(--ink-muted)', marginTop: 2 }}>{sel.note}</div>}
+        {sel?.voiceNote && (
+          <div style={{ fontSize: 11, color: '#c89b3c', marginTop: 2 }}>🎤 voice note</div>
+        )}
       </div>
     </div>
   );
@@ -829,6 +977,15 @@ function GalleryDetailView({ token, navigate }) {
           allImages={visible}
           allSels={sels}
           onClose={() => setLightbox(null)}
+          token={gallery.token}
+          onVoiceSaved={(filename, vn) => {
+            setGallery(g => {
+              const selections = { ...(g.selections || {}), [filename]: { ...(g.selections?.[filename] || {}) } };
+              if (vn) selections[filename].voiceNote = vn;
+              else delete selections[filename].voiceNote;
+              return { ...g, selections };
+            });
+          }}
         />
       )}
 
