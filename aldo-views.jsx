@@ -16,9 +16,16 @@ function placeholderStyle(src) {
   if (!blur) return undefined;
   const fx = src.focalX ?? src.coverFocalX;
   const fy = src.focalY ?? src.coverFocalY;
+  /* Inline ALL placeholder bg properties — existing rules like
+     `.portfolio .project .photo { background: var(--paper-soft) }`
+     are more specific than `.has-placeholder` and reset bg-size/repeat
+     to defaults (auto + repeat) which tiles the 20px PNG. Inline wins. */
   return {
     backgroundImage: `url(${blur})`,
+    backgroundSize: 'cover',
+    backgroundRepeat: 'no-repeat',
     backgroundPosition: (fx != null && fy != null) ? `${fx}% ${fy}%` : 'center',
+    imageRendering: 'pixelated',
   };
 }
 function focalImgStyle(src) {
