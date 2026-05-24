@@ -18,6 +18,7 @@ import fs       from 'node:fs';
 import sharp    from 'sharp';
 
 import { issueToken, verifyToken, authMiddleware, requireAuth } from './utils/auth.js';
+import { listFolder, getThumbnailBatch, downloadFile, isImageFile } from './utils/dropbox.js';
 import { Resend } from 'resend';
 import {
   readProjects, writeProjects,
@@ -2343,6 +2344,396 @@ app.get('/api/ga-analytics', async (req, res) => {
     });
   }
 });
+
+/* ------------------------------------------------------------------ */
+/* Dropbox AI curation endpoints                                       */
+/* ------------------------------------------------------------------ */
+
+// In-memory job store (per-process; restarting the server clears jobs, which is fine)
+const _curateJobs = new Map();
+
+function _makeJobId() {
+  return 'curate_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+}
+
+/** GET /api/dropbox/folders — list root folders with image counts */
+app.get('/api/dropbox/folders', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  try {
+    const token = process.env.DROPBOX_ACCESS_TOKEN;
+    if (!token) {
+      return res.json({ error: 'DROPBOX_ACCESS_TOKEN not configured', folders: [] });
+    }
+
+    const rootEntries = await listFolder(token, '');
+    const folderEntries = rootEntries.filter(e => e['.tag'] === 'folder');
+
+    // Count images in each folder (parallel, cap concurrency to 5)
+    const folders = [];
+    const CONCURRENCY = 5;
+    for (let i = 0; i < folderEntries.length; i += CONCURRENCY) {
+      const chunk = folderEntries.slice(i, i + CONCURRENCY);
+      const results = await Promise.all(chunk.map(async (folder) => {
+        try {
+          const children = await listFolder(token, folder.path_display);
+          const imageCount = children.filter(e => e['.tag'] === 'file' && isImageFile(e.name)).length;
+          return { name: folder.name, path: folder.path_display, imageCount };
+        } catch (err) {
+          console.warn(`[dropbox] failed to count images in ${folder.path_display}:`, err?.message);
+          return { name: folder.name, path: folder.path_display, imageCount: 0 };
+        }
+      }));
+      folders.push(...results);
+    }
+
+    res.json({ folders });
+  } catch (err) {
+    console.error('[dropbox/folders] FATAL:', err?.message, err?.stack);
+    res.status(500).json({ error: 'internal', message: err?.message || 'Unknown error' });
+  }
+});
+
+/** POST /api/dropbox/curate — start async curation job */
+app.post('/api/dropbox/curate', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  try {
+    const token = process.env.DROPBOX_ACCESS_TOKEN;
+    if (!token) {
+      return res.status(503).json({ error: 'DROPBOX_ACCESS_TOKEN not configured' });
+    }
+
+    const { folders, targetCount = 15 } = req.body || {};
+    if (!Array.isArray(folders) || folders.length === 0) {
+      return res.status(400).json({ error: 'validation', message: '`folders` array is required' });
+    }
+
+    const jobId = _makeJobId();
+    const job = {
+      id: jobId,
+      status: 'running',
+      phase: 'Starting…',
+      foldersDone: 0,
+      foldersTotal: folders.length,
+      results: [],
+      error: null,
+    };
+    _curateJobs.set(jobId, job);
+
+    // Fire off async — do NOT await
+    _runCurationJob(job, folders, targetCount, token).catch(err => {
+      job.status = 'error';
+      job.error = err?.message || 'Unknown error';
+      console.error('[_runCurationJob] uncaught:', err?.message, err?.stack);
+    });
+
+    res.json({ jobId });
+  } catch (err) {
+    console.error('[dropbox/curate] FATAL:', err?.message, err?.stack);
+    res.status(500).json({ error: 'internal', message: err?.message || 'Unknown error' });
+  }
+});
+
+/** GET /api/dropbox/curate/:jobId — poll job status */
+app.get('/api/dropbox/curate/:jobId', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  const job = _curateJobs.get(req.params.jobId);
+  if (!job) return res.status(404).json({ error: 'job_not_found' });
+  res.json(job);
+});
+
+/** POST /api/dropbox/import — import approved images to site */
+app.post('/api/dropbox/import', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  try {
+    const token = process.env.DROPBOX_ACCESS_TOKEN;
+    if (!token) {
+      return res.status(503).json({ error: 'DROPBOX_ACCESS_TOKEN not configured' });
+    }
+
+    const { foldersToImport } = req.body || {};
+    if (!Array.isArray(foldersToImport) || foldersToImport.length === 0) {
+      return res.status(400).json({ error: 'validation', message: '`foldersToImport` array is required' });
+    }
+
+    const data = await readProjects();
+    const createdProjects = [];
+    let totalImages = 0;
+
+    for (const folderSpec of foldersToImport) {
+      const { folderPath, projectName, year, imageDropboxPaths } = folderSpec;
+      if (!projectName) continue;
+      if (!Array.isArray(imageDropboxPaths) || imageDropboxPaths.length === 0) continue;
+
+      // Generate unique project ID
+      const baseId = projectName.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase() + '_' + (year || new Date().getFullYear());
+      let projectId = baseId;
+      let suffix = 2;
+      while (data.projects.find(p => p.id === projectId)) {
+        projectId = `${baseId}_${suffix}`;
+        suffix++;
+      }
+
+      const newProject = {
+        id: projectId,
+        name: projectName,
+        year: parseInt(year, 10) || new Date().getFullYear(),
+        images: [],
+        public: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      data.projects.push(newProject);
+      await writeProjects(data);
+
+      let order = 1;
+
+      for (const dropboxPath of imageDropboxPaths) {
+        try {
+          const rawName = dropboxPath.split('/').pop() || `image_${order}.jpg`;
+          const safeName = rawName.replace(/[^A-Za-z0-9._-]+/g, '_');
+
+          // De-dupe filename
+          let finalName = safeName;
+          if (newProject.images.find(i => i.filename === finalName)) {
+            const dot  = safeName.lastIndexOf('.');
+            const stem = dot === -1 ? safeName      : safeName.slice(0, dot);
+            const ext  = dot === -1 ? ''            : safeName.slice(dot);
+            let n = 2;
+            while (newProject.images.find(i => i.filename === `${stem}_${n}${ext}`)) n++;
+            finalName = `${stem}_${n}${ext}`;
+          }
+
+          // Download full-res from Dropbox
+          const buffer = await downloadFile(token, dropboxPath);
+
+          await writeBytes(projectId, finalName, buffer);
+
+          // Generate blur placeholder + dimensions (same pattern as upload route)
+          let blurDataURL = '';
+          let realDims = '';
+          try {
+            const pipe = sharp(buffer).rotate();
+            const meta = await pipe.metadata();
+            if (meta.width && meta.height) realDims = `${meta.width}×${meta.height}`;
+            const blur = await sharp(buffer)
+              .rotate()
+              .resize({ width: 20 })
+              .png()
+              .toBuffer();
+            blurDataURL = `data:image/png;base64,${blur.toString('base64')}`;
+          } catch (e) {
+            console.warn('[dropbox/import] blur/meta gen failed:', e?.message);
+          }
+
+          const record = {
+            filename: finalName,
+            blobPath: `${PUBLIC_URL}/api/projects/${encodeURIComponent(projectId)}/images/${encodeURIComponent(finalName)}`,
+            order,
+            selected: false,
+            favorite: false,
+            rejected: false,
+            notes: '',
+            blurDataURL,
+            exif: {
+              dateTaken: null,
+              dimensions: realDims,
+              fileSize: buffer.length,
+            },
+          };
+
+          newProject.images.push(record);
+          order++;
+          totalImages++;
+
+          // Persist after each image so partial results are saved
+          newProject.updatedAt = new Date().toISOString();
+          await writeProjects(data);
+        } catch (imgErr) {
+          console.error(`[dropbox/import] failed to import ${dropboxPath}:`, imgErr?.message);
+          // Continue with the remaining images
+        }
+      }
+
+      createdProjects.push({ id: projectId, name: projectName, imageCount: newProject.images.length });
+    }
+
+    res.json({ projects: createdProjects, totalImages });
+  } catch (err) {
+    console.error('[dropbox/import] FATAL:', err?.message, err?.stack);
+    res.status(500).json({ error: 'internal', message: err?.message || 'Unknown error' });
+  }
+});
+
+/**
+ * _runCurationJob — async background function, not a route.
+ * Fetches thumbnails from Dropbox, sends to Claude Vision, builds results.
+ */
+async function _runCurationJob(job, folderPaths, targetCount, dropboxToken) {
+  const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
+
+  for (const folderPath of folderPaths) {
+    const folderName = folderPath.split('/').filter(Boolean).pop() || folderPath;
+    job.phase = `Fetching images from ${folderName}…`;
+
+    // 1. List image files in this folder
+    const entries = await listFolder(dropboxToken, folderPath);
+    const imageFiles = entries.filter(e => e['.tag'] === 'file' && isImageFile(e.name));
+
+    if (imageFiles.length === 0) {
+      job.results.push({
+        folderPath,
+        folderName,
+        total: 0,
+        selected: [],
+      });
+      job.foldersDone++;
+      continue;
+    }
+
+    const imagePaths = imageFiles.map(f => f.path_display);
+    job.phase = `Fetching thumbnails for ${folderName} (${imagePaths.length} images)…`;
+
+    // 2. Batch fetch thumbnails
+    let thumbnails = [];
+    try {
+      thumbnails = await getThumbnailBatch(dropboxToken, imagePaths);
+    } catch (err) {
+      console.error(`[curation] thumbnail fetch failed for ${folderPath}:`, err?.message);
+      job.results.push({ folderPath, folderName, total: imageFiles.length, selected: [], error: err?.message });
+      job.foldersDone++;
+      continue;
+    }
+
+    if (thumbnails.length === 0) {
+      job.results.push({ folderPath, folderName, total: imageFiles.length, selected: [] });
+      job.foldersDone++;
+      continue;
+    }
+
+    job.phase = `Analyzing ${thumbnails.length} images with Claude Vision for ${folderName}…`;
+
+    // 3. Send to Claude Vision in batches of 20
+    const BATCH_SIZE = 20;
+    const allRatings = [];
+
+    for (let i = 0; i < thumbnails.length; i += BATCH_SIZE) {
+      const batch = thumbnails.slice(i, i + BATCH_SIZE);
+      const n = batch.length;
+
+      // Build content: interleaved text labels + images
+      const content = [];
+      content.push({
+        type: 'text',
+        text: `Review these ${n} images from shoot '${folderName}'. Rate each 1-10 for portfolio quality. Consider: sharpness, exposure, composition, subject energy/expression. Reject: soft focus, closed eyes, blown highlights, motion blur, duplicate frames (keep best of burst). Target the top ${targetCount} hero shots. Respond ONLY with JSON: {"ratings":[{"filename":"IMG_001.jpg","score":8,"keep":true,"reason":"Sharp focus, strong pose"}]}`,
+      });
+
+      for (const thumb of batch) {
+        content.push({ type: 'text', text: `[Image: ${thumb.filename}]` });
+        content.push({
+          type: 'image',
+          source: {
+            type: 'base64',
+            media_type: 'image/jpeg',
+            data: thumb.thumbnail,
+          },
+        });
+      }
+
+      if (!ANTHROPIC_KEY) {
+        // No API key — assign placeholder scores so the feature still works for testing
+        for (const thumb of batch) {
+          allRatings.push({ filename: thumb.filename, score: 7, keep: true, reason: 'ANTHROPIC_API_KEY not configured' });
+        }
+        continue;
+      }
+
+      try {
+        const aRes = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'x-api-key': ANTHROPIC_KEY,
+            'anthropic-version': '2023-06-01',
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'claude-opus-4-5',
+            max_tokens: 4096,
+            system: 'You are curating fashion/editorial photography by Aldo Carrera, a professional photographer in Los Angeles.',
+            messages: [{ role: 'user', content }],
+          }),
+        });
+
+        if (!aRes.ok) {
+          const txt = await aRes.text();
+          console.error(`[curation] Anthropic error ${aRes.status}:`, txt.slice(0, 500));
+          // Fall back: mark all as keep:true with mid score
+          for (const thumb of batch) {
+            allRatings.push({ filename: thumb.filename, score: 6, keep: true, reason: 'Claude API error — manual review needed' });
+          }
+          continue;
+        }
+
+        const aData = await aRes.json();
+        const raw = aData.content?.[0]?.text || '';
+
+        try {
+          // Extract JSON object from response
+          const match = raw.match(/\{[\s\S]*\}/);
+          const parsed = JSON.parse(match ? match[0] : raw);
+          if (Array.isArray(parsed.ratings)) {
+            allRatings.push(...parsed.ratings);
+          }
+        } catch (parseErr) {
+          console.error('[curation] JSON parse failed:', parseErr?.message, raw.slice(0, 400));
+          for (const thumb of batch) {
+            allRatings.push({ filename: thumb.filename, score: 5, keep: true, reason: 'Parse error — manual review needed' });
+          }
+        }
+      } catch (fetchErr) {
+        console.error('[curation] fetch to Anthropic failed:', fetchErr?.message);
+        for (const thumb of batch) {
+          allRatings.push({ filename: thumb.filename, score: 5, keep: true, reason: 'Network error — manual review needed' });
+        }
+      }
+    }
+
+    // 4. Sort by score desc, filter keep:true, take top targetCount
+    const sorted = allRatings
+      .filter(r => r.keep !== false)
+      .sort((a, b) => (b.score || 0) - (a.score || 0))
+      .slice(0, targetCount);
+
+    // Build thumbnail lookup map
+    const thumbMap = new Map(thumbnails.map(t => [t.filename, t]));
+    // Also try path-based lookup as fallback
+    const thumbByPath = new Map(thumbnails.map(t => [t.path, t]));
+
+    const selected = sorted.map(rating => {
+      const thumb = thumbMap.get(rating.filename) || null;
+      // Find original Dropbox path
+      const fileEntry = imageFiles.find(f => f.name === rating.filename);
+      return {
+        filename: rating.filename,
+        dropboxPath: fileEntry?.path_display || thumb?.path || '',
+        score: rating.score,
+        reason: rating.reason || '',
+        thumbnailDataUrl: thumb ? `data:image/jpeg;base64,${thumb.thumbnail}` : '',
+      };
+    });
+
+    job.results.push({
+      folderPath,
+      folderName,
+      total: imageFiles.length,
+      selected,
+    });
+    job.foldersDone++;
+  }
+
+  job.status = 'done';
+  job.phase = 'Complete';
+}
 
 /* ------------------------------------------------------------------ */
 /* Global error handler — catches anything the route wrappers forward  */
