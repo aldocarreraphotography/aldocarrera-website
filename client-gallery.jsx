@@ -152,7 +152,136 @@ function HeartBtn({ hearted, onClick, big }) {
 }
 
 /* ── LIGHTBOX ────────────────────────────────────────────── */
-function Lightbox({ images, idx, selects, onClose, onNav, onHeart, onNote }) {
+/* ── VoiceRecorder — per-image client voice feedback ───── */
+const VOICE_MAX_SECONDS = 60;
+
+function VoiceRecorder({ token, sessionKey, filename, voiceNote, onChange }) {
+  const [recording, setRecording] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [elapsed, setElapsed]     = useState(0);
+  const [err, setErr]             = useState(null);
+  const mrRef    = useRef(null);
+  const chunksRef = useRef([]);
+  const timerRef = useRef(null);
+
+  // Cleanup on unmount
+  useEffect(() => () => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    if (mrRef.current?.state === 'recording') mrRef.current.stop();
+  }, []);
+
+  const start = async () => {
+    setErr(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream);
+      chunksRef.current = [];
+      mr.ondataavailable = (e) => { if (e.data?.size > 0) chunksRef.current.push(e.data); };
+      mr.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+        setRecording(false);
+        const blob = new Blob(chunksRef.current, { type: mr.mimeType || 'audio/webm' });
+        if (blob.size > 0) await upload(blob);
+      };
+      mr.start();
+      mrRef.current = mr;
+      setRecording(true);
+      setElapsed(0);
+      timerRef.current = setInterval(() => {
+        setElapsed(prev => {
+          const next = prev + 1;
+          if (next >= VOICE_MAX_SECONDS && mrRef.current?.state === 'recording') {
+            mrRef.current.stop();
+          }
+          return next;
+        });
+      }, 1000);
+    } catch (e) {
+      setErr(e.name === 'NotAllowedError' ? 'Microphone access denied.' : `Couldn't start recording: ${e.message}`);
+    }
+  };
+
+  const stop = () => {
+    if (mrRef.current?.state === 'recording') mrRef.current.stop();
+  };
+
+  const upload = async (blob) => {
+    setUploading(true);
+    setErr(null);
+    try {
+      const form = new FormData();
+      form.append('audio', blob, 'note.' + (blob.type.includes('mp4') ? 'm4a' : 'webm'));
+      const r = await fetch(
+        `${GALLERY_API}/api/gallery-portals/${token}/voice/${encodeURIComponent(filename)}?key=${encodeURIComponent(sessionKey)}`,
+        { method: 'POST', body: form }
+      );
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const data = await r.json();
+      onChange(data.voiceNote);
+    } catch (e) {
+      console.error('[voice] upload failed:', e);
+      setErr('Upload failed. Try again.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const remove = async () => {
+    if (!confirm('Delete this voice note?')) return;
+    try {
+      await fetch(
+        `${GALLERY_API}/api/gallery-portals/${token}/voice/${encodeURIComponent(filename)}?key=${encodeURIComponent(sessionKey)}`,
+        { method: 'DELETE' }
+      );
+      onChange(null);
+    } catch (e) {
+      console.error('[voice] delete failed:', e);
+    }
+  };
+
+  if (uploading) {
+    return <div className="cg-voice cg-voice-state">Uploading & transcribing…</div>;
+  }
+
+  if (recording) {
+    return (
+      <div className="cg-voice cg-voice-recording">
+        <button className="cg-voice-stop" onClick={stop} type="button">
+          <span className="cg-voice-dot"/> Stop · {elapsed}s
+        </button>
+        <span className="cg-voice-hint">tap to finish (auto-stops at {VOICE_MAX_SECONDS}s)</span>
+      </div>
+    );
+  }
+
+  if (voiceNote) {
+    const audioSrc = `${GALLERY_API}/api/gallery-portals/${token}/voice/${encodeURIComponent(filename)}?key=${encodeURIComponent(sessionKey)}&v=${encodeURIComponent(voiceNote.recordedAt || '')}`;
+    return (
+      <div className="cg-voice cg-voice-has">
+        <audio controls src={audioSrc} preload="metadata"/>
+        {voiceNote.transcript && (
+          <div className="cg-voice-transcript">"{voiceNote.transcript}"</div>
+        )}
+        <div className="cg-voice-actions">
+          <button className="cg-voice-btn" onClick={start} type="button">Re-record</button>
+          <button className="cg-voice-btn cg-voice-del" onClick={remove} type="button">Delete</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="cg-voice">
+      <button className="cg-voice-record" onClick={start} type="button">
+        <span className="cg-voice-mic">●</span> Record voice note
+      </button>
+      {err && <div className="cg-voice-err">{err}</div>}
+    </div>
+  );
+}
+
+function Lightbox({ images, idx, selects, token, sessionKey, onClose, onNav, onHeart, onNote, onVoice }) {
   const img = images[idx];
   const sel = selects[img?.filename] || {};
   const [note, setNote] = useState(sel.note || '');
@@ -206,13 +335,22 @@ function Lightbox({ images, idx, selects, onClose, onNav, onHeart, onNote }) {
           hearted={sel.hearted}
           onClick={() => onHeart(img.filename, !sel.hearted)}
         />
-        <textarea
-          className="cg-lb-note"
-          placeholder="Leave a note…"
-          value={note}
-          onChange={e => handleNote(e.target.value)}
-          rows={2}
-        />
+        <div className="cg-lb-feedback">
+          <textarea
+            className="cg-lb-note"
+            placeholder="Leave a note…"
+            value={note}
+            onChange={e => handleNote(e.target.value)}
+            rows={2}
+          />
+          <VoiceRecorder
+            token={token}
+            sessionKey={sessionKey}
+            filename={img.filename}
+            voiceNote={sel.voiceNote || null}
+            onChange={(vn) => onVoice(img.filename, vn)}
+          />
+        </div>
       </div>
     </div>
   );
@@ -290,6 +428,18 @@ function GalleryView({ token, sessionKey, title }) {
     patchSelect(filename, { hearted: val });
   };
 
+  /* Voice note updates come back from VoiceRecorder after the audio is
+     uploaded — we just mirror the result into local selects so the UI
+     reflects it without a round-trip. Set to null on delete. */
+  const handleVoice = useCallback((filename, voiceNote) => {
+    setSelects(prev => {
+      const next = { ...(prev[filename] || {}) };
+      if (voiceNote) next.voiceNote = voiceNote;
+      else           delete next.voiceNote;
+      return { ...prev, [filename]: next };
+    });
+  }, []);
+
   const saveNote = useCallback((filename, note) => {
     patchSelect(filename, { note });
   }, [patchSelect]);
@@ -355,10 +505,13 @@ function GalleryView({ token, sessionKey, title }) {
           images={images}
           idx={lbIdx}
           selects={selects}
+          token={token}
+          sessionKey={sessionKey}
           onClose={() => setLbIdx(null)}
           onNav={setLbIdx}
           onHeart={handleHeart}
           onNote={saveNote}
+          onVoice={handleVoice}
         />
       )}
     </>

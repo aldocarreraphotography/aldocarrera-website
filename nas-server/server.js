@@ -1433,6 +1433,139 @@ app.patch('/api/gallery-portals/:token/select/:filename', async (req, res) => {
   }
 });
 
+/* ------------------------------------------------------------------ */
+/* Portal voice notes — client records audio feedback per image       */
+/* ------------------------------------------------------------------ */
+
+const _audioExt = (mime) => {
+  if (!mime) return 'webm';
+  if (mime.includes('webm')) return 'webm';
+  if (mime.includes('mp4'))  return 'm4a';   // Safari's default
+  if (mime.includes('mpeg')) return 'mp3';
+  if (mime.includes('ogg'))  return 'ogg';
+  if (mime.includes('wav'))  return 'wav';
+  return 'webm';
+};
+
+/* Best-effort Whisper transcription. Returns null on failure — never throws.
+   Requires OPENAI_API_KEY env var; without it, voice notes are still saved
+   but have no transcript. */
+async function _transcribeAudio(buffer, mime) {
+  if (!process.env.OPENAI_API_KEY) return null;
+  try {
+    const form = new FormData();
+    const blob = new Blob([buffer], { type: mime || 'audio/webm' });
+    form.append('file', blob, 'note.' + _audioExt(mime));
+    form.append('model', 'whisper-1');
+    const r = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` },
+      body: form,
+    });
+    if (!r.ok) {
+      const txt = await r.text().catch(() => '');
+      console.warn('[whisper]', r.status, txt.slice(0, 200));
+      return null;
+    }
+    const data = await r.json();
+    return (data?.text || '').trim() || null;
+  } catch (e) {
+    console.warn('[whisper] failed:', e?.message);
+    return null;
+  }
+}
+
+/* POST /api/gallery-portals/:token/voice/:filename?key=KEY  — upload voice note (PIN-gated) */
+app.post('/api/gallery-portals/:token/voice/:filename', upload.single('audio'), async (req, res) => {
+  const data = await readGalleryPortals();
+  const idx  = (data.portals || []).findIndex(p => p.token === req.params.token);
+  if (idx === -1) return res.status(404).json({ error: 'not_found' });
+  const portal = data.portals[idx];
+
+  const key = req.query.key || req.headers['x-gallery-key'] || '';
+  if (key !== _portalKey(portal.token, portal.pin)) return res.status(403).json({ error: 'forbidden' });
+  if (!req.file?.buffer) return res.status(400).json({ error: 'no_audio' });
+
+  const filename     = req.params.filename;
+  const ext          = _audioExt(req.file.mimetype);
+  const audioFile    = `${filename}.${ext}`;
+  await writeBytes(`__voice/${portal.token}`, audioFile, req.file.buffer);
+
+  // Transcribe in parallel — best-effort, doesn't block upload success
+  const transcript = await _transcribeAudio(req.file.buffer, req.file.mimetype);
+
+  if (!portal.selects) portal.selects = {};
+  if (!portal.selects[filename]) portal.selects[filename] = {};
+  portal.selects[filename].voiceNote = {
+    file:       audioFile,
+    mime:       req.file.mimetype || 'audio/webm',
+    transcript: transcript,
+    size:       req.file.buffer.length,
+    recordedAt: new Date().toISOString(),
+  };
+  data.portals[idx] = portal;
+  await writeGalleryPortals(data);
+
+  res.json({ ok: true, voiceNote: portal.selects[filename].voiceNote });
+});
+
+/* GET /api/gallery-portals/:token/voice/:filename?key=KEY  — serve audio (PIN-gated, public) */
+app.get('/api/gallery-portals/:token/voice/:filename', async (req, res) => {
+  const data = await readGalleryPortals();
+  const portal = (data.portals || []).find(p => p.token === req.params.token);
+  if (!portal) return res.status(404).end();
+
+  const key = req.query.key || req.headers['x-gallery-key'] || '';
+  if (key !== _portalKey(portal.token, portal.pin)) return res.status(403).end();
+
+  const voice = portal.selects?.[req.params.filename]?.voiceNote;
+  if (!voice) return res.status(404).end();
+
+  const bytes = await readBytes(`__voice/${portal.token}`, voice.file);
+  if (!bytes) return res.status(404).end();
+
+  res.setHeader('Content-Type', voice.mime || 'audio/webm');
+  res.setHeader('Cache-Control', 'private, max-age=3600');
+  res.send(bytes);
+});
+
+/* DELETE /api/gallery-portals/:token/voice/:filename?key=KEY  — remove voice note (PIN-gated) */
+app.delete('/api/gallery-portals/:token/voice/:filename', async (req, res) => {
+  const data = await readGalleryPortals();
+  const idx  = (data.portals || []).findIndex(p => p.token === req.params.token);
+  if (idx === -1) return res.status(404).json({ error: 'not_found' });
+  const portal = data.portals[idx];
+
+  const key = req.query.key || req.headers['x-gallery-key'] || '';
+  if (key !== _portalKey(portal.token, portal.pin)) return res.status(403).json({ error: 'forbidden' });
+
+  const filename = req.params.filename;
+  const voice    = portal.selects?.[filename]?.voiceNote;
+  if (voice?.file) {
+    try { await deleteImage(`__voice/${portal.token}`, voice.file); } catch (_) {}
+  }
+  if (portal.selects?.[filename]) {
+    delete portal.selects[filename].voiceNote;
+    data.portals[idx] = portal;
+    await writeGalleryPortals(data);
+  }
+  res.json({ ok: true });
+});
+
+/* GET /api/admin/gallery-portals/:token/voice/:filename  — admin playback (JWT-auth) */
+app.get('/api/admin/gallery-portals/:token/voice/:filename', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  const data   = await readGalleryPortals();
+  const portal = (data.portals || []).find(p => p.token === req.params.token);
+  if (!portal) return res.status(404).end();
+  const voice = portal.selects?.[req.params.filename]?.voiceNote;
+  if (!voice) return res.status(404).end();
+  const bytes = await readBytes(`__voice/${portal.token}`, voice.file);
+  if (!bytes) return res.status(404).end();
+  res.setHeader('Content-Type', voice.mime || 'audio/webm');
+  res.send(bytes);
+});
+
 /* POST /api/gallery-portals/:token/submit  — client submits final selections (PIN-gated, public) */
 app.post('/api/gallery-portals/:token/submit', async (req, res) => {
   try {
@@ -1449,11 +1582,20 @@ app.post('/api/gallery-portals/:token/submit', async (req, res) => {
     data.portals[idx]  = portal;
     await writeGalleryPortals(data);
 
-    // Fire email — don't let a mail failure block the 200 response
-    const hearted = Object.entries(portal.selects || {})
-      .filter(([, v]) => v.hearted)
-      .map(([filename, v]) => ({ filename, note: (v.note || '').trim() }));
-    _sendSubmitEmail({ portal, hearted }).catch(e => console.error('[email] send failed:', e?.message));
+    // Fire email — don't let a mail failure block the 200 response.
+    // Include any image with ANY feedback (heart, note, or voice) so voice-only
+    // feedback surfaces too.
+    const feedback = Object.entries(portal.selects || {})
+      .filter(([, v]) => v.hearted || (v.note || '').trim() || v.voiceNote?.transcript || v.voiceNote?.file)
+      .map(([filename, v]) => ({
+        filename,
+        hearted:         !!v.hearted,
+        note:            (v.note || '').trim(),
+        voiceTranscript: v.voiceNote?.transcript || '',
+        hasVoice:        !!v.voiceNote?.file,
+      }));
+    const heartedCount = feedback.filter(f => f.hearted).length;
+    _sendSubmitEmail({ portal, feedback, heartedCount }).catch(e => console.error('[email] send failed:', e?.message));
 
     res.json({ ok: true, submittedAt: portal.submittedAt });
   } catch (err) {
@@ -1462,21 +1604,39 @@ app.post('/api/gallery-portals/:token/submit', async (req, res) => {
   }
 });
 
-async function _sendSubmitEmail({ portal, hearted }) {
+async function _sendSubmitEmail({ portal, feedback, heartedCount }) {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) { console.warn('[email] RESEND_API_KEY not set — skipping notification email'); return; }
 
   const resend  = new Resend(apiKey);
   const to      = process.env.NOTIFY_EMAIL || 'aldo@aldocarrera.com';
-  const subject = `Gallery submitted: ${portal.title || portal.token} · ${hearted.length} selected`;
+  const subject = `Gallery submitted: ${portal.title || portal.token} · ${heartedCount} selected`;
+  const voiceCount = feedback.filter(f => f.hasVoice).length;
 
-  const imageRows = hearted.length > 0
-    ? hearted.map(h => `
+  const esc = (s) => String(s || '').replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+
+  const imageRows = feedback.length > 0
+    ? feedback.map(f => {
+        const heart = f.hearted ? '♥' : '·';
+        const noteBlock = f.note
+          ? `<div style="font-size:13px;color:#444;margin-top:4px;">${esc(f.note)}</div>`
+          : '';
+        const voiceBlock = f.voiceTranscript
+          ? `<div style="font-size:13px;color:#7c2a2a;margin-top:6px;font-style:italic;">🎤 "${esc(f.voiceTranscript)}"</div>`
+          : f.hasVoice
+          ? `<div style="font-size:12px;color:#999;margin-top:6px;font-style:italic;">🎤 (voice note — no transcript)</div>`
+          : '';
+        return `
         <tr>
-          <td style="padding:6px 16px 6px 0;font-size:13px;font-family:monospace;color:#1a1810;">${h.filename}</td>
-          <td style="padding:6px 0;font-size:13px;color:#666;">${h.note || ''}</td>
-        </tr>`).join('')
-    : `<tr><td colspan="2" style="padding:6px 0;color:#999;font-size:13px;font-style:italic;">No images hearted</td></tr>`;
+          <td style="padding:10px 12px 10px 0;font-size:13px;font-family:monospace;color:#1a1810;vertical-align:top;width:36px;">${heart}</td>
+          <td style="padding:10px 0;border-bottom:1px solid #f0ece4;">
+            <div style="font-size:13px;font-family:monospace;color:#1a1810;">${esc(f.filename)}</div>
+            ${noteBlock}
+            ${voiceBlock}
+          </td>
+        </tr>`;
+      }).join('')
+    : `<tr><td colspan="2" style="padding:6px 0;color:#999;font-size:13px;font-style:italic;">No feedback recorded</td></tr>`;
 
   const html = `<!DOCTYPE html>
 <html><body style="margin:0;padding:0;background:#fafaf8;">
@@ -1486,22 +1646,22 @@ async function _sendSubmitEmail({ portal, hearted }) {
   <table style="border-collapse:collapse;width:100%;margin-bottom:28px;">
     <tr>
       <td style="padding:5px 20px 5px 0;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#999;white-space:nowrap;vertical-align:top;">Gallery</td>
-      <td style="padding:5px 0;font-size:14px;color:#1a1810;">${portal.title || '(untitled)'}</td>
+      <td style="padding:5px 0;font-size:14px;color:#1a1810;">${esc(portal.title) || '(untitled)'}</td>
     </tr>
     <tr>
       <td style="padding:5px 20px 5px 0;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#999;white-space:nowrap;vertical-align:top;">Project</td>
-      <td style="padding:5px 0;font-size:13px;font-family:monospace;color:#555;">${portal.projectId}</td>
+      <td style="padding:5px 0;font-size:13px;font-family:monospace;color:#555;">${esc(portal.projectId)}</td>
     </tr>
     <tr>
       <td style="padding:5px 20px 5px 0;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#999;white-space:nowrap;vertical-align:top;">Hearted</td>
-      <td style="padding:5px 0;font-size:14px;color:#1a1810;font-weight:600;">${hearted.length} image${hearted.length !== 1 ? 's' : ''}</td>
+      <td style="padding:5px 0;font-size:14px;color:#1a1810;font-weight:600;">${heartedCount} image${heartedCount !== 1 ? 's' : ''}${voiceCount > 0 ? ` · ${voiceCount} voice note${voiceCount !== 1 ? 's' : ''}` : ''}</td>
     </tr>
     <tr>
       <td style="padding:5px 20px 5px 0;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#999;white-space:nowrap;vertical-align:top;">Submitted</td>
       <td style="padding:5px 0;font-size:13px;color:#555;">${new Date(portal.submittedAt).toLocaleString('en-US', { dateStyle:'long', timeStyle:'short' })}</td>
     </tr>
   </table>
-  <p style="margin:0 0 10px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#999;">Selected images</p>
+  <p style="margin:0 0 10px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#999;">Client feedback</p>
   <table style="border-collapse:collapse;width:100%;border-top:1px solid #e8e4dc;">
     ${imageRows}
   </table>
