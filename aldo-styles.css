@@ -2938,12 +2938,13 @@ img.lazy-img.loaded.in-view {
      both finished loading AND scrolled into the viewport.
      ease-in keeps the image dark/pixelated longer, then brings it in —
      the deliberate hold on the placeholder is the effect. */
-  animation: lazyFadeIn 2s steps(10, end) forwards;
-  animation-delay: 0.2s;
+  animation: lazyFadeIn 1.3s linear forwards;
+  animation-delay: 0.1s;
 }
 @keyframes lazyFadeIn {
   0%   { opacity: 0; }
-  45%  { opacity: 0; }
+  64%  { opacity: 0; }
+  65%  { opacity: 1; }
   100% { opacity: 1; }
 }
 /* Respect reduced-motion: snap in instantly when in view. */
