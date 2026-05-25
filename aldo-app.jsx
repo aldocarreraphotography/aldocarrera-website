@@ -1839,7 +1839,7 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
       return p;
     };
 
-    const HOLD_MS = 600; // how long the pixelated placeholder is visible
+    const HOLD_MS = 350; // how long the pixelated placeholder is visible
 
     const reveal = (el) => {
       if (el.classList.contains('lazy-revealed')) return;
@@ -1872,7 +1872,7 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
           nearObs.unobserve(e.target);
         }
       });
-    }, { rootMargin: '100px 0px 100px 0px' });
+    }, { rootMargin: '200px 0px 200px 0px' });
 
     const observe = () => {
       document.querySelectorAll('img.lazy-img:not(.lazy-revealed)').forEach(img => {
