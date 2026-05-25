@@ -2386,6 +2386,7 @@ app.get('/api/dropbox/folders', async (req, res) => {
       folders.push(...results);
     }
 
+    folders.sort((a, b) => a.name.localeCompare(b.name));
     res.json({ folders });
   } catch (err) {
     console.error('[dropbox/folders] FATAL:', err?.message, err?.stack);
