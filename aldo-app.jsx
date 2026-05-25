@@ -1818,7 +1818,68 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
     return () => window.removeEventListener('popstate', onPop);
   }, [project]);
 
-  /* scroll-reveal removed — images load naturally */
+  /* ── Two-phase scroll reveal ──
+     Phase 1 (1500px out): force eager-load and pre-decode while still off-screen,
+       mark the image .lazy-ready when it's fully decoded.
+     Phase 2 (in viewport): if already .lazy-ready, snap visibility immediately;
+       otherwise the snap waits at most one paint frame after decode completes.
+     The placeholder (blurDataURL background on the wrapper) shows the whole
+     time the image is hidden — so the swap is pixelated → sharp, no fade. */
+  aUseEffect(() => {
+    const preloaded = new WeakSet();
+
+    const preload = async (el) => {
+      if (preloaded.has(el)) return;
+      preloaded.add(el);
+      el.loading = 'eager';
+      try { await el.decode(); el.classList.add('lazy-ready'); }
+      catch (_) { el.classList.add('lazy-ready'); /* show anyway if decode unsupported */ }
+    };
+
+    const reveal = (el) => {
+      if (el.classList.contains('lazy-ready')) {
+        el.classList.add('lazy-revealed');
+      } else {
+        // Decode still running — chain reveal to the next frame after it lands
+        preload(el).then(() => {
+          requestAnimationFrame(() => el.classList.add('lazy-revealed'));
+        });
+      }
+    };
+
+    // Far observer: triggers preload well before image enters viewport
+    const farObs = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          preload(e.target);
+          farObs.unobserve(e.target);
+        }
+      });
+    }, { rootMargin: '1500px 0px 1500px 0px' });
+
+    // Near observer: triggers the actual visibility snap when image is in view
+    const nearObs = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          reveal(e.target);
+          nearObs.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.01 });
+
+    const observe = () => {
+      document.querySelectorAll('img.lazy-img:not(.lazy-revealed)').forEach(img => {
+        farObs.observe(img);
+        nearObs.observe(img);
+      });
+    };
+
+    observe();
+    const mut = new MutationObserver(observe);
+    mut.observe(document.body, { childList: true, subtree: true });
+
+    return () => { farObs.disconnect(); nearObs.disconnect(); mut.disconnect(); };
+  }, []);
 
   /* ── iOS-safe scroll lock when viewer/video is open ── */
   aUseEffect(() => {

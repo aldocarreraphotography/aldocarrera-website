@@ -2930,7 +2930,11 @@ img {
    bg-size to auto and tile the 20px source. The <img> on top fades in
    via the .lazy-img / .loaded keyframe below, dissolving the pixel grid
    into the real image. */
-/* lazy-img: no reveal effect — images load naturally as browser fetches them */
+/* Scroll-reveal: image hidden behind pixelated placeholder until in viewport.
+   Two-phase: observer at 1500px starts native load early; observer at 0px
+   reveals once image is already decoded — so the snap is truly instant. */
+img.lazy-img { visibility: hidden; }
+img.lazy-img.lazy-revealed { visibility: visible; }
 
 /* ── Touch devices: disable hover transforms to prevent double-tap flicker ── */
 @media (hover: none) {
