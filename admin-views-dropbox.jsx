@@ -20,9 +20,9 @@ const { useState: dbS, useEffect: dbE, useRef: dbRef } = React;
 .dbx-wizard { max-width: 1100px; }
 .dbx-step-indicator { display: flex; gap: 0; margin-bottom: 32px; }
 .dbx-step { display: flex; align-items: center; gap: 8px; font-size: 11px;
-  font-family: var(--font-mono); text-transform: uppercase; letter-spacing: .08em;
-  color: var(--text-dim); }
-.dbx-step.is-active { color: var(--text); }
+  font-family: "IBM Plex Mono", monospace; text-transform: uppercase; letter-spacing: .08em;
+  color: var(--ink-muted); }
+.dbx-step.is-active { color: var(--ink); }
 .dbx-step.is-done { color: var(--accent); }
 .dbx-step-num { width: 22px; height: 22px; border-radius: 50%;
   border: 1px solid currentColor; display: flex; align-items: center;
@@ -31,70 +31,70 @@ const { useState: dbS, useEffect: dbE, useRef: dbRef } = React;
   color: #fff; }
 .dbx-step.is-done .dbx-step-num { background: var(--accent); border-color: var(--accent);
   color: #fff; }
-.dbx-step-sep { flex: 1; height: 1px; background: var(--border); margin: 0 12px; }
+.dbx-step-sep { flex: 1; height: 1px; background: var(--rule); margin: 0 12px; }
 
 /* Folder picker */
-.dbx-setup-card { background: var(--bg-raised); border: 1px solid var(--border);
+.dbx-setup-card { background: var(--paper-soft); border: 1px solid var(--rule);
   border-radius: 6px; padding: 24px; margin-bottom: 24px; }
 .dbx-setup-card h3 { margin: 0 0 8px; font-size: 15px; }
-.dbx-setup-card p  { margin: 0 0 12px; color: var(--text-dim); font-size: 13px; line-height: 1.5; }
-.dbx-setup-card code { font-family: var(--font-mono); font-size: 12px;
-  background: var(--bg-subtle); padding: 2px 6px; border-radius: 3px; }
+.dbx-setup-card p  { margin: 0 0 12px; color: var(--ink-muted); font-size: 13px; line-height: 1.5; }
+.dbx-setup-card code { font-family: "IBM Plex Mono", monospace; font-size: 12px;
+  background: var(--paper-soft); padding: 2px 6px; border-radius: 3px; }
 
 .dbx-folder-controls { display: flex; align-items: center; gap: 10px;
   margin-bottom: 12px; flex-wrap: wrap; }
-.dbx-folder-count { font-family: var(--font-mono); font-size: 11px;
-  color: var(--text-dim); margin-left: auto; }
+.dbx-folder-count { font-family: "IBM Plex Mono", monospace; font-size: 11px;
+  color: var(--ink-muted); margin-left: auto; }
 
 .dbx-folder-table { width: 100%; border-collapse: collapse; }
-.dbx-folder-row { border-bottom: 1px solid var(--border); }
-.dbx-folder-row:hover { background: var(--bg-raised); }
+.dbx-folder-row { border-bottom: 1px solid var(--rule); }
+.dbx-folder-row:hover { background: var(--paper-soft); }
 .dbx-folder-row.is-checked { background: color-mix(in srgb, var(--accent) 6%, transparent); }
 .dbx-folder-cell { padding: 10px 12px; font-size: 13px; vertical-align: middle; }
 .dbx-folder-cell-check { width: 36px; }
-.dbx-folder-name { font-weight: 500; font-family: var(--font-mono); font-size: 12px; }
-.dbx-folder-img-count { font-size: 11px; color: var(--text-dim);
-  font-family: var(--font-mono); white-space: nowrap; }
-.dbx-img-badge { display: inline-block; background: var(--bg-subtle);
-  border: 1px solid var(--border); border-radius: 3px;
-  padding: 1px 7px; font-size: 11px; font-family: var(--font-mono); }
+.dbx-folder-name { font-weight: 500; font-family: "IBM Plex Mono", monospace; font-size: 12px; }
+.dbx-folder-img-count { font-size: 11px; color: var(--ink-muted);
+  font-family: "IBM Plex Mono", monospace; white-space: nowrap; }
+.dbx-img-badge { display: inline-block; background: var(--paper-soft);
+  border: 1px solid var(--rule); border-radius: 3px;
+  padding: 1px 7px; font-size: 11px; font-family: "IBM Plex Mono", monospace; }
 
 .dbx-target-row { display: flex; align-items: center; gap: 16px;
-  padding: 16px 0; border-top: 1px solid var(--border); margin-top: 12px; }
-.dbx-target-label { font-size: 12px; font-family: var(--font-mono); text-transform: uppercase;
-  letter-spacing: .07em; color: var(--text-dim); white-space: nowrap; }
+  padding: 16px 0; border-top: 1px solid var(--rule); margin-top: 12px; }
+.dbx-target-label { font-size: 12px; font-family: "IBM Plex Mono", monospace; text-transform: uppercase;
+  letter-spacing: .07em; color: var(--ink-muted); white-space: nowrap; }
 
 /* Progress step */
 .dbx-progress-wrap { padding: 40px 0; display: flex; flex-direction: column;
   align-items: center; gap: 20px; }
-.dbx-spinner { width: 40px; height: 40px; border: 3px solid var(--border);
+.dbx-spinner { width: 40px; height: 40px; border: 3px solid var(--rule);
   border-top-color: var(--accent); border-radius: 50%; animation: dbx-spin 0.9s linear infinite; }
 @keyframes dbx-spin { to { transform: rotate(360deg); } }
-.dbx-phase { font-size: 14px; color: var(--text-dim); text-align: center; max-width: 500px; }
-.dbx-progress-count { font-family: var(--font-mono); font-size: 12px; color: var(--text-dim); }
-.dbx-progress-bar-track { width: 320px; height: 4px; background: var(--border);
+.dbx-phase { font-size: 14px; color: var(--ink-muted); text-align: center; max-width: 500px; }
+.dbx-progress-count { font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--ink-muted); }
+.dbx-progress-bar-track { width: 320px; height: 4px; background: var(--rule);
   border-radius: 2px; overflow: hidden; }
 .dbx-progress-bar-fill { height: 100%; background: var(--accent);
   border-radius: 2px; transition: width .3s ease; }
 .dbx-error-box { background: color-mix(in srgb, #e53 15%, transparent);
   border: 1px solid color-mix(in srgb, #e53 40%, transparent);
   border-radius: 6px; padding: 16px 20px; font-size: 13px;
-  color: var(--text); max-width: 600px; text-align: center; }
+  color: var(--ink); max-width: 600px; text-align: center; }
 
 /* Review step */
 .dbx-folder-section { margin-bottom: 40px; }
 .dbx-folder-head { display: flex; align-items: flex-start; gap: 16px;
   flex-wrap: wrap; margin-bottom: 16px; padding-bottom: 14px;
-  border-bottom: 1px solid var(--border); }
+  border-bottom: 1px solid var(--rule); }
 .dbx-folder-title { font-size: 16px; font-weight: 600; margin: 0 0 4px; }
-.dbx-folder-meta { font-size: 12px; font-family: var(--font-mono); color: var(--text-dim); }
+.dbx-folder-meta { font-size: 12px; font-family: "IBM Plex Mono", monospace; color: var(--ink-muted); }
 .dbx-folder-fields { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; flex: 1; }
 .dbx-field-group { display: flex; flex-direction: column; gap: 4px; }
 .dbx-field-label { font-size: 10px; text-transform: uppercase; letter-spacing: .08em;
-  font-family: var(--font-mono); color: var(--text-dim); }
-.dbx-input { background: var(--bg-raised); border: 1px solid var(--border);
+  font-family: "IBM Plex Mono", monospace; color: var(--ink-muted); }
+.dbx-input { background: var(--paper-soft); border: 1px solid var(--rule);
   border-radius: 4px; padding: 6px 10px; font-size: 13px;
-  color: var(--text); font-family: inherit; outline: none; }
+  color: var(--ink); font-family: inherit; outline: none; }
 .dbx-input:focus { border-color: var(--accent); }
 .dbx-input-year { width: 72px; }
 .dbx-input-name { width: 220px; }
@@ -106,42 +106,42 @@ const { useState: dbS, useEffect: dbE, useRef: dbRef } = React;
   overflow: hidden; border: 2px solid transparent; transition: border-color .15s, opacity .15s; }
 .dbx-thumb-wrap:hover { border-color: var(--accent); }
 .dbx-thumb-wrap.is-selected { border-color: var(--accent); }
-.dbx-thumb-wrap.is-deselected { opacity: 0.35; border-color: var(--border); }
+.dbx-thumb-wrap.is-deselected { opacity: 0.35; border-color: var(--rule); }
 .dbx-thumb-wrap.is-deselected .dbx-thumb-img { filter: grayscale(60%); }
 .dbx-thumb-img { width: 100%; aspect-ratio: 4/3; object-fit: cover; display: block; }
 .dbx-thumb-img-placeholder { width: 100%; aspect-ratio: 4/3;
-  background: var(--bg-subtle); display: flex; align-items: center;
-  justify-content: center; color: var(--text-dim); font-size: 11px; }
+  background: var(--paper-soft); display: flex; align-items: center;
+  justify-content: center; color: var(--ink-muted); font-size: 11px; }
 .dbx-score-badge { position: absolute; top: 6px; right: 6px;
-  font-size: 10px; font-family: var(--font-mono); font-weight: 600;
+  font-size: 10px; font-family: "IBM Plex Mono", monospace; font-weight: 600;
   padding: 2px 6px; border-radius: 3px; line-height: 1.4; }
 .dbx-score-badge.score-hi  { background: #16a34a; color: #fff; }
 .dbx-score-badge.score-mid { background: #2563eb; color: #fff; }
-.dbx-score-badge.score-lo  { background: var(--bg-subtle); color: var(--text-dim);
-  border: 1px solid var(--border); }
+.dbx-score-badge.score-lo  { background: var(--paper-soft); color: var(--ink-muted);
+  border: 1px solid var(--rule); }
 .dbx-deselect-x { position: absolute; top: 6px; left: 6px;
   width: 18px; height: 18px; background: rgba(0,0,0,.55); border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
   font-size: 11px; color: #fff; line-height: 1; }
-.dbx-thumb-reason { padding: 6px 8px; font-size: 11px; color: var(--text-dim);
-  line-height: 1.4; background: var(--bg-raised); border-top: 1px solid var(--border); }
+.dbx-thumb-reason { padding: 6px 8px; font-size: 11px; color: var(--ink-muted);
+  line-height: 1.4; background: var(--paper-soft); border-top: 1px solid var(--rule); }
 .dbx-thumb-reason.is-deselected { text-decoration: line-through; }
 
 /* Sticky bottom bar */
-.dbx-sticky-bar { position: sticky; bottom: 0; background: var(--bg);
-  border-top: 1px solid var(--border); padding: 14px 0;
+.dbx-sticky-bar { position: sticky; bottom: 0; background: var(--paper);
+  border-top: 1px solid var(--rule); padding: 14px 0;
   display: flex; align-items: center; gap: 16px; z-index: 100; margin-top: 32px; }
-.dbx-sticky-count { font-size: 13px; color: var(--text-dim);
-  font-family: var(--font-mono); }
-.dbx-sticky-count strong { color: var(--text); }
+.dbx-sticky-count { font-size: 13px; color: var(--ink-muted);
+  font-family: "IBM Plex Mono", monospace; }
+.dbx-sticky-count strong { color: var(--ink); }
 
 /* Import progress overlay */
 .dbx-import-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6);
   display: flex; align-items: center; justify-content: center; z-index: 999; }
-.dbx-import-box { background: var(--bg); border-radius: 8px; padding: 32px 40px;
+.dbx-import-box { background: var(--paper); border-radius: 8px; padding: 32px 40px;
   min-width: 340px; text-align: center; }
 .dbx-import-box h3 { margin: 0 0 16px; font-size: 16px; }
-.dbx-import-msg { font-size: 13px; color: var(--text-dim); margin-bottom: 16px; }
+.dbx-import-msg { font-size: 13px; color: var(--ink-muted); margin-bottom: 16px; }
 
 /* Responsive */
 @media (max-width: 640px) {
@@ -251,11 +251,11 @@ function FolderPicker({ onAnalyze }) {
       if (res.jobId) {
         onAnalyze(res.jobId);
       } else {
-        toast.error('Failed to start job: ' + (res.error || 'unknown'));
+        toast('Failed to start job: ' + (res.error || 'unknown'), 'error');
         setAnalyzing(false);
       }
     } catch (err) {
-      toast.error(err?.message || 'Failed to start curation job');
+      toast(err?.message || 'Failed to start curation job', 'error');
       setAnalyzing(false);
     }
   };
@@ -530,14 +530,14 @@ function ReviewView({ job }) {
 
       if (res.projects) {
         const names = res.projects.map(p => p.name).join(', ');
-        toast.success(`Created ${res.projects.length} project${res.projects.length !== 1 ? 's' : ''}: ${names}. ${res.totalImages} images imported.`);
+        toast(`Created ${res.projects.length} project${res.projects.length !== 1 ? 's' : ''}: ${names}. ${res.totalImages} images imported.`, 'ok');
         // Navigate to projects
         window.location.hash = '#/projects';
       } else {
-        toast.error('Import failed: ' + (res.error || res.message || 'unknown error'));
+        toast('Import failed: ' + (res.error || res.message || 'unknown error'), 'error');
       }
     } catch (err) {
-      toast.error('Import failed: ' + (err?.message || 'unknown'));
+      toast('Import failed: ' + (err?.message || 'unknown'), 'error');
     } finally {
       setImporting(false);
       setImportMsg('');
@@ -667,7 +667,7 @@ function ReviewView({ job }) {
               <div className="dbx-spinner" />
             </div>
             <div className="dbx-import-msg">{importMsg}</div>
-            <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>
+            <div style={{ fontSize: 12, color: 'var(--ink-muted)' }}>
               Full-resolution images are being downloaded from Dropbox and processed.
             </div>
           </div>
