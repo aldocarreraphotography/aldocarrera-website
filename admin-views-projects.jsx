@@ -128,9 +128,19 @@ function ProjectRow({ project, navigate }) {
   const fav     = project.images.filter(i => i.favorite).length;
   const rej     = project.images.filter(i => i.rejected).length;
   const isPublic = project.public !== false;
-  const togglePublic = (e) => {
+  const togglePublic = async (e) => {
     e.stopPropagation();
     window.AdminStore.updateProject(project.id, { public: !isPublic });
+    try {
+      await window.AdminStore.apiFetch(`/api/projects/${encodeURIComponent(project.id)}`, {
+        method: 'PUT',
+        body: JSON.stringify({ public: !isPublic }),
+      });
+    } catch (err) {
+      // Revert local state if save failed
+      window.AdminStore.updateProject(project.id, { public: isPublic });
+      toast('Failed to save visibility: ' + (err?.message || 'unknown'), 'error');
+    }
   };
   return (
     <div className={`ad-project-row ${isPublic ? '' : 'is-private'}`}>
@@ -428,9 +438,20 @@ function ProjectEditorView({ projectId, navigate }) {
       toast(`Project ${id} created`, 'ok');
       navigate(`#/projects/${encodeURIComponent(id)}/upload`);
     } else {
-      window.AdminStore.updateProject(existing.id, draft);
-      toast('Project saved', 'ok');
-      navigate(`#/projects/${encodeURIComponent(existing.id)}/images`);
+      setSaving(true);
+      try {
+        await window.AdminStore.apiFetch(`/api/projects/${encodeURIComponent(existing.id)}`, {
+          method: 'PUT',
+          body: JSON.stringify(draft),
+        });
+        window.AdminStore.updateProject(existing.id, draft);
+        toast('Project saved', 'ok');
+        navigate(`#/projects/${encodeURIComponent(existing.id)}/images`);
+      } catch (err) {
+        toast('Failed to save project: ' + (err?.message || 'unknown'), 'error');
+      } finally {
+        setSaving(false);
+      }
     }
   };
   const remove = () => {
