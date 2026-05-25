@@ -1839,15 +1839,17 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
       return p;
     };
 
+    const HOLD_MS = 600; // how long the pixelated placeholder is visible
+
     const reveal = (el) => {
       if (el.classList.contains('lazy-revealed')) return;
-      // Always kick off preload (idempotent via the WeakMap cache),
-      // then snap visibility on the frame after decode completes
-      preload(el).then(() => {
+      // Wait for BOTH: decode complete AND minimum placeholder hold time
+      const hold = new Promise(r => setTimeout(r, HOLD_MS));
+      Promise.all([preload(el), hold]).then(() => {
         requestAnimationFrame(() => el.classList.add('lazy-revealed'));
       });
-      // Hard fallback: if anything stalls, reveal after 3s regardless
-      setTimeout(() => el.classList.add('lazy-revealed'), 3000);
+      // Hard fallback: never stay stuck longer than HOLD_MS + 3s
+      setTimeout(() => el.classList.add('lazy-revealed'), HOLD_MS + 3000);
     };
 
     // Far observer: triggers preload well before image enters viewport
@@ -1860,8 +1862,9 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
       });
     }, { rootMargin: '3000px 0px 3000px 0px' });
 
-    // Near observer: reveals BEFORE image enters viewport — by the time you
-    // look at it, it's already snapped to visible.
+    // Near observer: fires as image is entering the viewport — combined with
+    // the HOLD_MS delay in reveal(), the placeholder is visible briefly while
+    // the user scrolls toward it, then snaps to sharp.
     const nearObs = new IntersectionObserver((entries) => {
       entries.forEach(e => {
         if (e.isIntersecting) {
@@ -1869,7 +1872,7 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
           nearObs.unobserve(e.target);
         }
       });
-    }, { rootMargin: '600px 0px 600px 0px' });
+    }, { rootMargin: '100px 0px 100px 0px' });
 
     const observe = () => {
       document.querySelectorAll('img.lazy-img:not(.lazy-revealed)').forEach(img => {
