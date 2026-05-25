@@ -1818,31 +1818,24 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
     return () => window.removeEventListener('popstate', onPop);
   }, [project]);
 
-  /* ── Scroll-reveal for lazy images ── */
+  /* ── Scroll-reveal for lazy images — placeholder holds, then hard snap ── */
   aUseEffect(() => {
-    let batchTimer = null;
-    const pending = [];
-
-    const flush = () => {
-      // Stagger images that enter in the same scroll batch
-      pending.forEach((el, i) => {
-        el.style.animationDelay = `${0.08 + i * 0.07}s`;
-        el.classList.add('in-view');
-      });
-      pending.length = 0;
-      batchTimer = null;
-    };
+    const HOLD_MS  = 750;  // how long the pixelated placeholder shows
+    const STAGGER  = 65;   // ms between images in the same batch
+    const timers   = new Set();
 
     const obs = new IntersectionObserver((entries) => {
-      entries.forEach(e => {
-        if (e.isIntersecting) {
-          pending.push(e.target);
-          obs.unobserve(e.target);
-        }
+      // Collect all images entering this batch
+      const batch = entries.filter(e => e.isIntersecting).map(e => e.target);
+      batch.forEach(el => obs.unobserve(el));
+      // Stagger each image in the batch, then snap opacity — no fade
+      batch.forEach((el, i) => {
+        const t = setTimeout(() => {
+          el.classList.add('in-view');
+          timers.delete(t);
+        }, HOLD_MS + i * STAGGER);
+        timers.add(t);
       });
-      // Collect all images entering this frame, then stagger them together
-      clearTimeout(batchTimer);
-      batchTimer = setTimeout(flush, 16);
     }, { threshold: 0.05, rootMargin: '200px 0px 0px 0px' });
 
     const observe = () =>
@@ -1850,11 +1843,14 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
 
     observe();
 
-    // Pick up images added dynamically (tab switches, project opens)
     const mut = new MutationObserver(observe);
     mut.observe(document.body, { childList: true, subtree: true });
 
-    return () => { obs.disconnect(); mut.disconnect(); clearTimeout(batchTimer); };
+    return () => {
+      obs.disconnect();
+      mut.disconnect();
+      timers.forEach(clearTimeout);
+    };
   }, []);
 
   /* ── iOS-safe scroll lock when viewer/video is open ── */
