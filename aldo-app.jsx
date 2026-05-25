@@ -1820,23 +1820,24 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
 
   /* ── Scroll-reveal for lazy images — placeholder holds, then hard snap ── */
   aUseEffect(() => {
-    const HOLD_MS  = 750;  // how long the pixelated placeholder shows
-    const STAGGER  = 65;   // ms between images in the same batch
+    const HOLD_MS  = 350;  // how long the pixelated placeholder shows
+    const STAGGER  = 60;   // ms between images in the same batch
     const timers   = new Set();
 
     const obs = new IntersectionObserver((entries) => {
       // Collect all images entering this batch
       const batch = entries.filter(e => e.isIntersecting).map(e => e.target);
       batch.forEach(el => obs.unobserve(el));
-      // Stagger each image in the batch, then snap opacity — no fade
+      // Stagger each image, pre-decode so the snap is truly instant
       batch.forEach((el, i) => {
-        const t = setTimeout(() => {
+        const t = setTimeout(async () => {
+          try { await el.decode(); } catch (_) {}
           el.classList.add('in-view');
           timers.delete(t);
         }, HOLD_MS + i * STAGGER);
         timers.add(t);
       });
-    }, { threshold: 0.05, rootMargin: '200px 0px 0px 0px' });
+    }, { threshold: 0.05, rootMargin: '0px 0px 400px 0px' });
 
     const observe = () =>
       document.querySelectorAll('img.lazy-img:not(.in-view)').forEach(img => obs.observe(img));
