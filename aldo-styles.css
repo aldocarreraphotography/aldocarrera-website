@@ -613,49 +613,34 @@ input, textarea, select {
   line-height: 1.5;
   text-align: right;
 }
-/* I'm feeling lucky — drops you into a random project */
-.lucky-btn {
-  grid-column: 1 / -1;
-  justify-self: start;
-  margin-top: 14px;
+/* I'm feeling lucky — discreet sidebar link that opens a random image */
+.sb-lucky {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  padding: 9px 16px 9px 12px;
+  gap: 6px;
+  margin-top: 12px;
   background: transparent;
-  border: 1px solid var(--rule);
-  border-radius: 999px;
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink);
+  border: none;
+  padding: 0;
   cursor: pointer;
-  transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
+  font-family: inherit;
+  font-size: inherit;
+  color: var(--ink-muted);
+  letter-spacing: 0.02em;
+  transition: color 160ms ease;
 }
-.lucky-btn:hover {
-  background: var(--accent);
-  border-color: var(--accent);
-  transform: translateY(-1px);
-}
-.lucky-btn:active { transform: translateY(0); }
-.lucky-dot {
-  width: 7px; height: 7px;
+.sb-lucky:hover { color: var(--accent); }
+.sb-lucky::before {
+  content: "";
+  display: inline-block;
+  width: 4px;
+  height: 4px;
   border-radius: 50%;
   background: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
-  animation: lucky-pulse 2.2s ease-in-out infinite;
+  margin-right: 2px;
+  opacity: 0.7;
 }
-.lucky-btn:hover .lucky-dot {
-  background: var(--ink);
-  box-shadow: 0 0 0 3px rgba(255,255,255,0.4);
-}
-@keyframes lucky-pulse {
-  0%, 100% { transform: scale(1); opacity: 1; }
-  50%      { transform: scale(1.4); opacity: 0.5; }
-}
-.lucky-arrow { font-size: 13px; opacity: 0.6; }
-.lucky-btn:hover .lucky-arrow { opacity: 1; transform: translate(2px, -2px); transition: transform 160ms; }
+.sb-lucky:hover::before { opacity: 1; }
 
 /* ── CREW credits page ───────────────────────────────────── */
 .crew-link {

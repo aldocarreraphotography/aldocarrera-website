@@ -179,7 +179,12 @@ const SbChev = ({ open }) => (
 /* ============================================================
    SIDEBAR (Finder-style)
    ============================================================ */
-function Sidebar({ openWindow, activeKind, archiveFilter, setArchiveFilter, taskList }) {
+function Sidebar({ openWindow, activeKind, archiveFilter, setArchiveFilter, taskList, onOpenPhoto }) {
+  const lucky = () => {
+    if (!ARCHIVE || ARCHIVE.length === 0) return;
+    const photo = ARCHIVE[Math.floor(Math.random() * ARCHIVE.length)];
+    if (onOpenPhoto) onOpenPhoto(photo, null);
+  };
   const [open, setOpen] = aUseState({ favorites: true, tags: true, years: true, clients: false, recent: true });
   const toggle = (k) => setOpen(o => ({ ...o, [k]: !o[k] }));
 
@@ -335,6 +340,9 @@ function Sidebar({ openWindow, activeKind, archiveFilter, setArchiveFilter, task
         <a href="tel:+16199717182">+1 (619) 971-7182</a>
         <a href="https://instagram.com/aldocarrera" target="_blank" rel="noreferrer">@aldocarrera</a>
         <div style={{marginTop: 6}}>Los Angeles, CA</div>
+        <button className="sb-lucky" onClick={lucky} title="Show me a random photo">
+          feeling lucky
+        </button>
       </div>
     </aside>
   );
@@ -1529,6 +1537,7 @@ function ArchiveApp() {
         archiveFilter={archiveFilter}
         setArchiveFilter={setArchiveFilter}
         taskList={taskList}
+        onOpenPhoto={openPhotoViewer}
       />
 
       <div className="desktop" onContextMenu={onDesktopCtx} onClick={() => setCtx(null)}>

@@ -123,11 +123,6 @@ function FeaturedStrip({ onOpenProject }) {
 }
 
 function Portfolio({ view, onSetView, onOpenProject, onSetCrumb }) {
-  const lucky = () => {
-    if (PROJECTS.length === 0) return;
-    const p = PROJECTS[Math.floor(Math.random() * PROJECTS.length)];
-    onOpenProject(p);
-  };
   return (
     <div className={`portfolio ${view}`}>
       <FeaturedStrip onOpenProject={onOpenProject}/>
@@ -140,11 +135,6 @@ function Portfolio({ view, onSetView, onOpenProject, onSetCrumb }) {
           A curated set of editorial and commercial work across fashion,<br/>
           entertainment, and lifestyle. Open any project for the full record.
         </div>
-        <button className="lucky-btn" onClick={lucky} title="Open a random project">
-          <span className="lucky-dot"/>
-          <span>I'm feeling lucky</span>
-          <span className="lucky-arrow">↗</span>
-        </button>
       </div>
 
       <div className="projects">
