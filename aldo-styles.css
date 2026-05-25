@@ -2931,19 +2931,20 @@ img {
    via the .lazy-img / .loaded keyframe below, dissolving the pixel grid
    into the real image. */
 img.lazy-img { opacity: 0; }
-img.lazy-img.loaded {
+img.lazy-img.loaded.in-view {
   /* Animation (not transition) — sidesteps specificity conflicts with
      existing `.photo img` / `.pic img` rules that already declare their own
-     `transition` for hover filter/transform. */
+     `transition` for hover filter/transform. Fires only when the image has
+     both finished loading AND scrolled into the viewport. */
   animation: lazyFadeIn 1.1s ease forwards;
 }
 @keyframes lazyFadeIn {
   from { opacity: 0; }
   to   { opacity: 1; }
 }
-/* Respect reduced-motion: no fade, snap in instantly. */
+/* Respect reduced-motion: snap in instantly when in view. */
 @media (prefers-reduced-motion: reduce) {
-  img.lazy-img.loaded { animation: none; opacity: 1; }
+  img.lazy-img.loaded.in-view { animation: none; opacity: 1; }
 }
 
 /* ── Touch devices: disable hover transforms to prevent double-tap flicker ── */

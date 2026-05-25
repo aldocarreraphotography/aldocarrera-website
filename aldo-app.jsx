@@ -1818,6 +1818,29 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
     return () => window.removeEventListener('popstate', onPop);
   }, [project]);
 
+  /* ── Scroll-reveal for lazy images ── */
+  aUseEffect(() => {
+    const obs = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          e.target.classList.add('in-view');
+          obs.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.05, rootMargin: '0px 0px -40px 0px' });
+
+    const observe = () =>
+      document.querySelectorAll('img.lazy-img:not(.in-view)').forEach(img => obs.observe(img));
+
+    observe();
+
+    // Pick up images added dynamically (tab switches, project opens)
+    const mut = new MutationObserver(observe);
+    mut.observe(document.body, { childList: true, subtree: true });
+
+    return () => { obs.disconnect(); mut.disconnect(); };
+  }, []);
+
   /* ── iOS-safe scroll lock when viewer/video is open ── */
   aUseEffect(() => {
     const isOpen = !!(openPhoto || mobileVideo);
