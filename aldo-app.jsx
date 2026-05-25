@@ -1820,14 +1820,30 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
 
   /* ── Scroll-reveal for lazy images ── */
   aUseEffect(() => {
+    let batchTimer = null;
+    const pending = [];
+
+    const flush = () => {
+      // Stagger images that enter in the same scroll batch
+      pending.forEach((el, i) => {
+        el.style.animationDelay = `${0.08 + i * 0.07}s`;
+        el.classList.add('in-view');
+      });
+      pending.length = 0;
+      batchTimer = null;
+    };
+
     const obs = new IntersectionObserver((entries) => {
       entries.forEach(e => {
         if (e.isIntersecting) {
-          e.target.classList.add('in-view');
+          pending.push(e.target);
           obs.unobserve(e.target);
         }
       });
-    }, { threshold: 0.05, rootMargin: '0px 0px -40px 0px' });
+      // Collect all images entering this frame, then stagger them together
+      clearTimeout(batchTimer);
+      batchTimer = setTimeout(flush, 16);
+    }, { threshold: 0.05, rootMargin: '0px 0px -30px 0px' });
 
     const observe = () =>
       document.querySelectorAll('img.lazy-img:not(.in-view)').forEach(img => obs.observe(img));
@@ -1838,7 +1854,7 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
     const mut = new MutationObserver(observe);
     mut.observe(document.body, { childList: true, subtree: true });
 
-    return () => { obs.disconnect(); mut.disconnect(); };
+    return () => { obs.disconnect(); mut.disconnect(); clearTimeout(batchTimer); };
   }, []);
 
   /* ── iOS-safe scroll lock when viewer/video is open ── */
