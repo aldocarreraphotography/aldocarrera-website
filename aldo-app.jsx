@@ -1557,6 +1557,8 @@ function ArchiveApp() {
               openWindow('project', { project: p });
             }}
             onOpenVideo={(v, dims) => openWindow('video', { video: v, dims })}
+            onOpenCrew={(name) => openWindow('crew', { crewName: name || null })}
+            onOpenPrint={(p) => openWindow('prints', { print: p })}
             view={view} setView={setView}
             archiveFilter={archiveFilter}
             setArchiveFilter={setArchiveFilter}
@@ -1694,7 +1696,7 @@ function ArchiveApp() {
 /* ============================================================
    WINDOW HOST — content router
    ============================================================ */
-function WindowHost({ win, z, focused, minimized, onMove, onResize, onFocus, onClose, onMinimize, onMaximize, onOpenPhoto, onOpenProject, onOpenVideo, view, setView, archiveFilter, setArchiveFilter, selectionMode, setSelectionMode, selectedIds, toggleSelection }) {
+function WindowHost({ win, z, focused, minimized, onMove, onResize, onFocus, onClose, onMinimize, onMaximize, onOpenPhoto, onOpenProject, onOpenVideo, onOpenCrew, onOpenPrint, view, setView, archiveFilter, setArchiveFilter, selectionMode, setSelectionMode, selectedIds, toggleSelection }) {
   let content, toolbar, statusbar;
   const baseCrumb = (parts) => (
     <div className="crumbs">
@@ -1769,13 +1771,13 @@ function WindowHost({ win, z, focused, minimized, onMove, onResize, onFocus, onC
   } else if (win.kind === 'crew') {
     toolbar = <div className="window-toolbar">{baseCrumb(['~', 'crew', win.crewName || 'index'])}</div>;
     content = win.crewName
-      ? <CrewDetail name={win.crewName} onOpenProject={(p) => openWindow('project', { project: p })} onBack={() => openWindow('crew')}/>
-      : <CrewIndex onOpenProject={(p) => openWindow('project', { project: p })} onOpenCrew={(name) => openWindow('crew', { crewName: name })}/>;
+      ? <CrewDetail name={win.crewName} onOpenProject={onOpenProject} onBack={() => onOpenCrew(null)}/>
+      : <CrewIndex onOpenProject={onOpenProject} onOpenCrew={(name) => onOpenCrew(name)}/>;
   } else if (win.kind === 'prints') {
     toolbar = <div className="window-toolbar">{baseCrumb(['~', 'prints', win.print ? win.print.id : 'shop'])}</div>;
     content = win.print
-      ? <PrintDetail print={win.print} onBack={() => openWindow('prints', { print: null })}/>
-      : <PrintShop onOpenPrint={(p) => openWindow('prints', { print: p })}/>;
+      ? <PrintDetail print={win.print} onBack={() => onOpenPrint(null)}/>
+      : <PrintShop onOpenPrint={(p) => onOpenPrint(p)}/>;
   } else if (win.kind === 'project') {
     toolbar = (
       <div className="window-toolbar">
