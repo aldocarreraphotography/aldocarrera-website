@@ -791,6 +791,323 @@ input, textarea, select {
   color: var(--ink-muted);
 }
 
+/* ── PRINT SHOP ─────────────────────────────────────────── */
+.prints-page, .print-detail { padding: 24px 28px 60px; }
+.prints-page .heading {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: end;
+  gap: 18px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--rule);
+  margin-bottom: 28px;
+}
+.prints-page .heading h2 {
+  font-family: "Neue Haas Grotesk Display Pro", "Inter", sans-serif;
+  font-weight: 500;
+  font-size: 28px;
+  margin: 0;
+  letter-spacing: -0.022em;
+}
+.prints-page .lede {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  color: var(--ink-muted);
+  max-width: 280px;
+  line-height: 1.6;
+  text-align: right;
+}
+
+.prints-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 28px 22px;
+}
+.print-card {
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.print-photo {
+  position: relative;
+  aspect-ratio: 4/5;
+  overflow: hidden;
+  background: var(--paper-soft);
+  border: 1px solid var(--rule-soft);
+  transition: border-color 160ms ease;
+}
+.print-card:hover .print-photo { border-color: var(--accent); }
+.print-photo img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+}
+.print-scarce {
+  position: absolute;
+  top: 10px; left: 10px;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 4px 8px;
+  border-radius: 2px;
+}
+.print-soldout {
+  position: absolute;
+  inset: 0;
+  background: rgba(26,26,26,0.55);
+  color: var(--paper);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.print-title {
+  font-family: "Neue Haas Grotesk Display Pro", "Inter", sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+.print-meta {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  color: var(--ink-muted);
+}
+
+/* Print detail */
+.print-detail .crumb-back {
+  background: transparent;
+  border: none;
+  color: var(--ink-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  cursor: pointer;
+  margin-bottom: 18px;
+  padding: 0;
+}
+.print-detail .crumb-back:hover { color: var(--accent); }
+.print-detail-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 36px;
+  align-items: flex-start;
+}
+.print-detail-photo {
+  aspect-ratio: 4/5;
+  background: var(--paper-soft);
+  border: 1px solid var(--rule);
+  overflow: hidden;
+}
+.print-detail-photo img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+}
+.print-detail-info .headline {
+  font-family: "Neue Haas Grotesk Display Pro", "Inter", sans-serif;
+  font-size: 28px;
+  font-weight: 500;
+  letter-spacing: -0.022em;
+  margin: 6px 0 12px;
+}
+.print-desc {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+  margin: 0 0 20px;
+}
+.print-spec {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--ink-soft);
+  border-top: 1px solid var(--rule-soft);
+  border-bottom: 1px solid var(--rule-soft);
+  padding: 14px 0;
+  margin: 18px 0 22px;
+}
+.print-spec .ui-label {
+  display: inline-block;
+  min-width: 70px;
+  color: var(--ink-muted);
+}
+.print-sizes { display: grid; gap: 10px; }
+.print-size-buy {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 18px;
+  background: var(--paper-soft);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  cursor: pointer;
+  text-decoration: none;
+  color: var(--ink);
+  transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+.print-size-buy:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+.print-size-label {
+  font-family: "Neue Haas Grotesk Display Pro", "Inter", sans-serif;
+  font-size: 15px;
+  font-weight: 500;
+}
+.print-size-dims {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  color: var(--ink-muted);
+  margin-top: 2px;
+}
+.print-size-buy:hover .print-size-dims { color: var(--ink); }
+.print-size-price {
+  font-family: "Neue Haas Grotesk Display Pro", "Inter", sans-serif;
+  font-size: 16px;
+  font-weight: 500;
+}
+.print-size-arrow { font-size: 16px; opacity: 0.6; }
+.print-size-buy:hover .print-size-arrow { opacity: 1; transform: translateX(3px); transition: transform 160ms; }
+.print-soldout-msg {
+  margin-top: 18px;
+  padding: 14px 16px;
+  background: var(--paper-soft);
+  font-size: 13px;
+  color: var(--ink-soft);
+  border-left: 3px solid var(--ink);
+}
+
+@media (max-width: 720px) {
+  .print-detail-grid { grid-template-columns: 1fr; }
+}
+
+/* ── ADMIN print catalog styles ──────────────────────── */
+.ad-print-grid { display: grid; gap: 16px; }
+.ad-print-row {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 18px;
+  padding: 16px;
+  background: var(--paper-soft);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+}
+.ad-print-row.is-inactive { opacity: 0.7; }
+.ad-print-thumb { aspect-ratio: 4/5; }
+.ad-print-title {
+  font-family: "Neue Haas Grotesk Display Pro", "Inter", sans-serif;
+  font-size: 16px;
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+.ad-print-meta {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  color: var(--ink-muted);
+  margin-bottom: 10px;
+}
+.ad-print-sizes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.ad-print-size {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  padding: 4px 8px;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+}
+.ad-print-size.is-pending { opacity: 0.55; }
+.ad-print-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.ad-print-status {
+  margin-left: auto;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+.ad-print-status.on  { color: var(--accent); }
+.ad-print-status.off { color: var(--ink-muted); }
+.ad-print-size-edit {
+  display: grid;
+  grid-template-columns: 80px 100px 1fr 2fr;
+  gap: 12px;
+  align-items: end;
+  padding: 12px 0;
+  border-top: 1px solid var(--rule-soft);
+}
+.ad-print-size-edit:first-child { border-top: none; }
+.ad-print-size-edit .ad-print-size-label {
+  font-family: "Neue Haas Grotesk Display Pro", "Inter", sans-serif;
+  font-size: 16px;
+  font-weight: 500;
+  padding-bottom: 6px;
+}
+.ad-print-size-edit .ad-print-size-dims {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  color: var(--ink-muted);
+  padding-bottom: 6px;
+}
+
+.ad-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+  padding: 40px 20px;
+}
+.ad-modal {
+  background: var(--paper);
+  border-radius: 8px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+  width: 100%;
+}
+.ad-pick-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+}
+.ad-pick-tile {
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 6px;
+  background: var(--paper);
+  transition: border-color 140ms, transform 140ms;
+}
+.ad-pick-tile:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+.ad-pick-tile-name {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10px;
+  color: var(--ink-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* GRID VIEW */
 .portfolio.grid .projects {
   display: grid;

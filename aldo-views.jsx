@@ -2,7 +2,7 @@
 
 const { useState: vsUseState, useEffect: vsUseEffect, useMemo: vsUseMemo, useRef: vsUseRef } = React;
 
-const { PROJECTS, ARCHIVE, CLIENTS, PHOTOS, SERVICES, ABOUT, SETTINGS } = window.ALDO;
+const { PROJECTS, ARCHIVE, CLIENTS, PHOTOS, SERVICES, ABOUT, SETTINGS, PRINTS = [] } = window.ALDO;
 
 /* Pixelated lazy-load placeholder (SHOWstudio-style) + focal point.
    `placeholderStyle()` returns inline bg style for the IMAGE WRAPPER —
@@ -1234,6 +1234,138 @@ function CrewDetail({ name, onOpenProject, onBack }) {
 
 window.CrewIndex = CrewIndex;
 window.CrewDetail = CrewDetail;
+
+/* ============================================================
+   PRINT SHOP — limited edition prints for sale
+   ============================================================ */
+function PrintShop({ onOpenPrint }) {
+  const printList = window.ALDO.PRINTS || [];
+  if (printList.length === 0) {
+    return (
+      <div className="prints-page">
+        <div className="heading">
+          <div>
+            <h2>Print shop</h2>
+            <div className="ui-label" style={{marginTop: 6}}>Limited edition prints · 50 of each</div>
+          </div>
+        </div>
+        <div style={{padding:'80px 24px', textAlign:'center', color:'var(--ink-soft)'}}>
+          <div style={{fontSize:32, marginBottom:12}}>◯</div>
+          <div>New prints coming soon. Check back shortly.</div>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="prints-page">
+      <div className="heading">
+        <div>
+          <h2>Print shop</h2>
+          <div className="ui-label" style={{marginTop: 6}}>{printList.length} edition{printList.length === 1 ? '' : 's'} · limited to 50 of each</div>
+        </div>
+        <div className="lede">
+          Archival fine art prints,<br/>
+          signed and numbered.<br/>
+          Ships within 14 days.
+        </div>
+      </div>
+      <div className="prints-grid">
+        {printList.map(p => {
+          const remaining = (p.editionTotal || 0) - (p.editionsSold || 0);
+          const minPrice = Math.min(...p.sizes.filter(s => s.price > 0).map(s => s.price));
+          return (
+            <article key={p.id} className="print-card" onClick={() => onOpenPrint && onOpenPrint(p)}>
+              <div className="print-photo" style={placeholderStyle(p)}>
+                <img
+                  src={p.blobPath}
+                  alt={p.title}
+                  loading="lazy"
+                  className="lazy-img"
+                  style={focalImgStyle(p)}
+                  onLoad={_markLoaded}
+                  ref={_onImgRef}
+                />
+                {remaining <= 5 && remaining > 0 && (
+                  <span className="print-scarce">Only {remaining} left</span>
+                )}
+                {remaining === 0 && <span className="print-soldout">Sold out</span>}
+              </div>
+              <div className="print-info">
+                <div className="print-title">{p.title}</div>
+                <div className="print-meta">
+                  From ${minPrice} · {remaining} of {p.editionTotal} remaining
+                </div>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function PrintDetail({ print, onBack }) {
+  const remaining = (print.editionTotal || 0) - (print.editionsSold || 0);
+  const validSizes = (print.sizes || []).filter(s => s.price > 0 && s.paymentLink);
+  return (
+    <div className="print-detail">
+      <button className="crumb-back" onClick={onBack}>← Back to shop</button>
+      <div className="print-detail-grid">
+        <div className="print-detail-photo" style={placeholderStyle(print)}>
+          <img
+            src={print.blobPath}
+            alt={print.title}
+            loading="lazy"
+            className="lazy-img"
+            style={focalImgStyle(print)}
+            onLoad={_markLoaded}
+            ref={_onImgRef}
+          />
+        </div>
+        <div className="print-detail-info">
+          <div className="ui-label">Limited edition · {remaining} of {print.editionTotal} remaining</div>
+          <h2 className="headline">{print.title}</h2>
+          {print.description && (
+            <p className="print-desc">{print.description}</p>
+          )}
+          <div className="print-spec">
+            <div><span className="ui-label">Paper</span> Hahnemühle Photo Rag 308gsm</div>
+            <div><span className="ui-label">Finish</span> Matte, archival</div>
+            <div><span className="ui-label">Signed</span> Verso, numbered ✕/50</div>
+            <div><span className="ui-label">Ships</span> Within 14 days</div>
+          </div>
+          <div className="print-sizes">
+            <div className="ui-label" style={{marginBottom:10}}>Choose a size</div>
+            {validSizes.length === 0 ? (
+              <div style={{color:'var(--ink-muted)', fontSize:13}}>Pricing coming soon.</div>
+            ) : validSizes.map(s => (
+              <a
+                key={s.label}
+                className="print-size-buy"
+                href={s.paymentLink}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <div>
+                  <div className="print-size-label">{s.label}</div>
+                  <div className="print-size-dims">{s.dims}</div>
+                </div>
+                <div className="print-size-price">${s.price}</div>
+                <div className="print-size-arrow">→</div>
+              </a>
+            ))}
+          </div>
+          {remaining === 0 && (
+            <div className="print-soldout-msg">This edition is sold out. <a href="#" onClick={(e) => { e.preventDefault(); /* open contact */ }}>Get on the waitlist</a> for next release.</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+window.PrintShop = PrintShop;
+window.PrintDetail = PrintDetail;
 
 window.Services = Services;
 window.ProjectDetail = ProjectDetail;

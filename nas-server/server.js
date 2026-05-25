@@ -29,6 +29,7 @@ import {
   readBytes, writeBytes, deleteImage, deleteProjectImages,
   readVideos, writeVideos, readVideoBytes, writeVideoBytes, deleteVideoFile,
   readGalleryPortals, writeGalleryPortals,
+  readPrints, writePrints,
 } from './utils/store.js';
 import {
   createGallery, readGalleries, findGallery, updateGallery, deleteGallery, isExpired,
@@ -770,17 +771,83 @@ app.get('/api/public/site', async (req, res) => {
     .filter(v => v.public !== false)
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
+  // Public prints: filter to active prints with at least one size available
+  const printsFile = await readPrints().catch(() => ({ prints: [] }));
+  const prints = (printsFile?.prints || [])
+    .filter(p => p.active !== false)
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
   res.setHeader('x-aldo-served', new Date().toISOString());
   res.json({
     projects,
     videos,
+    prints,
     about,
     clients,
     services: services.slice().sort((a, b) => (a.order || 0) - (b.order || 0)),
     settings,
   });
+});
+
+/* ------------------------------------------------------------------ */
+/* Prints — admin CRUD                                                 */
+/* ------------------------------------------------------------------ */
+
+function nextPrintId() { return 'PRINT_' + Date.now(); }
+
+app.get('/api/prints', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  try { res.json(await readPrints()); }
+  catch (err) { console.error('[GET /api/prints]', err); res.status(500).json({ error: 'internal' }); }
+});
+
+app.post('/api/prints', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  try {
+    const data = await readPrints();
+    const print = {
+      id: nextPrintId(),
+      title: req.body.title || 'Untitled print',
+      sourceProjectId: req.body.sourceProjectId || '',
+      sourceFilename:  req.body.sourceFilename  || '',
+      blobPath:        req.body.blobPath        || '',
+      description:     req.body.description     || '',
+      editionTotal:    req.body.editionTotal ?? 50,
+      editionsSold:    req.body.editionsSold ?? 0,
+      sizes:           Array.isArray(req.body.sizes) ? req.body.sizes : [],
+      active:          req.body.active !== false,
+      order:           data.prints.length,
+      createdAt:       new Date().toISOString(),
+      updatedAt:       new Date().toISOString(),
+    };
+    data.prints.push(print);
+    await writePrints(data);
+    res.status(201).json(print);
+  } catch (err) { console.error('[POST /api/prints]', err); res.status(500).json({ error: 'internal' }); }
+});
+
+app.put('/api/prints/:id', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  try {
+    const data = await readPrints();
+    const idx  = data.prints.findIndex(p => p.id === req.params.id);
+    if (idx === -1) return res.status(404).json({ error: 'not_found' });
+    data.prints[idx] = { ...data.prints[idx], ...req.body, id: data.prints[idx].id, updatedAt: new Date().toISOString() };
+    await writePrints(data);
+    res.json(data.prints[idx]);
+  } catch (err) { console.error('[PUT /api/prints/:id]', err); res.status(500).json({ error: 'internal' }); }
+});
+
+app.delete('/api/prints/:id', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  try {
+    const data = await readPrints();
+    data.prints = data.prints.filter(p => p.id !== req.params.id);
+    await writePrints(data);
+    res.status(204).send();
+  } catch (err) { console.error('[DELETE /api/prints/:id]', err); res.status(500).json({ error: 'internal' }); }
 });
 
 /* ------------------------------------------------------------------ */

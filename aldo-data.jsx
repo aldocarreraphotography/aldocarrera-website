@@ -237,8 +237,9 @@ const SETTINGS = {
 };
 
 const VIDEOS = [];
+const PRINTS = [];
 
-window.ALDO = { PROJECTS, ARCHIVE, CLIENTS, PHOTOS, SERVICES, ABOUT, SETTINGS, VIDEOS };
+window.ALDO = { PROJECTS, ARCHIVE, CLIENTS, PHOTOS, SERVICES, ABOUT, SETTINGS, VIDEOS, PRINTS };
 
 /* ============================================================================
    LIVE DATA SYNC — admin ↔ public site
@@ -475,6 +476,8 @@ function _aldoApplyData(data) {
   CLIENTS.length  = 0; CLIENTS.push(...newClients);
   SERVICES.length = 0; SERVICES.push(...newServices);
   VIDEOS.length   = 0; VIDEOS.push(...newVideos);
+  const newPrints = (data.prints || []).filter(p => p.active !== false).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  PRINTS.length   = 0; PRINTS.push(...newPrints);
 
   if (data.about    && Object.keys(data.about).length    > 0) _aldoReplaceObject(ABOUT,    data.about);
   if (data.settings && Object.keys(data.settings).length > 0) _aldoReplaceObject(SETTINGS, data.settings);

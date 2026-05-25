@@ -105,6 +105,16 @@ const DockGlyph = ({ kind, accent }) => {
           <path d="M10 18 C10 14 13 13 15 13 C17 13 20 14 20 18" stroke={stroke} strokeWidth="1.2" fill="none"/>
         </svg>
       );
+    case 'prints':
+      return (
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+          <rect x="3" y="3" width="14" height="14" stroke={stroke} strokeWidth="1.2"/>
+          <rect x="6" y="6" width="14" height="14" stroke={stroke} strokeWidth="1.2"/>
+          <line x1="9" y1="11" x2="16" y2="11" stroke={stroke} strokeWidth="1.2"/>
+          <line x1="9" y1="14" x2="16" y2="14" stroke={stroke} strokeWidth="1.2"/>
+          <line x1="9" y1="17" x2="13" y2="17" stroke={stroke} strokeWidth="1.2"/>
+        </svg>
+      );
     default: return null;
   }
 };
@@ -1397,6 +1407,15 @@ function ArchiveApp() {
         focus(existing.id);
         return;
       }
+      // Same idea for prints — toggle between shop index and print detail in one window
+      if (kind === 'prints') {
+        const newPrint = opts.print || null;
+        if ((existing.print && existing.print.id) !== (newPrint && newPrint.id)) {
+          setWindows(ws => ({ ...ws, [existing.id]: { ...ws[existing.id], minimized: false, mounted: true, print: newPrint, title: newPrint ? newPrint.title : 'Print shop', path: newPrint ? `~/prints/${newPrint.id}` : '~/prints' } }));
+          focus(existing.id);
+          return;
+        }
+      }
       setWindows(ws => ({ ...ws, [existing.id]: { ...ws[existing.id], minimized: false, mounted: true } }));
       focus(existing.id);
       return;
@@ -1411,6 +1430,7 @@ function ArchiveApp() {
       contact:   { title:'Inquiry · contact.html', path:'~/contact',                        w: 480, h: 540 },
       reels:     { title:'Reels',                path: '~/reels',                           w: 680, h: 520 },
       crew:      { title: opts.crewName || 'Crew', path: opts.crewName ? `~/crew/${opts.crewName}` : '~/crew', w: 820, h: 620 },
+      prints:    { title: opts.print ? opts.print.title : 'Print shop', path: opts.print ? `~/prints/${opts.print.id}` : '~/prints', w: 900, h: 640 },
       video:     (() => {
         // Size the window to the video's actual aspect ratio — eliminates black bars
         const CHROME_H = 90; // toolbar + statusbar + title bar
@@ -1439,6 +1459,7 @@ function ArchiveApp() {
         project: opts.project || null,
         video:   opts.video   || null,
         crewName: opts.crewName || null,
+        print:   opts.print   || null,
       },
     }));
     setOrder(o => [...o, id]);
@@ -1585,6 +1606,7 @@ function ArchiveApp() {
             { k: 'services',  g: 'services',  l: 'Services'  },
             { k: 'clients',   g: 'clients',   l: 'Clients'   },
             { k: 'crew',      g: 'crew',      l: 'Crew'      },
+            { k: 'prints',    g: 'prints',    l: 'Prints'    },
             { k: 'about',     g: 'about',     l: 'About'     },
             { k: 'contact',   g: 'contact',   l: 'Contact'   },
           ].map(d => {
@@ -1740,6 +1762,11 @@ function WindowHost({ win, z, focused, minimized, onMove, onResize, onFocus, onC
     content = win.crewName
       ? <CrewDetail name={win.crewName} onOpenProject={(p) => openWindow('project', { project: p })} onBack={() => openWindow('crew')}/>
       : <CrewIndex onOpenProject={(p) => openWindow('project', { project: p })} onOpenCrew={(name) => openWindow('crew', { crewName: name })}/>;
+  } else if (win.kind === 'prints') {
+    toolbar = <div className="window-toolbar">{baseCrumb(['~', 'prints', win.print ? win.print.id : 'shop'])}</div>;
+    content = win.print
+      ? <PrintDetail print={win.print} onBack={() => openWindow('prints', { print: null })}/>
+      : <PrintShop onOpenPrint={(p) => openWindow('prints', { print: p })}/>;
   } else if (win.kind === 'project') {
     toolbar = (
       <div className="window-toolbar">

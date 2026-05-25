@@ -89,6 +89,9 @@ export const writeProjects = (d) => writeJson('projects.json', d);
 export const readVideos  = () => readJson('videos.json').then(d => d || { videos: [] });
 export const writeVideos = (d) => writeJson('videos.json', d);
 
+export const readPrints  = () => readJson('prints.json').then(d => d || { prints: [] });
+export const writePrints = (d) => writeJson('prints.json', d);
+
 export async function readVideoBytes(videoId, filename) {
   try { return await fs.readFile(path.join(IMAGES_DIR, '__videos', videoId, filename)); }
   catch (e) { if (e.code === 'ENOENT') return null; throw e; }

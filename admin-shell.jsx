@@ -42,6 +42,7 @@ function parseRoute(hash) {
   }
   if (parts[0] === 'portals') return { name: 'portals' };
   if (parts[0] === 'videos') return { name: 'videos' };
+  if (parts[0] === 'prints') return { name: 'prints' };
   if (parts[0] === 'about')    return { name: 'about' };
   if (parts[0] === 'services') return { name: 'services' };
   if (parts[0] === 'clients')  return { name: 'clients' };
@@ -63,6 +64,7 @@ const NAV = [
   { id: 'galleries',  label: 'Galleries',       match: ['galleries','gallery-detail'],  hash: '#/galleries' },
   { id: 'portals',   label: 'Client Portals', match: ['portals'],                     hash: '#/portals'   },
   { id: 'videos',    label: 'Videos',         match: ['videos'],                      hash: '#/videos'    },
+  { id: 'prints',    label: 'Print Shop',     match: ['prints'],                      hash: '#/prints'    },
   { id: 'about',      label: 'About',     match: ['about'],                       hash: '#/about' },
   { id: 'services',   label: 'Services',  match: ['services'],                    hash: '#/services' },
   { id: 'clients',    label: 'Clients',   match: ['clients'],                     hash: '#/clients' },
@@ -207,6 +209,7 @@ function AdminApp() {
     case 'gallery-detail':  view = <GalleryDetailView        token={route.token} navigate={navigate}/>; break;
     case 'portals':         view = <ClientGalleryPortalsView navigate={navigate}/>; break;
     case 'videos':          view = <VideosView          navigate={navigate}/>; break;
+    case 'prints':          view = <PrintsListView      navigate={navigate}/>; break;
     case 'about':           view = <AboutEditorView    navigate={navigate}/>; break;
     case 'services':        view = <ServicesEditorView navigate={navigate}/>; break;
     case 'clients':         view = <ClientsEditorView  navigate={navigate}/>; break;
