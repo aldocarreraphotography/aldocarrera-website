@@ -1843,7 +1843,7 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
       // Collect all images entering this frame, then stagger them together
       clearTimeout(batchTimer);
       batchTimer = setTimeout(flush, 16);
-    }, { threshold: 0.05, rootMargin: '0px 0px -30px 0px' });
+    }, { threshold: 0.05, rootMargin: '200px 0px 0px 0px' });
 
     const observe = () =>
       document.querySelectorAll('img.lazy-img:not(.in-view)').forEach(img => obs.observe(img));

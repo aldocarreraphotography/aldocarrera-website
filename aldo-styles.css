@@ -2930,23 +2930,25 @@ img {
    bg-size to auto and tile the 20px source. The <img> on top fades in
    via the .lazy-img / .loaded keyframe below, dissolving the pixel grid
    into the real image. */
-img.lazy-img { opacity: 0; transform: scale(1.03); }
+img.lazy-img { opacity: 0; }
 img.lazy-img.loaded.in-view {
   /* Animation (not transition) — sidesteps specificity conflicts with
      existing `.photo img` / `.pic img` rules that already declare their own
      `transition` for hover filter/transform. Fires only when the image has
-     both finished loading AND scrolled into the viewport. */
-  animation: lazyFadeIn 1.8s cubic-bezier(0.4,0,0.2,1) forwards;
-  animation-delay: 0.08s;
+     both finished loading AND scrolled into the viewport.
+     ease-in keeps the image dark/pixelated longer, then brings it in —
+     the deliberate hold on the placeholder is the effect. */
+  animation: lazyFadeIn 2.2s ease-in forwards;
+  animation-delay: 0.25s;
 }
 @keyframes lazyFadeIn {
-  from { opacity: 0; transform: scale(1.03); }
-  to   { opacity: 1; transform: scale(1); }
+  0%   { opacity: 0; }
+  40%  { opacity: 0; }
+  100% { opacity: 1; }
 }
 /* Respect reduced-motion: snap in instantly when in view. */
 @media (prefers-reduced-motion: reduce) {
-  img.lazy-img { transform: none; }
-  img.lazy-img.loaded.in-view { animation: none; opacity: 1; transform: none; }
+  img.lazy-img.loaded.in-view { animation: none; opacity: 1; }
 }
 
 /* ── Touch devices: disable hover transforms to prevent double-tap flicker ── */
