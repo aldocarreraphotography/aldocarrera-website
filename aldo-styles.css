@@ -2935,7 +2935,7 @@ img.lazy-img.loaded {
   /* Animation (not transition) — sidesteps specificity conflicts with
      existing `.photo img` / `.pic img` rules that already declare their own
      `transition` for hover filter/transform. */
-  animation: lazyFadeIn 0.45s ease forwards;
+  animation: lazyFadeIn 1.1s ease forwards;
 }
 @keyframes lazyFadeIn {
   from { opacity: 0; }
