@@ -1855,9 +1855,10 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
           farObs.unobserve(e.target);
         }
       });
-    }, { rootMargin: '1500px 0px 1500px 0px' });
+    }, { rootMargin: '3000px 0px 3000px 0px' });
 
-    // Near observer: triggers the actual visibility snap when image is in view
+    // Near observer: reveals BEFORE image enters viewport — by the time you
+    // look at it, it's already snapped to visible.
     const nearObs = new IntersectionObserver((entries) => {
       entries.forEach(e => {
         if (e.isIntersecting) {
@@ -1865,7 +1866,7 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
           nearObs.unobserve(e.target);
         }
       });
-    }, { threshold: 0.01 });
+    }, { rootMargin: '600px 0px 600px 0px' });
 
     const observe = () => {
       document.querySelectorAll('img.lazy-img:not(.lazy-revealed)').forEach(img => {
