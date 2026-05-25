@@ -18,7 +18,7 @@ import fs       from 'node:fs';
 import sharp    from 'sharp';
 
 import { issueToken, verifyToken, authMiddleware, requireAuth } from './utils/auth.js';
-import { listFolder, getThumbnailBatch, downloadFile, isImageFile } from './utils/dropbox.js';
+import { listFolder, getThumbnailBatch, downloadFile, isImageFile, isConfigured as isDropboxConfigured } from './utils/dropbox.js';
 import { Resend } from 'resend';
 import {
   readProjects, writeProjects,
@@ -2427,12 +2427,11 @@ function _makeJobId() {
 app.get('/api/dropbox/folders', async (req, res) => {
   if (!requireAuth(req, res)) return;
   try {
-    const token = process.env.DROPBOX_ACCESS_TOKEN;
-    if (!token) {
-      return res.json({ error: 'DROPBOX_ACCESS_TOKEN not configured', folders: [] });
+    if (!isDropboxConfigured()) {
+      return res.json({ error: 'Dropbox not configured — set DROPBOX_APP_KEY + DROPBOX_APP_SECRET + DROPBOX_REFRESH_TOKEN', folders: [] });
     }
 
-    const rootEntries = await listFolder(token, '');
+    const rootEntries = await listFolder(null, '');
     const folderEntries = rootEntries.filter(e => e['.tag'] === 'folder');
 
     // Count images in each folder (parallel, cap concurrency to 5)
@@ -2442,7 +2441,7 @@ app.get('/api/dropbox/folders', async (req, res) => {
       const chunk = folderEntries.slice(i, i + CONCURRENCY);
       const results = await Promise.all(chunk.map(async (folder) => {
         try {
-          const children = await listFolder(token, folder.path_display);
+          const children = await listFolder(null, folder.path_display);
           const imageCount = children.filter(e => e['.tag'] === 'file' && isImageFile(e.name)).length;
           return { name: folder.name, path: folder.path_display, imageCount };
         } catch (err) {
@@ -2465,9 +2464,8 @@ app.get('/api/dropbox/folders', async (req, res) => {
 app.post('/api/dropbox/curate', async (req, res) => {
   if (!requireAuth(req, res)) return;
   try {
-    const token = process.env.DROPBOX_ACCESS_TOKEN;
-    if (!token) {
-      return res.status(503).json({ error: 'DROPBOX_ACCESS_TOKEN not configured' });
+    if (!isDropboxConfigured()) {
+      return res.status(503).json({ error: 'Dropbox not configured — set DROPBOX_APP_KEY + DROPBOX_APP_SECRET + DROPBOX_REFRESH_TOKEN' });
     }
 
     const { folders, targetCount = 15 } = req.body || {};
@@ -2488,7 +2486,7 @@ app.post('/api/dropbox/curate', async (req, res) => {
     _curateJobs.set(jobId, job);
 
     // Fire off async — do NOT await
-    _runCurationJob(job, folders, targetCount, token).catch(err => {
+    _runCurationJob(job, folders, targetCount, null).catch(err => {
       job.status = 'error';
       job.error = err?.message || 'Unknown error';
       console.error('[_runCurationJob] uncaught:', err?.message, err?.stack);
@@ -2513,9 +2511,8 @@ app.get('/api/dropbox/curate/:jobId', async (req, res) => {
 app.post('/api/dropbox/import', async (req, res) => {
   if (!requireAuth(req, res)) return;
   try {
-    const token = process.env.DROPBOX_ACCESS_TOKEN;
-    if (!token) {
-      return res.status(503).json({ error: 'DROPBOX_ACCESS_TOKEN not configured' });
+    if (!isDropboxConfigured()) {
+      return res.status(503).json({ error: 'Dropbox not configured — set DROPBOX_APP_KEY + DROPBOX_APP_SECRET + DROPBOX_REFRESH_TOKEN' });
     }
 
     const { foldersToImport } = req.body || {};
@@ -2572,8 +2569,8 @@ app.post('/api/dropbox/import', async (req, res) => {
             finalName = `${stem}_${n}${ext}`;
           }
 
-          // Download full-res from Dropbox
-          const buffer = await downloadFile(token, dropboxPath);
+          // Download full-res from Dropbox (refresh-token auth handled in util)
+          const buffer = await downloadFile(null, dropboxPath);
 
           await writeBytes(projectId, finalName, buffer);
 
