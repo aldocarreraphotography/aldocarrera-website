@@ -503,6 +503,7 @@ async function _aldoFetchFromApi() {
     const normalized = {
       projects: data.projects || [],
       videos:   data.videos   || [],
+      prints:   data.prints   || [],
       clients:  Array.isArray(data.clients)  ? data.clients  : (data.clients?.clients  || []),
       services: Array.isArray(data.services) ? data.services : (data.services?.services || []),
       about:    data.about    || {},
