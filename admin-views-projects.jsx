@@ -529,6 +529,37 @@ function ProjectEditorView({ projectId, navigate }) {
           </Field>
         </div>
 
+        {/* Crew credits — all optional */}
+        <div className="ad-form-section" style={{ marginTop: 24 }}>
+          <div className="ad-form-section-label">Crew credits <span style={{ opacity: 0.55, textTransform: 'none', letterSpacing: 0 }}>· all optional</span></div>
+          <div className="ad-form-grid">
+            <Field label="Talent / Model(s)" wide hint="Comma-separated. Each gets their own credit page.">
+              <TextInput value={draft.crewTalent || ''} onChange={(v) => set('crewTalent', v)} placeholder="Emma Riskin, Devaux Bell"/>
+            </Field>
+            <Field label="Stylist">
+              <TextInput value={draft.crewStylist || ''} onChange={(v) => set('crewStylist', v)} placeholder=""/>
+            </Field>
+            <Field label="Hair">
+              <TextInput value={draft.crewHair || ''} onChange={(v) => set('crewHair', v)} placeholder=""/>
+            </Field>
+            <Field label="Makeup">
+              <TextInput value={draft.crewMakeup || ''} onChange={(v) => set('crewMakeup', v)} placeholder=""/>
+            </Field>
+            <Field label="Art Direction">
+              <TextInput value={draft.crewArtDirection || ''} onChange={(v) => set('crewArtDirection', v)} placeholder=""/>
+            </Field>
+            <Field label="Set Design">
+              <TextInput value={draft.crewSetDesign || ''} onChange={(v) => set('crewSetDesign', v)} placeholder=""/>
+            </Field>
+            <Field label="Production">
+              <TextInput value={draft.crewProduction || ''} onChange={(v) => set('crewProduction', v)} placeholder=""/>
+            </Field>
+            <Field label="Agency / Brand contact">
+              <TextInput value={draft.crewAgency || ''} onChange={(v) => set('crewAgency', v)} placeholder=""/>
+            </Field>
+          </div>
+        </div>
+
         {!isNew && (
           <div className="ad-form-footer">
             <Btn variant="ghost" onClick={remove}>Delete project</Btn>

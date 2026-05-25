@@ -313,6 +313,19 @@ body {
   grid-template-columns: repeat(2, 1fr);
   gap: 22px 24px;
 }
+.ad-form-section {
+  border-top: 1px solid var(--rule);
+  padding-top: 22px;
+  margin-top: 6px;
+}
+.ad-form-section-label {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink);
+  margin-bottom: 16px;
+}
 .ad-field {
   display: flex; flex-direction: column;
   gap: 6px;

@@ -96,6 +96,15 @@ const DockGlyph = ({ kind, accent }) => {
           <polygon points="9,8 9,14 15,11" fill={stroke}/>
         </svg>
       );
+    case 'crew':
+      return (
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+          <circle cx="7"  cy="8" r="2.5" stroke={stroke} strokeWidth="1.2"/>
+          <circle cx="15" cy="8" r="2.5" stroke={stroke} strokeWidth="1.2"/>
+          <path d="M2 18 C2 14 5 13 7 13 C9 13 12 14 12 18" stroke={stroke} strokeWidth="1.2" fill="none"/>
+          <path d="M10 18 C10 14 13 13 15 13 C17 13 20 14 20 18" stroke={stroke} strokeWidth="1.2" fill="none"/>
+        </svg>
+      );
     default: return null;
   }
 };
@@ -1324,16 +1333,23 @@ function ArchiveApp() {
   /* hash routing — for embedding in mobile preview (?mode=mobile&section=portfolio) */
   aUseEffect(() => {
     const applyHash = () => {
-      const params = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+      const hash = window.location.hash.replace(/^#/, '');
+      // Crew deep link: #crew/Name
+      if (hash.startsWith('crew/')) {
+        const name = decodeURIComponent(hash.slice(5));
+        if (name) openWindow('crew', { crewName: name });
+        return;
+      }
+      const params = new URLSearchParams(hash);
       const section = params.get('section');
-      if (section && ['portfolio','archive','clients','about','contact'].includes(section)) {
+      if (section && ['portfolio','archive','clients','about','contact','crew'].includes(section)) {
         setActiveMobileTab(section);
       }
     };
     applyHash();
     window.addEventListener('hashchange', applyHash);
     return () => window.removeEventListener('hashchange', applyHash);
-  }, []);
+  }, [openWindow]);
 
   /* apply tweaks */
   aUseEffect(() => {
@@ -1370,8 +1386,17 @@ function ArchiveApp() {
   }), []);
 
   const openWindow = aUseCallback((kind, opts = {}) => {
-    const existing = Object.values(windows).find(w => w.kind === kind && w.mounted && (!opts.project || w.project === opts.project));
+    const existing = Object.values(windows).find(w => w.kind === kind && w.mounted
+      && (!opts.project || w.project === opts.project)
+      && (!opts.crewName || w.crewName === opts.crewName)
+      && (opts.crewName || !w.crewName || kind !== 'crew'));
     if (existing) {
+      // If switching crew person, update the existing crew window instead of opening new
+      if (kind === 'crew' && opts.crewName !== existing.crewName) {
+        setWindows(ws => ({ ...ws, [existing.id]: { ...ws[existing.id], minimized: false, mounted: true, crewName: opts.crewName || null, title: opts.crewName || 'Crew', path: opts.crewName ? `~/crew/${opts.crewName}` : '~/crew' } }));
+        focus(existing.id);
+        return;
+      }
       setWindows(ws => ({ ...ws, [existing.id]: { ...ws[existing.id], minimized: false, mounted: true } }));
       focus(existing.id);
       return;
@@ -1385,6 +1410,7 @@ function ArchiveApp() {
       about:     { title:'about_me.txt',         path: '~/info',                            w: 460, h: 620 },
       contact:   { title:'Inquiry · contact.html', path:'~/contact',                        w: 480, h: 540 },
       reels:     { title:'Reels',                path: '~/reels',                           w: 680, h: 520 },
+      crew:      { title: opts.crewName || 'Crew', path: opts.crewName ? `~/crew/${opts.crewName}` : '~/crew', w: 820, h: 620 },
       video:     (() => {
         // Size the window to the video's actual aspect ratio — eliminates black bars
         const CHROME_H = 90; // toolbar + statusbar + title bar
@@ -1412,6 +1438,7 @@ function ArchiveApp() {
         title: p.title, path: p.path,
         project: opts.project || null,
         video:   opts.video   || null,
+        crewName: opts.crewName || null,
       },
     }));
     setOrder(o => [...o, id]);
@@ -1557,6 +1584,7 @@ function ArchiveApp() {
             { k: 'reels',     g: 'reels',     l: 'Reels'     },
             { k: 'services',  g: 'services',  l: 'Services'  },
             { k: 'clients',   g: 'clients',   l: 'Clients'   },
+            { k: 'crew',      g: 'crew',      l: 'Crew'      },
             { k: 'about',     g: 'about',     l: 'About'     },
             { k: 'contact',   g: 'contact',   l: 'Contact'   },
           ].map(d => {
@@ -1707,6 +1735,11 @@ function WindowHost({ win, z, focused, minimized, onMove, onResize, onFocus, onC
   } else if (win.kind === 'contact') {
     toolbar = <div className="window-toolbar">{baseCrumb(['~', 'contact', 'inquiry.html'])}</div>;
     content = <Contact/>;
+  } else if (win.kind === 'crew') {
+    toolbar = <div className="window-toolbar">{baseCrumb(['~', 'crew', win.crewName || 'index'])}</div>;
+    content = win.crewName
+      ? <CrewDetail name={win.crewName} onOpenProject={(p) => openWindow('project', { project: p })} onBack={() => openWindow('crew')}/>
+      : <CrewIndex onOpenProject={(p) => openWindow('project', { project: p })} onOpenCrew={(name) => openWindow('crew', { crewName: name })}/>;
   } else if (win.kind === 'project') {
     toolbar = (
       <div className="window-toolbar">

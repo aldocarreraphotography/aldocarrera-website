@@ -123,6 +123,11 @@ function FeaturedStrip({ onOpenProject }) {
 }
 
 function Portfolio({ view, onSetView, onOpenProject, onSetCrumb }) {
+  const lucky = () => {
+    if (PROJECTS.length === 0) return;
+    const p = PROJECTS[Math.floor(Math.random() * PROJECTS.length)];
+    onOpenProject(p);
+  };
   return (
     <div className={`portfolio ${view}`}>
       <FeaturedStrip onOpenProject={onOpenProject}/>
@@ -135,6 +140,11 @@ function Portfolio({ view, onSetView, onOpenProject, onSetCrumb }) {
           A curated set of editorial and commercial work across fashion,<br/>
           entertainment, and lifestyle. Open any project for the full record.
         </div>
+        <button className="lucky-btn" onClick={lucky} title="Open a random project">
+          <span className="lucky-dot"/>
+          <span>I'm feeling lucky</span>
+          <span className="lucky-arrow">↗</span>
+        </button>
       </div>
 
       <div className="projects">
@@ -233,6 +243,39 @@ function ProjectDetail({ project, onOpenPhoto, onOpenVideo }) {
           <div><span className="ui-label" style={{display:'block', marginBottom:3}}>Date</span>{project.month}</div>
           <div><span className="ui-label" style={{display:'block', marginBottom:3}}>Location</span>{project.location}</div>
           {project.crew && <div style={{gridColumn:'1 / -1'}}><span className="ui-label" style={{display:'block', marginBottom:3}}>Credits</span>{project.crew}</div>}
+          {(() => {
+            const credits = [
+              ['Talent', project.crewTalent],
+              ['Stylist', project.crewStylist],
+              ['Hair', project.crewHair],
+              ['Makeup', project.crewMakeup],
+              ['Art Direction', project.crewArtDirection],
+              ['Set Design', project.crewSetDesign],
+              ['Production', project.crewProduction],
+              ['Agency', project.crewAgency],
+            ].filter(([, v]) => v && v.trim());
+            if (credits.length === 0) return null;
+            return (
+              <div style={{gridColumn:'1 / -1', borderTop:'1px solid var(--rule-soft)', paddingTop: 12, marginTop: 4}}>
+                <span className="ui-label" style={{display:'block', marginBottom:8}}>Crew</span>
+                <div style={{display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:'6px 24px'}}>
+                  {credits.map(([label, value]) => (
+                    <div key={label} style={{display:'flex', gap:8, alignItems:'baseline'}}>
+                      <span style={{opacity:0.55, minWidth:90}}>{label}</span>
+                      <span style={{color:'var(--ink)'}}>
+                        {value.split(',').map((name, i, arr) => (
+                          <React.Fragment key={i}>
+                            <a className="crew-link" href={`#crew/${encodeURIComponent(name.trim())}`}>{name.trim()}</a>
+                            {i < arr.length - 1 && ', '}
+                          </React.Fragment>
+                        ))}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
           {project.note && <div style={{gridColumn:'1 / -1', fontStyle:'italic', color:'var(--ink)', fontFamily:'Neue Haas Grotesk Display Pro, Inter, sans-serif', fontSize: 14, lineHeight: 1.5, paddingTop: 10, borderTop:'1px solid var(--rule-soft)'}}>"{project.note}"</div>}
         </div>
       </div>
@@ -1028,6 +1071,166 @@ function VideoPlayer({ video }) {
     </div>
   );
 }
+
+/* ============================================================
+   CREW — projects grouped by collaborator name
+   ============================================================ */
+const CREW_FIELDS = [
+  ['Talent',        'crewTalent'],
+  ['Stylist',       'crewStylist'],
+  ['Hair',          'crewHair'],
+  ['Makeup',        'crewMakeup'],
+  ['Art Direction', 'crewArtDirection'],
+  ['Set Design',    'crewSetDesign'],
+  ['Production',    'crewProduction'],
+  ['Agency',        'crewAgency'],
+];
+
+function CrewIndex({ onOpenProject, onOpenCrew }) {
+  // Build map of { name → [{ role, project }, ...] } across all projects
+  const map = vsUseMemo(() => {
+    const m = new Map();
+    for (const p of PROJECTS) {
+      for (const [role, key] of CREW_FIELDS) {
+        const v = p[key];
+        if (!v) continue;
+        for (const raw of v.split(',')) {
+          const name = raw.trim();
+          if (!name) continue;
+          if (!m.has(name)) m.set(name, []);
+          m.get(name).push({ role, project: p });
+        }
+      }
+    }
+    return m;
+  }, []);
+
+  // Group by role for the index display
+  const byRole = vsUseMemo(() => {
+    const groups = {};
+    for (const [name, credits] of map) {
+      for (const { role } of credits) {
+        if (!groups[role]) groups[role] = new Set();
+        groups[role].add(name);
+      }
+    }
+    return groups;
+  }, [map]);
+
+  const totalPeople = map.size;
+
+  return (
+    <div className="crew-index">
+      <div className="heading">
+        <div>
+          <h2>Crew</h2>
+          <div className="ui-label" style={{marginTop: 6}}>
+            {totalPeople} {totalPeople === 1 ? 'collaborator' : 'collaborators'} · across {PROJECTS.length} projects
+          </div>
+        </div>
+        <div className="lede">
+          The stylists, hair, makeup artists, art directors,<br/>
+          and talent who made these images possible.
+        </div>
+      </div>
+
+      {CREW_FIELDS.map(([role]) => {
+        const names = byRole[role];
+        if (!names || names.size === 0) return null;
+        const sorted = [...names].sort((a,b) => a.localeCompare(b));
+        return (
+          <div className="crew-role-section" key={role}>
+            <div className="crew-role-label">{role}</div>
+            <div className="crew-name-grid">
+              {sorted.map(name => (
+                <button
+                  key={name}
+                  className="crew-name-card"
+                  onClick={() => onOpenCrew && onOpenCrew(name)}
+                >
+                  <span className="crew-name">{name}</span>
+                  <span className="crew-count">
+                    {map.get(name).length} project{map.get(name).length !== 1 ? 's' : ''}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function CrewDetail({ name, onOpenProject, onBack }) {
+  // Find all credits for this person across projects
+  const credits = vsUseMemo(() => {
+    const out = [];
+    for (const p of PROJECTS) {
+      for (const [role, key] of CREW_FIELDS) {
+        if (!p[key]) continue;
+        const names = p[key].split(',').map(s => s.trim());
+        if (names.includes(name)) out.push({ role, project: p });
+      }
+    }
+    return out;
+  }, [name]);
+
+  // Deduplicate projects (same person could be credited twice on one shoot)
+  const projects = vsUseMemo(() => {
+    const seen = new Set();
+    const list = [];
+    for (const { project, role } of credits) {
+      if (seen.has(project.id)) {
+        const existing = list.find(x => x.project.id === project.id);
+        if (existing) existing.roles.push(role);
+      } else {
+        seen.add(project.id);
+        list.push({ project, roles: [role] });
+      }
+    }
+    return list;
+  }, [credits]);
+
+  return (
+    <div className="crew-detail">
+      <button className="crumb-back" onClick={onBack}>← All crew</button>
+      <div className="heading">
+        <div>
+          <h2>{name}</h2>
+          <div className="ui-label" style={{marginTop: 6}}>
+            {projects.length} project{projects.length !== 1 ? 's' : ''} with Aldo Carrera
+          </div>
+        </div>
+      </div>
+      <div className="projects">
+        {projects.map(({ project, roles }) => (
+          <article key={project.id} className="project" onClick={() => onOpenProject(project)}>
+            <div className="photo" style={placeholderStyle(project)}>
+              <img
+                src={project.photo}
+                alt={project.name}
+                loading="lazy"
+                className="lazy-img"
+                style={focalImgStyle(project)}
+                onLoad={_markLoaded}
+                ref={_onImgRef}
+              />
+            </div>
+            <div className="info">
+              <div className="ui-label">{[...new Set(roles)].join(' · ')}</div>
+              <h3 className="name">{project.name}</h3>
+              <div className="meta">{project.client} · {project.year}</div>
+            </div>
+          </article>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+window.CrewIndex = CrewIndex;
+window.CrewDetail = CrewDetail;
 
 window.Services = Services;
 window.ProjectDetail = ProjectDetail;

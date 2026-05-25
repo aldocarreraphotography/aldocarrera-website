@@ -613,6 +613,183 @@ input, textarea, select {
   line-height: 1.5;
   text-align: right;
 }
+/* I'm feeling lucky — drops you into a random project */
+.lucky-btn {
+  grid-column: 1 / -1;
+  justify-self: start;
+  margin-top: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 16px 9px 12px;
+  background: transparent;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink);
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+.lucky-btn:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+.lucky-btn:active { transform: translateY(0); }
+.lucky-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
+  animation: lucky-pulse 2.2s ease-in-out infinite;
+}
+.lucky-btn:hover .lucky-dot {
+  background: var(--ink);
+  box-shadow: 0 0 0 3px rgba(255,255,255,0.4);
+}
+@keyframes lucky-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50%      { transform: scale(1.4); opacity: 0.5; }
+}
+.lucky-arrow { font-size: 13px; opacity: 0.6; }
+.lucky-btn:hover .lucky-arrow { opacity: 1; transform: translate(2px, -2px); transition: transform 160ms; }
+
+/* ── CREW credits page ───────────────────────────────────── */
+.crew-link {
+  color: var(--ink);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 140ms ease, color 140ms ease;
+}
+.crew-link:hover { border-bottom-color: var(--accent); color: var(--accent); }
+
+.crew-index, .crew-detail { padding: 24px 28px 60px; }
+.crew-index .heading,
+.crew-detail .heading {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: end;
+  gap: 18px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--rule);
+  margin-bottom: 28px;
+}
+.crew-index .heading h2,
+.crew-detail .heading h2 {
+  font-family: "Neue Haas Grotesk Display Pro", "Inter", sans-serif;
+  font-weight: 500;
+  font-size: 28px;
+  margin: 0;
+  letter-spacing: -0.022em;
+}
+.crew-index .heading .lede {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  color: var(--ink-muted);
+  max-width: 320px;
+  line-height: 1.5;
+  text-align: right;
+}
+.crew-role-section { margin-bottom: 36px; }
+.crew-role-label {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  margin-bottom: 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--rule-soft);
+}
+.crew-name-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px 12px;
+}
+.crew-name-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 10px 14px;
+  background: transparent;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: background 140ms ease, border-color 140ms ease, transform 140ms ease;
+}
+.crew-name-card:hover {
+  background: var(--paper-soft);
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+.crew-name {
+  font-family: "Neue Haas Grotesk Display Pro", "Inter", sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.crew-count {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10px;
+  color: var(--ink-muted);
+  letter-spacing: 0.04em;
+}
+
+.crew-detail .crumb-back {
+  display: inline-block;
+  margin-bottom: 14px;
+  background: transparent;
+  border: none;
+  color: var(--ink-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0;
+}
+.crew-detail .crumb-back:hover { color: var(--accent); }
+.crew-detail .projects {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 22px;
+}
+.crew-detail .project {
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.crew-detail .project .photo {
+  position: relative;
+  aspect-ratio: 4/3;
+  overflow: hidden;
+  background: var(--paper-soft);
+}
+.crew-detail .project .photo img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+}
+.crew-detail .project .info .ui-label {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+}
+.crew-detail .project .name {
+  font-family: "Neue Haas Grotesk Display Pro", "Inter", sans-serif;
+  font-size: 15px;
+  font-weight: 500;
+  margin: 4px 0 2px;
+}
+.crew-detail .project .meta {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  color: var(--ink-muted);
+}
 
 /* GRID VIEW */
 .portfolio.grid .projects {
