@@ -2580,12 +2580,21 @@ async function _runCurationJob(job, folderPaths, targetCount, dropboxToken) {
     const entries = await listFolder(dropboxToken, folderPath);
     const imageFiles = entries.filter(e => e['.tag'] === 'file' && isImageFile(e.name));
 
+    // Breakdown of file extensions for diagnostics
+    const extCounts = {};
+    for (const f of imageFiles) {
+      const ext = (f.name.split('.').pop() || '').toLowerCase();
+      extCounts[ext] = (extCounts[ext] || 0) + 1;
+    }
+    console.log(`[curation] ${folderName}: ${imageFiles.length} image files —`, extCounts);
+
     if (imageFiles.length === 0) {
       job.results.push({
         folderPath,
         folderName,
         total: 0,
         selected: [],
+        note: 'No image files found in this folder.',
       });
       job.foldersDone++;
       continue;
@@ -2595,18 +2604,47 @@ async function _runCurationJob(job, folderPaths, targetCount, dropboxToken) {
     job.phase = `Fetching thumbnails for ${folderName} (${imagePaths.length} images)…`;
 
     // 2. Batch fetch thumbnails
-    let thumbnails = [];
+    let thumbResult;
     try {
-      thumbnails = await getThumbnailBatch(dropboxToken, imagePaths);
+      thumbResult = await getThumbnailBatch(dropboxToken, imagePaths);
     } catch (err) {
       console.error(`[curation] thumbnail fetch failed for ${folderPath}:`, err?.message);
-      job.results.push({ folderPath, folderName, total: imageFiles.length, selected: [], error: err?.message });
+      job.results.push({
+        folderPath, folderName, total: imageFiles.length, selected: [],
+        error: err?.message,
+        note: `Dropbox thumbnail API errored: ${err?.message || 'unknown'}`,
+      });
       job.foldersDone++;
       continue;
     }
 
+    const thumbnails = thumbResult.results || [];
+    const thumbFailures = thumbResult.failures || [];
+    console.log(`[curation] ${folderName}: ${thumbnails.length} thumbnails OK, ${thumbFailures.length} failed`);
+    if (thumbFailures.length > 0) {
+      const reasonCounts = {};
+      for (const f of thumbFailures) reasonCounts[f.reason] = (reasonCounts[f.reason] || 0) + 1;
+      console.log(`[curation] ${folderName} failure reasons:`, reasonCounts);
+    }
+
     if (thumbnails.length === 0) {
-      job.results.push({ folderPath, folderName, total: imageFiles.length, selected: [] });
+      // Build a helpful diagnostic message
+      const extList = Object.entries(extCounts).map(([k,v]) => `${v} .${k}`).join(', ');
+      const reasonCounts = {};
+      for (const f of thumbFailures) reasonCounts[f.reason] = (reasonCounts[f.reason] || 0) + 1;
+      const reasonList = Object.entries(reasonCounts).map(([k,v]) => `${v}× ${k}`).join(', ');
+      const hasRaw = Object.keys(extCounts).some(k => ['cr3','nef','arw','dng','raf','rw2','heic'].includes(k));
+      const hint = hasRaw
+        ? ' Dropbox cannot thumbnail RAW or HEIC files — only JPEG/PNG/TIFF/BMP/GIF/WebP. Export web-size JPEGs into the folder first.'
+        : '';
+      job.results.push({
+        folderPath, folderName,
+        total: imageFiles.length,
+        selected: [],
+        note: `Found ${extList}. Dropbox returned no thumbnails (${reasonList || 'all failed silently'}).${hint}`,
+        extCounts,
+        thumbFailures: thumbFailures.length,
+      });
       job.foldersDone++;
       continue;
     }

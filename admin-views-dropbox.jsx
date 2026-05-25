@@ -598,7 +598,7 @@ function ReviewView({ job }) {
             {result.selected.length === 0 ? (
               <Empty
                 title="No images selected"
-                sub="Claude could not fetch thumbnails for this folder."
+                sub={result.note || result.error || 'Claude could not fetch thumbnails for this folder.'}
               />
             ) : (
               <div className="dbx-gallery">

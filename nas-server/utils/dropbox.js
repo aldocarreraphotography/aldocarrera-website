@@ -70,10 +70,12 @@ export async function listFolder(token, path = '') {
 /**
  * Batch fetch JPEG thumbnails for an array of Dropbox file paths.
  * Automatically chunks into batches of 25 (Dropbox max).
- * Returns array of { path, filename, thumbnail: base64string }.
+ * Returns { results: [{path,filename,thumbnail}], failures: [{path,reason}] }.
+ * Dropbox only thumbnails jpg/jpeg/png/tiff/bmp/gif/webp — RAW formats and HEIC fail.
  */
 export async function getThumbnailBatch(token, paths) {
   const results = [];
+  const failures = [];
   const CHUNK_SIZE = 25;
 
   for (let i = 0; i < paths.length; i += CHUNK_SIZE) {
@@ -101,21 +103,33 @@ export async function getThumbnailBatch(token, paths) {
 
     const data = await res.json();
 
-    for (const entry of (data.entries || [])) {
+    for (let j = 0; j < (data.entries || []).length; j++) {
+      const entry = data.entries[j];
+      const reqPath = chunk[j] || '';
       if (entry['.tag'] === 'success' && entry.thumbnail) {
-        const filePath = entry.metadata?.path_display || '';
+        const filePath = entry.metadata?.path_display || reqPath;
         const filename = filePath.split('/').pop() || '';
         results.push({
           path: filePath,
           filename,
           thumbnail: entry.thumbnail, // already base64 string from Dropbox
         });
+      } else {
+        // Capture failure reason — usually "unsupported_image" for RAW/HEIC
+        const innerTag = entry.failure?.['.tag'] || entry['.tag'] || 'unknown';
+        const innerDetail = entry.failure?.path?.['.tag']
+          || entry.failure?.unsupported_image?.['.tag']
+          || '';
+        failures.push({
+          path: reqPath,
+          filename: reqPath.split('/').pop() || '',
+          reason: innerDetail ? `${innerTag}:${innerDetail}` : innerTag,
+        });
       }
-      // silently skip failures (e.g. unsupported format) — they just won't appear in results
     }
   }
 
-  return results;
+  return { results, failures };
 }
 
 /**
