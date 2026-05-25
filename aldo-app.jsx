@@ -1841,6 +1841,16 @@ function WindowHost({ win, z, focused, minimized, onMove, onResize, onFocus, onC
 }
 
 /* ============================================================
+   MOBILE PRINT SHOP — wrapper so hooks stay at component level
+   ============================================================ */
+function MobilePrints() {
+  const [mobilePrint, setMobilePrint] = aUseState(null);
+  return mobilePrint
+    ? <PrintDetail print={mobilePrint} onBack={() => setMobilePrint(null)}/>
+    : <PrintShop onOpenPrint={(p) => setMobilePrint(p)}/>;
+}
+
+/* ============================================================
    MOBILE SHELL
    ============================================================ */
 function MobileShell({ active, setActive, project, setProject, folders, setFolders, openPhoto, setOpenPhoto }) {
@@ -1853,6 +1863,7 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
     { k: 'reels',     l: 'Reels'     },
     { k: 'services',  l: 'Services'  },
     { k: 'clients',   l: 'Clients'   },
+    { k: 'prints',    l: 'Prints'    },
     { k: 'about',     l: 'About'     },
     { k: 'contact',   l: 'Contact'   },
   ];
@@ -2115,6 +2126,8 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
     body = <div className="mobile-page about"><About/></div>;
   } else if (active === 'contact') {
     body = <div className="mobile-page contact"><Contact/></div>;
+  } else if (active === 'prints') {
+    body = <div className="mobile-page prints"><MobilePrints/></div>;
   }
 
   return (
