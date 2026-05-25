@@ -1876,6 +1876,11 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
 
     const observe = () => {
       document.querySelectorAll('img.lazy-img:not(.lazy-revealed)').forEach(img => {
+        // Archive page: skip the reveal effect, show images instantly
+        if (img.closest('.archive-only')) {
+          img.classList.add('lazy-revealed');
+          return;
+        }
         farObs.observe(img);
         nearObs.observe(img);
       });
