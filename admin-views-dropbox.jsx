@@ -457,9 +457,11 @@ function ReviewView({ job }) {
     const state = {};
     for (const result of (job.results || [])) {
       const selectedPaths = new Set(result.selected.map(s => s.dropboxPath));
+      // Prefer EXIF year from Dropbox media_info over folder-name guess
+      const year = result.exifYear || guessYear(result.folderName);
       state[result.folderPath] = {
         projectName: guessProjectName(result.folderName),
-        year: guessYear(result.folderName),
+        year,
         selected: selectedPaths,
       };
     }

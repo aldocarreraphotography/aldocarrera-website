@@ -695,6 +695,30 @@ function ProjectUploadView({ projectId, navigate }) {
   const totalBytes = queue.reduce((s, q) => s + q.file.size, 0);
   const exifDates = queue.map(q => q.exif?.dateTaken).filter(Boolean);
   const exifInfo = exifDates.length ? `${exifDates.length} of ${queue.length} have EXIF dates` : null;
+
+  // Detect dominant year from EXIF dates
+  const exifYearCounts = {};
+  for (const d of exifDates) {
+    const y = new Date(d).getFullYear();
+    if (y > 1990 && y <= new Date().getFullYear() + 1) exifYearCounts[y] = (exifYearCounts[y] || 0) + 1;
+  }
+  const exifYear = Object.keys(exifYearCounts).length
+    ? parseInt(Object.entries(exifYearCounts).sort((a,b) => b[1]-a[1])[0][0], 10)
+    : null;
+  const exifYearDiffers = exifYear && exifYear !== Number(project.year);
+
+  const applyExifYear = async () => {
+    try {
+      await window.AdminStore.apiFetch(`/api/projects/${encodeURIComponent(project.id)}`, {
+        method: 'PUT',
+        body: JSON.stringify({ year: exifYear }),
+      });
+      window.AdminStore.updateProject(project.id, { year: exifYear });
+      toast(`Project year updated to ${exifYear}`, 'ok');
+    } catch (err) {
+      toast('Failed to update year: ' + (err?.message || 'unknown'), 'error');
+    }
+  };
   // HEIC/AVIF can't be compressed by Canvas — warn if they're over the limit.
   const oversized = queue.filter(q =>
     q.file.size > 5 * 1024 * 1024 &&
@@ -741,6 +765,12 @@ function ProjectUploadView({ projectId, navigate }) {
                 <button className="ad-link" onClick={clear}>Clear queue</button>
               </div>
             </div>
+            {exifYearDiffers && (
+              <div className="ad-warn" style={{ display:'flex', alignItems:'center', gap:12, justifyContent:'space-between' }}>
+                <span>📅 EXIF dates suggest this shoot was in <strong>{exifYear}</strong> (project is set to {project.year}).</span>
+                <Btn size="sm" onClick={applyExifYear}>Update to {exifYear}</Btn>
+              </div>
+            )}
             {oversized.length > 0 && (
               <div className="ad-warn">
                 {oversized.length} file{oversized.length > 1 ? 's' : ''} {oversized.length > 1 ? 'are' : 'is'} HEIC/AVIF and over 5 MB — convert to JPEG before uploading.

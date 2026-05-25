@@ -2589,6 +2589,19 @@ async function _runCurationJob(job, folderPaths, targetCount, dropboxToken) {
     }
     console.log(`[curation] ${folderName}: ${imageFiles.length} image files —`, extCounts);
 
+    // Detect shoot year from Dropbox media_info.time_taken (most common year wins)
+    const yearCounts = {};
+    for (const f of imageFiles) {
+      const timeTaken = f.media_info?.metadata?.time_taken;
+      if (timeTaken) {
+        const y = new Date(timeTaken).getFullYear();
+        if (y > 1990) yearCounts[y] = (yearCounts[y] || 0) + 1;
+      }
+    }
+    const exifYear = Object.keys(yearCounts).length
+      ? parseInt(Object.entries(yearCounts).sort((a,b) => b[1]-a[1])[0][0], 10)
+      : null;
+
     if (imageFiles.length === 0) {
       job.results.push({
         folderPath,
@@ -2766,6 +2779,7 @@ async function _runCurationJob(job, folderPaths, targetCount, dropboxToken) {
       folderName,
       total: imageFiles.length,
       selected,
+      exifYear: exifYear || null,
     });
     job.foldersDone++;
   }
