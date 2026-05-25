@@ -1281,9 +1281,9 @@ function PrintShop({ onOpenPrint }) {
                 {remaining === 0 && <span className="print-soldout">Sold out</span>}
               </div>
               <div className="print-info">
-                <div className="print-title">{p.title}</div>
+                <div className="print-title">{(p.title || '').split(' — ')[0]}</div>
                 <div className="print-meta">
-                  From ${minPrice} · {remaining} of {p.editionTotal} remaining
+                  Edition of {p.editionTotal} · from ${minPrice}
                 </div>
               </div>
             </article>
@@ -1313,8 +1313,8 @@ function PrintDetail({ print, onBack }) {
           />
         </div>
         <div className="print-detail-info">
-          <div className="ui-label">Limited edition · {remaining} of {print.editionTotal} remaining</div>
-          <h2 className="headline">{print.title}</h2>
+          <div className="ui-label">Limited edition of {print.editionTotal}</div>
+          <h2 className="headline">{(print.title || '').split(' — ')[0]}</h2>
           {print.description && (
             <p className="print-desc">{print.description}</p>
           )}
