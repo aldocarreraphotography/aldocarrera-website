@@ -2930,9 +2930,10 @@ img {
    bg-size to auto and tile the 20px source. The <img> on top fades in
    via the .lazy-img / .loaded keyframe below, dissolving the pixel grid
    into the real image. */
-img.lazy-img { opacity: 0; transition: none !important; animation: none !important; }
-img.lazy-img.loaded.in-view { opacity: 1; transition: none !important; animation: none !important; }
-/* Placeholder holds, then hard cut — timing handled in JS (aldo-app.jsx) */
+img.lazy-img { visibility: hidden; }
+img.lazy-img.in-view { visibility: visible; }
+/* visibility cannot be smoothly interpolated by any browser — guaranteed hard cut.
+   Timing handled in JS (aldo-app.jsx). No opacity, no transition, no animation. */
 
 /* ── Touch devices: disable hover transforms to prevent double-tap flicker ── */
 @media (hover: none) {

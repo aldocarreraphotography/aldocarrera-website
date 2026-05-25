@@ -1828,10 +1828,11 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
       // Collect all images entering this batch
       const batch = entries.filter(e => e.isIntersecting).map(e => e.target);
       batch.forEach(el => obs.unobserve(el));
-      // Stagger each image, pre-decode so the snap is truly instant
+      // Stagger each image, pre-decode so paint is ready before reveal
       batch.forEach((el, i) => {
         const t = setTimeout(async () => {
           try { await el.decode(); } catch (_) {}
+          // visibility snap — physically impossible for browsers to fade this
           el.classList.add('in-view');
           timers.delete(t);
         }, HOLD_MS + i * STAGGER);
