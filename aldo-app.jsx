@@ -1826,25 +1826,28 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
      The placeholder (blurDataURL background on the wrapper) shows the whole
      time the image is hidden — so the swap is pixelated → sharp, no fade. */
   aUseEffect(() => {
-    const preloaded = new WeakSet();
+    // Cache the decode promise so multiple callers can await the same load
+    const preloadPromises = new WeakMap();
 
-    const preload = async (el) => {
-      if (preloaded.has(el)) return;
-      preloaded.add(el);
+    const preload = (el) => {
+      if (preloadPromises.has(el)) return preloadPromises.get(el);
       el.loading = 'eager';
-      try { await el.decode(); el.classList.add('lazy-ready'); }
-      catch (_) { el.classList.add('lazy-ready'); /* show anyway if decode unsupported */ }
+      const p = el.decode()
+        .catch(() => { /* ignore decode failures — we'll still show the img */ })
+        .then(() => { el.classList.add('lazy-ready'); });
+      preloadPromises.set(el, p);
+      return p;
     };
 
     const reveal = (el) => {
-      if (el.classList.contains('lazy-ready')) {
-        el.classList.add('lazy-revealed');
-      } else {
-        // Decode still running — chain reveal to the next frame after it lands
-        preload(el).then(() => {
-          requestAnimationFrame(() => el.classList.add('lazy-revealed'));
-        });
-      }
+      if (el.classList.contains('lazy-revealed')) return;
+      // Always kick off preload (idempotent via the WeakMap cache),
+      // then snap visibility on the frame after decode completes
+      preload(el).then(() => {
+        requestAnimationFrame(() => el.classList.add('lazy-revealed'));
+      });
+      // Hard fallback: if anything stalls, reveal after 3s regardless
+      setTimeout(() => el.classList.add('lazy-revealed'), 3000);
     };
 
     // Far observer: triggers preload well before image enters viewport
