@@ -797,15 +797,18 @@ function Contact() {
     setSubmitting(true);
     setError(null);
     try {
-      const res = await fetch('/', {
+      const res = await fetch('/api/contact', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: encodeFormData({ 'form-name': 'contact', ...f }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(f),
       });
-      if (!res.ok) throw new Error('submit_failed');
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.message || data.error || 'submit_failed');
+      }
       setSent(true);
     } catch (err) {
-      setError("Couldn't send — please email aldo@aldocarrera.com directly.");
+      setError(err.message || "Couldn't send — please email aldo@aldocarrera.com directly.");
     } finally {
       setSubmitting(false);
     }
