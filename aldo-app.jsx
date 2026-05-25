@@ -1818,42 +1818,7 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
     return () => window.removeEventListener('popstate', onPop);
   }, [project]);
 
-  /* ── Scroll-reveal for lazy images — placeholder holds, then hard snap ── */
-  aUseEffect(() => {
-    const HOLD_MS  = 350;  // how long the pixelated placeholder shows
-    const STAGGER  = 60;   // ms between images in the same batch
-    const timers   = new Set();
-
-    const obs = new IntersectionObserver((entries) => {
-      // Collect all images entering this batch
-      const batch = entries.filter(e => e.isIntersecting).map(e => e.target);
-      batch.forEach(el => obs.unobserve(el));
-      // Stagger each image, pre-decode so paint is ready before reveal
-      batch.forEach((el, i) => {
-        const t = setTimeout(async () => {
-          try { await el.decode(); } catch (_) {}
-          // visibility snap — physically impossible for browsers to fade this
-          el.classList.add('in-view');
-          timers.delete(t);
-        }, HOLD_MS + i * STAGGER);
-        timers.add(t);
-      });
-    }, { threshold: 0.05, rootMargin: '0px 0px 400px 0px' });
-
-    const observe = () =>
-      document.querySelectorAll('img.lazy-img:not(.in-view)').forEach(img => obs.observe(img));
-
-    observe();
-
-    const mut = new MutationObserver(observe);
-    mut.observe(document.body, { childList: true, subtree: true });
-
-    return () => {
-      obs.disconnect();
-      mut.disconnect();
-      timers.forEach(clearTimeout);
-    };
-  }, []);
+  /* scroll-reveal removed — images load naturally */
 
   /* ── iOS-safe scroll lock when viewer/video is open ── */
   aUseEffect(() => {
