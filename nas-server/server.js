@@ -16,6 +16,7 @@ import multer   from 'multer';
 import path     from 'node:path';
 import fs       from 'node:fs';
 import sharp    from 'sharp';
+import exifr    from 'exifr';
 
 import { issueToken, verifyToken, authMiddleware, requireAuth } from './utils/auth.js';
 import { listFolder, getThumbnailBatch, downloadFile, isImageFile, isConfigured as isDropboxConfigured } from './utils/dropbox.js';
@@ -2566,6 +2567,7 @@ app.post('/api/dropbox/import', async (req, res) => {
       await writeProjects(data);
 
       let order = 1;
+      const yearTally = {}; // track EXIF years across all images in this folder
 
       for (const dropboxPath of imageDropboxPaths) {
         try {
@@ -2605,6 +2607,21 @@ app.post('/api/dropbox/import', async (req, res) => {
             console.warn('[dropbox/import] blur/meta gen failed:', e?.message);
           }
 
+          // Read EXIF date directly from the image bytes — more reliable than
+          // Dropbox's media_info which is often unpopulated for RAW/unindexed files.
+          let dateTaken = null;
+          try {
+            const exif = await exifr.parse(buffer, ['DateTimeOriginal', 'DateTimeDigitized', 'DateTime']);
+            const raw = exif?.DateTimeOriginal || exif?.DateTimeDigitized || exif?.DateTime;
+            if (raw) {
+              const d = new Date(raw);
+              if (!isNaN(d.getTime()) && d.getFullYear() > 1990) {
+                dateTaken = d.toISOString();
+                yearTally[d.getFullYear()] = (yearTally[d.getFullYear()] || 0) + 1;
+              }
+            }
+          } catch (_) { /* EXIF unavailable — fine, leave dateTaken null */ }
+
           const record = {
             filename: finalName,
             blobPath: `${PUBLIC_URL}/api/projects/${encodeURIComponent(projectId)}/images/${encodeURIComponent(finalName)}`,
@@ -2615,7 +2632,7 @@ app.post('/api/dropbox/import', async (req, res) => {
             notes: '',
             blurDataURL,
             exif: {
-              dateTaken: null,
+              dateTaken,
               dimensions: realDims,
               fileSize: buffer.length,
             },
@@ -2634,7 +2651,19 @@ app.post('/api/dropbox/import', async (req, res) => {
         }
       }
 
-      createdProjects.push({ id: projectId, name: projectName, imageCount: newProject.images.length });
+      // If we got real EXIF years from the images, use the dominant one for the
+      // project — overrides any default/guessed year passed from the frontend.
+      if (Object.keys(yearTally).length > 0) {
+        const dominantYear = parseInt(
+          Object.entries(yearTally).sort((a, b) => b[1] - a[1])[0][0], 10
+        );
+        if (dominantYear !== newProject.year) {
+          newProject.year = dominantYear;
+          await writeProjects(data);
+        }
+      }
+
+      createdProjects.push({ id: projectId, name: projectName, year: newProject.year, imageCount: newProject.images.length });
     }
 
     res.json({ projects: createdProjects, totalImages });
