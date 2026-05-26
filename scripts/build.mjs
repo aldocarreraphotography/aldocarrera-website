@@ -75,6 +75,9 @@ const FILES = [
 
   // Favicon
   'favicon.svg',
+
+  // Social sharing / OG image
+  'og-image.jpg',
 ];
 
 const DIRS = [
@@ -117,8 +120,21 @@ Allow: /
 Disallow: /admin
 Disallow: /Admin.html
 Disallow: /api/
+Disallow: /g/
 
 Sitemap: https://aldocarrera.com/sitemap.xml
+`;
+
+const today = new Date().toISOString().slice(0, 10);
+const SITEMAP = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://aldocarrera.com/</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+</urlset>
 `;
 
 const NOT_FOUND = `<!doctype html>
@@ -191,9 +207,10 @@ async function main() {
     await copyDir(src, dest);
   }
 
-  console.log('• writing robots.txt + 404.html');
-  await fs.writeFile(path.join(DIST, 'robots.txt'), ROBOTS);
-  await fs.writeFile(path.join(DIST, '404.html'),  NOT_FOUND);
+  console.log('• writing robots.txt + sitemap.xml + 404.html');
+  await fs.writeFile(path.join(DIST, 'robots.txt'),  ROBOTS);
+  await fs.writeFile(path.join(DIST, 'sitemap.xml'), SITEMAP);
+  await fs.writeFile(path.join(DIST, '404.html'),    NOT_FOUND);
 
   // Friendly /admin URL with no extension — a static stub for direct hits,
   // even though netlify.toml also redirects /admin → /Admin.html.

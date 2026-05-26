@@ -1269,6 +1269,27 @@ function ArchiveApp() {
     return () => window.removeEventListener('aldo-data-updated', h);
   }, []);
 
+  // Keep browser tab title in sync with the focused window
+  aUseEffect(() => {
+    const win = windows[focused];
+    if (!win) { document.title = 'Aldo Carrera Photography'; return; }
+    const LABELS = {
+      portfolio: 'Portfolio',
+      archive:   'Archive',
+      services:  'Services',
+      clients:   'Clients',
+      about:     'About',
+      contact:   'Contact',
+      reels:     'Reels',
+      crew:      win.crewName || 'Crew',
+      prints:    win.print ? (win.print.title || 'Print').split(' — ')[0] : 'Prints',
+      video:     win.video?.title || 'Reels',
+      project:   win.project?.name || 'Project',
+    };
+    const label = LABELS[win.kind];
+    document.title = label ? `${label} — Aldo Carrera Photography` : 'Aldo Carrera Photography';
+  }, [focused, windows]);
+
   const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
   const [windows, setWindows] = aUseState(INITIAL_WINDOWS);
   const [order, setOrder] = aUseState(['about', 'clients', 'portfolio']);
@@ -1879,10 +1900,10 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
     window.scrollTo(0, 0);
     if (p) {
       try { window.plausible && window.plausible('Project View', { props: { name: p.name || '', client: p.client || '' } }); } catch (_) {}
-      document.title = `${p.name} — Aldo Carrera`;
+      document.title = `${p.name} — Aldo Carrera Photography`;
       history.pushState({ mobileProject: p.id }, '', '#' + encodeURIComponent(p.id));
     } else {
-      document.title = 'Aldo Carrera — Photography';
+      document.title = 'Aldo Carrera Photography';
       history.replaceState(null, '', window.location.pathname + window.location.search);
     }
   };
@@ -1892,7 +1913,7 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
     const onPop = (e) => {
       if (project) {
         setProject(null);
-        document.title = 'Aldo Carrera — Photography';
+        document.title = 'Aldo Carrera Photography';
         window.scrollTo(0, 0);
       }
     };
