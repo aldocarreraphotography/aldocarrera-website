@@ -209,6 +209,7 @@ function FolderPicker({ onAnalyze }) {
   const [targetCount, setTarget]    = dbS(15);
   const [analyzing, setAnalyzing]   = dbS(false);
   const [noToken, setNoToken]       = dbS(false);
+  const [mode, setMode]             = dbS('ai');    // 'ai' | 'direct'
 
   dbE(() => {
     window.AdminStore.apiFetch('/api/dropbox/folders')
@@ -246,10 +247,14 @@ function FolderPicker({ onAnalyze }) {
     try {
       const res = await window.AdminStore.apiFetch('/api/dropbox/curate', {
         method: 'POST',
-        body: JSON.stringify({ folders: Array.from(checked), targetCount }),
+        body: JSON.stringify({
+          folders: Array.from(checked),
+          targetCount,
+          direct: mode === 'direct',
+        }),
       });
       if (res.jobId) {
-        onAnalyze(res.jobId);
+        onAnalyze(res.jobId, mode === 'direct');
       } else {
         toast('Failed to start job: ' + (res.error || 'unknown'), 'error');
         setAnalyzing(false);
@@ -357,26 +362,42 @@ function FolderPicker({ onAnalyze }) {
       </table>
 
       <div className="dbx-target-row">
-        <span className="dbx-target-label">Target picks per folder:</span>
+        <span className="dbx-target-label">Import mode:</span>
         <Radio
-          name="targetCount"
-          value={String(targetCount)}
-          onChange={v => setTarget(Number(v))}
+          name="importMode"
+          value={mode}
+          onChange={v => setMode(v)}
           options={[
-            { value: '10', label: '10' },
-            { value: '15', label: '15' },
-            { value: '20', label: '20' },
+            { value: 'ai',     label: 'AI curation' },
+            { value: 'direct', label: 'Direct (all images)' },
           ]}
         />
+        {mode === 'ai' && (
+          <>
+            <span className="dbx-target-label" style={{ marginLeft: 16 }}>Target picks:</span>
+            <Radio
+              name="targetCount"
+              value={String(targetCount)}
+              onChange={v => setTarget(Number(v))}
+              options={[
+                { value: '10', label: '10' },
+                { value: '15', label: '15' },
+                { value: '20', label: '20' },
+              ]}
+            />
+          </>
+        )}
         <div style={{ marginLeft: 'auto' }}>
           <Btn
             onClick={handleAnalyze}
             disabled={checked.size === 0 || analyzing}
-            icon={analyzing ? '…' : '✦'}
+            icon={analyzing ? '…' : mode === 'direct' ? '↓' : '✦'}
           >
             {analyzing
               ? 'Starting…'
-              : `Analyze ${checked.size} folder${checked.size !== 1 ? 's' : ''} with Claude`}
+              : mode === 'direct'
+                ? `Import all from ${checked.size} folder${checked.size !== 1 ? 's' : ''}`
+                : `Analyze ${checked.size} folder${checked.size !== 1 ? 's' : ''} with Claude`}
           </Btn>
         </div>
       </div>
@@ -451,7 +472,7 @@ function ProcessingView({ jobId, onDone }) {
 /* ------------------------------------------------------------------ */
 /* Step 3 — Review grid                                               */
 /* ------------------------------------------------------------------ */
-function ReviewView({ job }) {
+function ReviewView({ job, direct = false }) {
   // Per-folder state: projectName, year, selected image paths
   const initFolderState = () => {
     const state = {};
@@ -563,7 +584,7 @@ function ReviewView({ job }) {
                 <div className="dbx-folder-title">{result.folderName}</div>
                 <div className="dbx-folder-meta">
                   {selectedCount} selected / {result.total} total
-                  {result.total > 0 && ` · Claude picked ${result.selected.length}`}
+                  {!direct && result.total > 0 && ` · Claude picked ${result.selected.length}`}
                 </div>
               </div>
               <div className="dbx-folder-fields">
@@ -624,15 +645,17 @@ function ReviewView({ job }) {
                         <div className="dbx-thumb-img-placeholder">{img.filename}</div>
                       )}
 
-                      <span className={`dbx-score-badge ${scoreTone(img.score)}`}>
-                        {img.score}/10
-                      </span>
+                      {!direct && img.score != null && (
+                        <span className={`dbx-score-badge ${scoreTone(img.score)}`}>
+                          {img.score}/10
+                        </span>
+                      )}
 
                       {!isOn && (
                         <span className="dbx-deselect-x" aria-label="Deselected">✕</span>
                       )}
 
-                      {img.reason && (
+                      {!direct && img.reason && (
                         <div className={`dbx-thumb-reason ${isOn ? '' : 'is-deselected'}`}>
                           {img.reason}
                         </div>
@@ -683,12 +706,14 @@ function ReviewView({ job }) {
 /* Main component                                                      */
 /* ------------------------------------------------------------------ */
 function DropboxImportView({ navigate }) {
-  const [step, setStep]   = dbS(1);
-  const [jobId, setJobId] = dbS(null);
-  const [job,   setJob]   = dbS(null);
+  const [step,   setStep]   = dbS(1);
+  const [jobId,  setJobId]  = dbS(null);
+  const [job,    setJob]    = dbS(null);
+  const [direct, setDirect] = dbS(false);
 
-  const handleAnalyze = (id) => {
+  const handleAnalyze = (id, isDirect) => {
     setJobId(id);
+    setDirect(!!isDirect);
     setStep(2);
   };
 
@@ -717,7 +742,7 @@ function DropboxImportView({ navigate }) {
 
       {step === 1 && <FolderPicker onAnalyze={handleAnalyze} />}
       {step === 2 && jobId && <ProcessingView jobId={jobId} onDone={handleDone} />}
-      {step === 3 && job   && <ReviewView job={job} />}
+      {step === 3 && job   && <ReviewView job={job} direct={direct} />}
     </>
   );
 }

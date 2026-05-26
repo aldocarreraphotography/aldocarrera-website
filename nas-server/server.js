@@ -2468,7 +2468,7 @@ app.post('/api/dropbox/curate', async (req, res) => {
       return res.status(503).json({ error: 'Dropbox not configured — set DROPBOX_APP_KEY + DROPBOX_APP_SECRET + DROPBOX_REFRESH_TOKEN' });
     }
 
-    const { folders, targetCount = 15 } = req.body || {};
+    const { folders, targetCount = 15, direct = false } = req.body || {};
     if (!Array.isArray(folders) || folders.length === 0) {
       return res.status(400).json({ error: 'validation', message: '`folders` array is required' });
     }
@@ -2482,11 +2482,12 @@ app.post('/api/dropbox/curate', async (req, res) => {
       foldersTotal: folders.length,
       results: [],
       error: null,
+      direct: !!direct,
     };
     _curateJobs.set(jobId, job);
 
     // Fire off async — do NOT await
-    _runCurationJob(job, folders, targetCount, null).catch(err => {
+    _runCurationJob(job, folders, targetCount, null, !!direct).catch(err => {
       job.status = 'error';
       job.error = err?.message || 'Unknown error';
       console.error('[_runCurationJob] uncaught:', err?.message, err?.stack);
@@ -2634,12 +2635,14 @@ app.post('/api/dropbox/import', async (req, res) => {
  * _runCurationJob — async background function, not a route.
  * Fetches thumbnails from Dropbox, sends to Claude Vision, builds results.
  */
-async function _runCurationJob(job, folderPaths, targetCount, dropboxToken) {
+async function _runCurationJob(job, folderPaths, targetCount, dropboxToken, direct = false) {
   const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
 
   for (const folderPath of folderPaths) {
     const folderName = folderPath.split('/').filter(Boolean).pop() || folderPath;
-    job.phase = `Fetching images from ${folderName}…`;
+    job.phase = direct
+      ? `Listing images in ${folderName}…`
+      : `Fetching images from ${folderName}…`;
 
     // 1. List image files in this folder
     const entries = await listFolder(dropboxToken, folderPath);
@@ -2679,6 +2682,27 @@ async function _runCurationJob(job, folderPaths, targetCount, dropboxToken) {
     }
 
     const imagePaths = imageFiles.map(f => f.path_display);
+
+    // Direct mode — skip thumbnails and Claude, select everything
+    if (direct) {
+      job.results.push({
+        folderPath,
+        folderName,
+        total: imageFiles.length,
+        exifYear,
+        direct: true,
+        selected: imageFiles.map(f => ({
+          dropboxPath: f.path_display,
+          filename: f.name,
+          thumbnailDataUrl: null,
+          score: null,
+          reason: null,
+        })),
+      });
+      job.foldersDone++;
+      continue;
+    }
+
     job.phase = `Fetching thumbnails for ${folderName} (${imagePaths.length} images)…`;
 
     // 2. Batch fetch thumbnails
