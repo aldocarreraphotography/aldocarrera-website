@@ -1,0 +1,189 @@
+/* raw-styles.css — /raw hidden section */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  background: #0b0b0b;
+  color: #d4cfc9;
+  font-family: 'IBM Plex Mono', 'Courier New', monospace;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Header ─────────────────────────────────── */
+.raw-header {
+  padding: 1.75rem 1.5rem 1.25rem;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.raw-header-label {
+  font-size: 0.6rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  opacity: 0.35;
+}
+.raw-back {
+  font-size: 0.6rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.2;
+  text-decoration: none;
+  color: inherit;
+  transition: opacity 0.25s;
+}
+.raw-back:hover { opacity: 0.55; }
+
+/* ── Project grid ─────────────────────────────── */
+.raw-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: #1a1a1a;
+  padding: 0 0 1px;
+}
+@media (max-width: 640px) {
+  .raw-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+.raw-project {
+  cursor: pointer;
+  position: relative;
+  aspect-ratio: 2/3;
+  overflow: hidden;
+  background: #0f0f0f;
+}
+.raw-project img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  opacity: 0;
+  transition: opacity 0.5s ease, transform 0.4s ease;
+  transform: scale(1.02);
+}
+.raw-project img.loaded {
+  opacity: 1;
+  transform: scale(1);
+}
+.raw-project-info {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  padding: 2rem 0.85rem 0.85rem;
+  background: linear-gradient(transparent, rgba(0,0,0,0.75));
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.raw-project:hover .raw-project-info { opacity: 1; }
+
+/* ── Detail view ─────────────────────────────── */
+.raw-detail-header {
+  padding: 1.5rem 1.5rem 1rem;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.raw-detail-name {
+  font-size: 0.65rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  opacity: 0.5;
+}
+.raw-detail-year {
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  opacity: 0.25;
+}
+.raw-detail-back {
+  font-size: 0.6rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.25;
+  cursor: pointer;
+  background: none;
+  border: none;
+  color: inherit;
+  font-family: inherit;
+  transition: opacity 0.2s;
+  padding: 0;
+}
+.raw-detail-back:hover { opacity: 0.6; }
+
+.raw-images {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: #1a1a1a;
+  padding-bottom: 1px;
+}
+@media (max-width: 640px) {
+  .raw-images { grid-template-columns: repeat(2, 1fr); }
+}
+
+.raw-img {
+  aspect-ratio: 2/3;
+  overflow: hidden;
+  background: #0f0f0f;
+  cursor: zoom-in;
+}
+.raw-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+.raw-img img.loaded { opacity: 1; }
+
+/* ── Lightbox ─────────────────────────────────── */
+.raw-lightbox {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.96);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  cursor: zoom-out;
+}
+.raw-lightbox img {
+  max-width: 90vw;
+  max-height: 90vh;
+  object-fit: contain;
+  display: block;
+}
+.raw-lightbox-close {
+  position: absolute;
+  top: 1.25rem; right: 1.5rem;
+  background: none; border: none;
+  color: #d4cfc9; font-family: inherit;
+  font-size: 0.6rem; letter-spacing: 0.12em;
+  text-transform: uppercase; opacity: 0.3;
+  cursor: pointer; transition: opacity 0.2s;
+}
+.raw-lightbox-close:hover { opacity: 0.7; }
+
+/* ── Empty / loading ─────────────────────────── */
+.raw-empty {
+  padding: 5rem 1.5rem;
+  font-size: 0.6rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.2;
+}
+.raw-loading {
+  padding: 5rem 1.5rem;
+  font-size: 0.6rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  opacity: 0.2;
+  animation: raw-pulse 2s ease infinite;
+}
+@keyframes raw-pulse {
+  0%, 100% { opacity: 0.15; }
+  50% { opacity: 0.4; }
+}

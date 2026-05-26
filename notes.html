@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta name="robots" content="noindex, nofollow"/>
+<title>Notes — Aldo Carrera</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;1,400&display=swap"/>
+<link rel="stylesheet" href="/notes-styles.css"/>
+</head>
+<body>
+<div id="app"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin></script>
+
+<script type="text/babel">
+const API = 'https://api.aldocarrera.com';
+const { useState, useEffect } = React;
+
+function formatDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso + 'T12:00:00');
+  return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }).toUpperCase();
+}
+
+function lede(body) {
+  if (!body) return '';
+  // Return first sentence or first 140 chars
+  const first = (body.trim().split(/\n\n|(?<=\.)\s/)[0] || '').trim();
+  return first.length > 140 ? first.slice(0, 140) + '…' : first;
+}
+
+/* ── Dispatch detail ────────────────────────── */
+function DispatchView({ dispatch, onBack }) {
+  useEffect(() => {
+    document.title = (dispatch.title ? dispatch.title + ' — ' : '') + 'Notes · Aldo Carrera Photography';
+    return () => { document.title = 'Notes — Aldo Carrera Photography'; };
+  }, [dispatch.id]);
+
+  return (
+    <div className="notes-shell">
+      <div className="notes-header">
+        <span className="notes-header-label">notes</span>
+        <button className="notes-back" onClick={onBack}>← all notes</button>
+      </div>
+
+      <div className="notes-dispatch-date">{formatDate(dispatch.date)}</div>
+      {dispatch.title && <div className="notes-dispatch-title">{dispatch.title}</div>}
+      <div className="notes-dispatch-body">{dispatch.body}</div>
+
+      <div style={{ paddingBottom: '6rem' }}/>
+    </div>
+  );
+}
+
+/* ── Dispatch list ──────────────────────────── */
+function ListView({ dispatches, onOpen }) {
+  return (
+    <div className="notes-shell">
+      <div className="notes-header">
+        <span className="notes-header-label">notes</span>
+        <a className="notes-back" href="/">← archive</a>
+      </div>
+
+      {dispatches.length === 0 && (
+        <div className="notes-empty">—</div>
+      )}
+
+      <div className="notes-list">
+        {dispatches.map(d => (
+          <div key={d.id} className="notes-item" onClick={() => onOpen(d)}>
+            <div className="notes-item-date">{formatDate(d.date)}</div>
+            {d.title && <div className="notes-item-title">{d.title}</div>}
+            <div className="notes-item-lede">{lede(d.body)}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ paddingBottom: '6rem' }}/>
+    </div>
+  );
+}
+
+/* ── Root ───────────────────────────────────── */
+function NotesApp() {
+  const [dispatches, setDispatches] = useState(null);
+  const [active, setActive] = useState(null);
+
+  useEffect(() => {
+    fetch(API + '/api/dispatches')
+      .then(r => r.json())
+      .then(d => setDispatches(d.dispatches || []))
+      .catch(() => setDispatches([]));
+  }, []);
+
+  if (dispatches === null) {
+    return (
+      <div className="notes-shell">
+        <div className="notes-header">
+          <span className="notes-header-label">notes</span>
+          <a className="notes-back" href="/">← archive</a>
+        </div>
+        <div className="notes-loading">—</div>
+      </div>
+    );
+  }
+
+  if (active) {
+    return <DispatchView dispatch={active} onBack={() => { setActive(null); window.scrollTo(0,0); }}/>;
+  }
+
+  return <ListView dispatches={dispatches} onOpen={d => { setActive(d); window.scrollTo(0,0); }}/>;
+}
+
+const root = ReactDOM.createRoot(document.getElementById('app'));
+root.render(<NotesApp/>);
+</script>
+</body>
+</html>

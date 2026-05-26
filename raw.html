@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta name="robots" content="noindex, nofollow"/>
+<title>— Aldo Carrera</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap"/>
+<link rel="stylesheet" href="/raw-styles.css"/>
+</head>
+<body>
+<div id="app"><div class="raw-loading">—</div></div>
+
+<script>
+(function () {
+'use strict';
+
+const API = 'https://api.aldocarrera.com';
+let allProjects = [];
+let lightboxSrc = null;
+
+/* ── Lazy image loader ─────────────────────────── */
+function lazyImg(src, alt) {
+  const img = document.createElement('img');
+  img.alt = alt || '';
+  const io = new IntersectionObserver(function(entries) {
+    entries.forEach(function(e) {
+      if (e.isIntersecting) {
+        img.src = src;
+        img.onload  = function() { img.classList.add('loaded'); };
+        img.onerror = function() { img.classList.add('loaded'); };
+        io.disconnect();
+      }
+    });
+  }, { rootMargin: '300px' });
+  io.observe(img);
+  return img;
+}
+
+function resolveUrl(blobPath) {
+  if (!blobPath) return '';
+  if (blobPath.startsWith('http')) return blobPath;
+  return API + '/' + blobPath;
+}
+
+/* ── Lightbox ──────────────────────────────────── */
+function openLightbox(src) {
+  lightboxSrc = src;
+  const lb = document.createElement('div');
+  lb.className = 'raw-lightbox';
+  lb.addEventListener('click', closeLightbox);
+
+  const img = document.createElement('img');
+  img.src = src;
+  img.alt = '';
+  lb.appendChild(img);
+
+  const close = document.createElement('button');
+  close.className = 'raw-lightbox-close';
+  close.textContent = '× close';
+  lb.appendChild(close);
+
+  document.body.appendChild(lb);
+  document.addEventListener('keydown', onLightboxKey);
+}
+function closeLightbox() {
+  const lb = document.querySelector('.raw-lightbox');
+  if (lb) lb.remove();
+  document.removeEventListener('keydown', onLightboxKey);
+  lightboxSrc = null;
+}
+function onLightboxKey(e) {
+  if (e.key === 'Escape') closeLightbox();
+}
+
+/* ── Views ─────────────────────────────────────── */
+function renderGrid(projects) {
+  const app = document.getElementById('app');
+  app.innerHTML = '';
+
+  const header = document.createElement('div');
+  header.className = 'raw-header';
+  header.innerHTML =
+    '<span class="raw-header-label">not for print</span>' +
+    '<a class="raw-back" href="/">← archive</a>';
+  app.appendChild(header);
+
+  if (projects.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'raw-empty';
+    empty.textContent = '—';
+    app.appendChild(empty);
+    return;
+  }
+
+  const grid = document.createElement('div');
+  grid.className = 'raw-grid';
+
+  projects.forEach(function(project) {
+    const cover = (project.images || [])[0];
+    if (!cover) return;
+
+    const card = document.createElement('div');
+    card.className = 'raw-project';
+
+    const src = resolveUrl(cover.blobPath);
+    if (src) card.appendChild(lazyImg(src, project.name || ''));
+
+    const info = document.createElement('div');
+    info.className = 'raw-project-info';
+    info.textContent = (project.name || '').toUpperCase();
+    card.appendChild(info);
+
+    card.addEventListener('click', function() { renderProject(project); });
+    grid.appendChild(card);
+  });
+
+  app.appendChild(grid);
+}
+
+function renderProject(project) {
+  const app = document.getElementById('app');
+  app.innerHTML = '';
+  window.scrollTo(0, 0);
+
+  const header = document.createElement('div');
+  header.className = 'raw-detail-header';
+
+  const left = document.createElement('div');
+  left.style.cssText = 'display:flex;align-items:baseline;gap:1rem';
+  const name = document.createElement('span');
+  name.className = 'raw-detail-name';
+  name.textContent = (project.name || '').toUpperCase();
+  const year = document.createElement('span');
+  year.className = 'raw-detail-year';
+  year.textContent = project.year || '';
+  left.appendChild(name);
+  if (project.year) left.appendChild(year);
+
+  const back = document.createElement('button');
+  back.className = 'raw-detail-back';
+  back.textContent = '← back';
+  back.addEventListener('click', function() { renderGrid(allProjects); });
+
+  header.appendChild(left);
+  header.appendChild(back);
+  app.appendChild(header);
+
+  const images = document.createElement('div');
+  images.className = 'raw-images';
+
+  (project.images || []).forEach(function(image) {
+    const src = resolveUrl(image.blobPath);
+    if (!src) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'raw-img';
+    const img = lazyImg(src, project.name || '');
+    wrap.appendChild(img);
+    wrap.addEventListener('click', function() { openLightbox(src); });
+    images.appendChild(wrap);
+  });
+
+  app.appendChild(images);
+}
+
+/* ── Init ──────────────────────────────────────── */
+async function init() {
+  try {
+    const r = await fetch(API + '/api/raw-projects');
+    if (!r.ok) throw new Error('fetch failed');
+    const d = await r.json();
+    allProjects = d.projects || [];
+  } catch (_) {
+    allProjects = [];
+  }
+  renderGrid(allProjects);
+}
+
+init();
+})();
+</script>
+</body>
+</html>

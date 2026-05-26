@@ -1629,6 +1629,22 @@ function ArchiveApp() {
 
         {ctx && <CtxMenu {...ctx} onClose={() => setCtx(null)}/>}
 
+        {/* Hidden breadcrumb — not for print */}
+        <a
+          href="/raw"
+          aria-hidden="true"
+          tabIndex={-1}
+          style={{
+            position:'absolute', bottom:'0.55rem', right:'1rem',
+            fontSize:'0.45rem', letterSpacing:'0.08em',
+            color:'var(--ink)', opacity:0.045,
+            textDecoration:'none', transition:'opacity 0.4s',
+            userSelect:'none', zIndex:1,
+          }}
+          onMouseEnter={e => e.currentTarget.style.opacity = '0.22'}
+          onMouseLeave={e => e.currentTarget.style.opacity = '0.045'}
+        >·</a>
+
         {/* DOCK */}
         <div className="dock">
           {[

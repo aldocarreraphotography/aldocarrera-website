@@ -78,6 +78,17 @@ const FILES = [
 
   // Social sharing / OG image
   'og-image.jpg',
+
+  // Hidden /raw section
+  'raw.html',
+  'raw-styles.css',
+
+  // /notes dispatch section
+  'notes.html',
+  'notes-styles.css',
+
+  // Admin dispatches view
+  'admin-views-dispatches.jsx',
 ];
 
 const DIRS = [

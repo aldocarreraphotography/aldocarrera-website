@@ -31,6 +31,7 @@ import {
   readVideos, writeVideos, readVideoBytes, writeVideoBytes, writeVideoBytesFromPath, getVideoTmpDir, deleteVideoFile,
   readGalleryPortals, writeGalleryPortals,
   readPrints, writePrints,
+  readDispatches, writeDispatches,
 } from './utils/store.js';
 import {
   createGallery, readGalleries, findGallery, updateGallery, deleteGallery, isExpired,
@@ -753,7 +754,7 @@ app.get('/api/public/site', async (req, res) => {
 
   const sortMode = settings.projectSort || 'year';
   const cleanedFromStore = (projectsFile?.projects || [])
-    .filter(p => p.public !== false)
+    .filter(p => p.public !== false && !p.raw) // raw projects live at /raw only
     .map(p => {
       const imgs = (p.images || []).filter(img => !img.rejected);
       const coverIdx = imgs.findIndex(i => i.cover);
@@ -790,6 +791,120 @@ app.get('/api/public/site', async (req, res) => {
     services: services.slice().sort((a, b) => (a.order || 0) - (b.order || 0)),
     settings,
   });
+});
+
+/* ------------------------------------------------------------------ */
+/* Raw projects — public, no auth (obscurity is the protection)       */
+/* ------------------------------------------------------------------ */
+
+app.get('/api/raw-projects', async (req, res) => {
+  try {
+    const data = await readProjects();
+    const raws = (data.projects || [])
+      .filter(p => p.raw === true)
+      .map(p => {
+        const imgs = (p.images || []).filter(img => !img.rejected);
+        const coverIdx = imgs.findIndex(i => i.cover);
+        if (coverIdx > 0) { const [c] = imgs.splice(coverIdx, 1); imgs.unshift(c); }
+        return { ...p, images: imgs };
+      })
+      .sort((a, b) => Number(b.year || 0) - Number(a.year || 0));
+    res.json({ projects: raws });
+  } catch (err) {
+    res.status(500).json({ error: 'internal' });
+  }
+});
+
+/* ------------------------------------------------------------------ */
+/* Dispatches — public read, auth write                                */
+/* ------------------------------------------------------------------ */
+
+app.get('/api/dispatches', async (req, res) => {
+  try {
+    const data = await readDispatches();
+    const published = (data.dispatches || [])
+      .filter(d => d.published)
+      .sort((a, b) => new Date(b.date) - new Date(a.date));
+    res.json({ dispatches: published });
+  } catch (err) {
+    res.status(500).json({ error: 'internal' });
+  }
+});
+
+app.get('/api/dispatches/:id', async (req, res) => {
+  try {
+    const data = await readDispatches();
+    const d = data.dispatches.find(d => d.id === req.params.id);
+    if (!d || !d.published) return res.status(404).json({ error: 'not_found' });
+    res.json(d);
+  } catch (err) {
+    res.status(500).json({ error: 'internal' });
+  }
+});
+
+app.get('/api/admin/dispatches', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  try {
+    const data = await readDispatches();
+    const sorted = (data.dispatches || []).sort((a, b) => new Date(b.date) - new Date(a.date));
+    res.json({ dispatches: sorted });
+  } catch (err) {
+    res.status(500).json({ error: 'internal' });
+  }
+});
+
+app.post('/api/dispatches', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  try {
+    const { title, body, date, published } = req.body || {};
+    const data = await readDispatches();
+    const entry = {
+      id: `DISPATCH_${Date.now()}`,
+      title: (title || '').trim(),
+      body:  (body  || '').trim(),
+      date:  date || new Date().toISOString().slice(0, 10),
+      published: !!published,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    data.dispatches.push(entry);
+    await writeDispatches(data);
+    res.json(entry);
+  } catch (err) {
+    res.status(500).json({ error: 'internal', message: err?.message });
+  }
+});
+
+app.put('/api/dispatches/:id', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  try {
+    const data = await readDispatches();
+    const idx = data.dispatches.findIndex(d => d.id === req.params.id);
+    if (idx === -1) return res.status(404).json({ error: 'not_found' });
+    data.dispatches[idx] = {
+      ...data.dispatches[idx],
+      ...req.body,
+      id:        data.dispatches[idx].id,
+      createdAt: data.dispatches[idx].createdAt,
+      updatedAt: new Date().toISOString(),
+    };
+    await writeDispatches(data);
+    res.json(data.dispatches[idx]);
+  } catch (err) {
+    res.status(500).json({ error: 'internal', message: err?.message });
+  }
+});
+
+app.delete('/api/dispatches/:id', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  try {
+    const data = await readDispatches();
+    data.dispatches = data.dispatches.filter(d => d.id !== req.params.id);
+    await writeDispatches(data);
+    res.status(204).end();
+  } catch (err) {
+    res.status(500).json({ error: 'internal' });
+  }
 });
 
 /* ------------------------------------------------------------------ */

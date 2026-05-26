@@ -63,6 +63,18 @@
   to     = "/client-gallery.html"
   status = 200
 
+# Hidden /raw section — intentionally not in nav
+[[redirects]]
+  from   = "/raw"
+  to     = "/raw.html"
+  status = 200
+
+# Notes / dispatch section
+[[redirects]]
+  from   = "/notes"
+  to     = "/notes.html"
+  status = 200
+
 # Contact form → Resend
 [[redirects]]
   from   = "/api/contact"

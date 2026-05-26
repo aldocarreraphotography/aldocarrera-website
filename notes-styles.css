@@ -1,0 +1,144 @@
+/* notes-styles.css — /notes dispatch section */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  background: #f5f2ee;
+  color: #1a1714;
+  font-family: 'IBM Plex Mono', 'Courier New', monospace;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Shell ───────────────────────────────────── */
+.notes-shell {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+
+/* ── Header ─────────────────────────────────── */
+.notes-header {
+  padding: 2.5rem 0 2rem;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  border-bottom: 1px solid #cdc8c2;
+  margin-bottom: 3rem;
+}
+.notes-header-label {
+  font-size: 0.6rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  opacity: 0.45;
+}
+.notes-back {
+  font-size: 0.6rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.3;
+  text-decoration: none;
+  color: inherit;
+  transition: opacity 0.2s;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  padding: 0;
+}
+.notes-back:hover { opacity: 0.7; }
+
+/* ── Dispatch list ───────────────────────────── */
+.notes-list {
+  display: flex;
+  flex-direction: column;
+}
+.notes-item {
+  padding: 1.75rem 0;
+  border-bottom: 1px solid #e0dbd5;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.notes-item:last-child { border-bottom: none; }
+.notes-item:hover .notes-item-lede { opacity: 0.6; }
+
+.notes-item-date {
+  font-size: 0.6rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  opacity: 0.4;
+  margin-bottom: 0.6rem;
+}
+.notes-item-title {
+  font-size: 0.9rem;
+  font-weight: 500;
+  line-height: 1.4;
+  margin-bottom: 0.5rem;
+  letter-spacing: -0.01em;
+}
+.notes-item-lede {
+  font-size: 0.8rem;
+  line-height: 1.65;
+  opacity: 0.5;
+  transition: opacity 0.2s;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ── Full dispatch ───────────────────────────── */
+.notes-dispatch-date {
+  font-size: 0.6rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  opacity: 0.4;
+  margin-bottom: 1.5rem;
+}
+.notes-dispatch-title {
+  font-size: 1.35rem;
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+  margin-bottom: 2.5rem;
+  padding-bottom: 2rem;
+  border-bottom: 1px solid #cdc8c2;
+}
+.notes-dispatch-body {
+  font-size: 0.88rem;
+  line-height: 1.85;
+  letter-spacing: 0.005em;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.notes-dispatch-body p {
+  margin-bottom: 1.5rem;
+}
+
+/* ── Empty state ─────────────────────────────── */
+.notes-empty {
+  padding: 4rem 0;
+  font-size: 0.6rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  opacity: 0.25;
+}
+.notes-loading {
+  padding: 4rem 0;
+  font-size: 0.6rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  opacity: 0.2;
+  animation: notes-pulse 2s ease infinite;
+}
+@keyframes notes-pulse {
+  0%, 100% { opacity: 0.15; }
+  50%       { opacity: 0.35; }
+}
+
+/* ── Mobile ──────────────────────────────────── */
+@media (max-width: 600px) {
+  .notes-shell { padding: 0 1.25rem; }
+  .notes-dispatch-title { font-size: 1.1rem; }
+  .notes-dispatch-body { font-size: 0.85rem; }
+}

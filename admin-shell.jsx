@@ -49,6 +49,10 @@ function parseRoute(hash) {
   if (parts[0] === 'settings')  return { name: 'settings' };
   if (parts[0] === 'analytics') return { name: 'analytics' };
   if (parts[0] === 'dropbox')   return { name: 'dropbox' };
+  if (parts[0] === 'dispatches') {
+    if (!parts[1]) return { name: 'dispatches' };
+    return { name: 'dispatch-edit', id: decodeURIComponent(parts[1]) };
+  }
   return { name: 'dashboard' };
 }
 function navigate(to) {
@@ -69,6 +73,7 @@ const NAV = [
   { id: 'services',   label: 'Services',  match: ['services'],                    hash: '#/services' },
   { id: 'clients',    label: 'Clients',   match: ['clients'],                     hash: '#/clients' },
   { id: 'settings',   label: 'Settings',  match: ['settings'],                    hash: '#/settings' },
+  { id: 'dispatches', label: 'Notes',      match: ['dispatches','dispatch-edit'],   hash: '#/dispatches'},
   { id: 'dropbox',    label: 'AI Import',  match: ['dropbox'],                      hash: '#/dropbox'   },
   { id: 'analytics',  label: 'Analytics', match: ['analytics'],                    hash: '#/analytics' },
 ];
@@ -214,9 +219,11 @@ function AdminApp() {
     case 'services':        view = <ServicesEditorView navigate={navigate}/>; break;
     case 'clients':         view = <ClientsEditorView  navigate={navigate}/>; break;
     case 'settings':        view = <SettingsEditorView navigate={navigate}/>; break;
-    case 'analytics':       view = <AnalyticsView      navigate={navigate}/>; break;
-    case 'dropbox':         view = <DropboxImportView  navigate={navigate}/>; break;
-    default:                view = <DashboardView      navigate={navigate}/>;
+    case 'analytics':       view = <AnalyticsView          navigate={navigate}/>; break;
+    case 'dropbox':         view = <DropboxImportView      navigate={navigate}/>; break;
+    case 'dispatches':      view = <DispatchesView         navigate={navigate}/>; break;
+    case 'dispatch-edit':   view = <DispatchEditorView     dispatchId={route.id} navigate={navigate}/>; break;
+    default:                view = <DashboardView          navigate={navigate}/>;
   }
 
   return (

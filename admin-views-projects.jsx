@@ -507,14 +507,23 @@ function ProjectEditorView({ projectId, navigate }) {
           <Field label="Location" wide>
             <TextInput value={draft.location} onChange={(v) => set('location', v)} placeholder="Hong Kong — Sheung Wan"/>
           </Field>
-          <Field label="Visibility" hint={draft.public !== false ? 'Visible on the public archive.' : 'Hidden from the public archive.'}>
-            <div className="ad-toggle-row">
+          <Field label="Visibility" hint={draft.raw ? 'Hidden from main archive — lives at /raw only.' : draft.public !== false ? 'Visible on the public archive.' : 'Hidden from the public archive.'}>
+            <div className="ad-toggle-row" style={{display:'flex',gap:'0.5rem',flexWrap:'wrap'}}>
               <button
                 type="button"
-                className={`ad-visibility-btn ${draft.public !== false ? 'pub' : 'priv'}`}
-                onClick={() => set('public', draft.public === false ? true : false)}
+                className={`ad-visibility-btn ${draft.public !== false && !draft.raw ? 'pub' : 'priv'}`}
+                onClick={() => { set('public', draft.public === false ? true : false); if (draft.raw) set('raw', false); }}
               >
-                {draft.public !== false ? '● Public' : '○ Private'}
+                {draft.public !== false && !draft.raw ? '● Public' : '○ Private'}
+              </button>
+              <button
+                type="button"
+                className={`ad-visibility-btn ${draft.raw ? 'pub' : 'priv'}`}
+                style={draft.raw ? {background:'var(--ink)',color:'var(--paper)'} : {}}
+                onClick={() => { set('raw', !draft.raw); if (!draft.raw) set('public', true); }}
+                title="Not for print — hidden from main archive, accessible at /raw"
+              >
+                {draft.raw ? '● /raw' : '○ /raw'}
               </button>
             </div>
           </Field>
@@ -554,7 +563,7 @@ function ProjectEditorView({ projectId, navigate }) {
             <Field label="Production">
               <TextInput value={draft.crewProduction || ''} onChange={(v) => set('crewProduction', v)} placeholder=""/>
             </Field>
-            <Field label="Agency / Brand contact">
+            <Field label="Photo Assistant(s)">
               <TextInput value={draft.crewAgency || ''} onChange={(v) => set('crewAgency', v)} placeholder=""/>
             </Field>
             <Field label="Photo Assistant(s)">
