@@ -243,6 +243,8 @@ function ProjectDetail({ project, onOpenPhoto, onOpenVideo }) {
               ['Set Design', project.crewSetDesign],
               ['Production', project.crewProduction],
               ['Agency', project.crewAgency],
+              ['Photo Assistant', project.crewPhotoAssistant],
+              ['Digital Tech', project.crewDigitalTech],
             ].filter(([, v]) => v && v.trim());
             if (credits.length === 0) return null;
             return (
@@ -1069,17 +1071,28 @@ function VideoPlayer({ video }) {
    CREW — projects grouped by collaborator name
    ============================================================ */
 const CREW_FIELDS = [
-  ['Talent',        'crewTalent'],
-  ['Stylist',       'crewStylist'],
-  ['Hair',          'crewHair'],
-  ['Makeup',        'crewMakeup'],
-  ['Art Direction', 'crewArtDirection'],
-  ['Set Design',    'crewSetDesign'],
-  ['Production',    'crewProduction'],
-  ['Agency',        'crewAgency'],
+  ['Talent',           'crewTalent'],
+  ['Stylist',          'crewStylist'],
+  ['Hair',             'crewHair'],
+  ['Makeup',           'crewMakeup'],
+  ['Art Direction',    'crewArtDirection'],
+  ['Set Design',       'crewSetDesign'],
+  ['Production',       'crewProduction'],
+  ['Agency',           'crewAgency'],
+  ['Photo Assistant',  'crewPhotoAssistant'],
+  ['Digital Tech',     'crewDigitalTech'],
 ];
 
 function CrewIndex({ onOpenProject, onOpenCrew }) {
+  // Re-compute whenever NAS data refreshes (PROJECTS is mutated in-place;
+  // useMemo with [] would stay stale after the first aldo-data-updated event)
+  const [dataTick, setDataTick] = vsUseState(0);
+  vsUseEffect(() => {
+    const h = () => setDataTick(n => n + 1);
+    window.addEventListener('aldo-data-updated', h);
+    return () => window.removeEventListener('aldo-data-updated', h);
+  }, []);
+
   // Build map of { name → [{ role, project }, ...] } across all projects
   const map = vsUseMemo(() => {
     const m = new Map();
@@ -1096,7 +1109,7 @@ function CrewIndex({ onOpenProject, onOpenCrew }) {
       }
     }
     return m;
-  }, []);
+  }, [dataTick]);
 
   // Group by role for the index display
   const byRole = vsUseMemo(() => {
@@ -1156,6 +1169,14 @@ function CrewIndex({ onOpenProject, onOpenCrew }) {
 }
 
 function CrewDetail({ name, onOpenProject, onBack }) {
+  // Re-compute if data refreshes (same stale-memo fix as CrewIndex)
+  const [dataTick, setDataTick] = vsUseState(0);
+  vsUseEffect(() => {
+    const h = () => setDataTick(n => n + 1);
+    window.addEventListener('aldo-data-updated', h);
+    return () => window.removeEventListener('aldo-data-updated', h);
+  }, []);
+
   // Find all credits for this person across projects
   const credits = vsUseMemo(() => {
     const out = [];
@@ -1167,7 +1188,7 @@ function CrewDetail({ name, onOpenProject, onBack }) {
       }
     }
     return out;
-  }, [name]);
+  }, [name, dataTick]);
 
   // Deduplicate projects (same person could be credited twice on one shoot)
   const projects = vsUseMemo(() => {

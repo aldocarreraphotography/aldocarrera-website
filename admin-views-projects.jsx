@@ -557,6 +557,12 @@ function ProjectEditorView({ projectId, navigate }) {
             <Field label="Agency / Brand contact">
               <TextInput value={draft.crewAgency || ''} onChange={(v) => set('crewAgency', v)} placeholder=""/>
             </Field>
+            <Field label="Photo Assistant(s)">
+              <TextInput value={draft.crewPhotoAssistant || ''} onChange={(v) => set('crewPhotoAssistant', v)} placeholder=""/>
+            </Field>
+            <Field label="Digital Tech">
+              <TextInput value={draft.crewDigitalTech || ''} onChange={(v) => set('crewDigitalTech', v)} placeholder=""/>
+            </Field>
           </div>
         </div>
 

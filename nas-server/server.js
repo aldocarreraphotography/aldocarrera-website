@@ -27,7 +27,7 @@ import {
   readServices, writeServices,
   readSettings, writeSettings,
   readBytes, writeBytes, deleteImage, deleteProjectImages,
-  readVideos, writeVideos, readVideoBytes, writeVideoBytes, deleteVideoFile,
+  readVideos, writeVideos, readVideoBytes, writeVideoBytes, writeVideoBytesFromPath, getVideoTmpDir, deleteVideoFile,
   readGalleryPortals, writeGalleryPortals,
   readPrints, writePrints,
 } from './utils/store.js';
@@ -854,7 +854,20 @@ app.delete('/api/prints/:id', async (req, res) => {
 /* Videos — admin CRUD + upload + public serve                         */
 /* ------------------------------------------------------------------ */
 
-const videoUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 500 * 1024 * 1024 } });
+const videoUpload = multer({
+  storage: multer.diskStorage({
+    destination: async (req, file, cb) => {
+      const dir = getVideoTmpDir();
+      await fs.promises.mkdir(dir, { recursive: true });
+      cb(null, dir);
+    },
+    filename: (req, file, cb) => {
+      const safe = (file.originalname || `video_${Date.now()}.mp4`).replace(/[^A-Za-z0-9._-]+/g, '_');
+      cb(null, `${Date.now()}_${safe}`);
+    },
+  }),
+  limits: { fileSize: 100 * 1024 * 1024 },
+});
 
 function nextVideoId() { return 'VID_' + Date.now(); }
 
@@ -862,7 +875,7 @@ function nextVideoId() { return 'VID_' + Date.now(); }
    hangs the connection (which Safari reports as "Load failed"). */
 function handleMulterError(err, req, res, next) {
   if (err?.code === 'LIMIT_FILE_SIZE') {
-    return res.status(413).json({ error: 'file_too_large', message: 'File exceeds the 500 MB limit.' });
+    return res.status(413).json({ error: 'file_too_large', message: 'File exceeds the 100 MB limit.' });
   }
   next(err);
 }
@@ -953,7 +966,7 @@ app.post('/api/videos/:id/upload', videoUpload.single('file'), handleMulterError
     if (!video) return res.status(404).json({ error: 'not_found' });
     if (!req.file) return res.status(400).json({ error: 'missing_file' });
     const safeName = (req.file.originalname || `video_${Date.now()}.mp4`).replace(/[^A-Za-z0-9._-]+/g, '_');
-    await writeVideoBytes(video.id, safeName, req.file.buffer);
+    await writeVideoBytesFromPath(video.id, safeName, req.file.path);
     video.blobPath = `__videos/${video.id}/${safeName}`;
     video.updatedAt = new Date().toISOString();
     await writeVideos(data);

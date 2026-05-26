@@ -101,6 +101,23 @@ export async function writeVideoBytes(videoId, filename, buffer) {
   await fs.mkdir(dir, { recursive: true });
   await fs.writeFile(path.join(dir, filename), buffer);
 }
+export async function writeVideoBytesFromPath(videoId, filename, tmpPath) {
+  const dir  = path.join(IMAGES_DIR, '__videos', videoId);
+  const dest = path.join(dir, filename);
+  await fs.mkdir(dir, { recursive: true });
+  // Try rename first (same filesystem = instant), fall back to copy+unlink
+  try {
+    await fs.rename(tmpPath, dest);
+  } catch (e) {
+    if (e.code === 'EXDEV') {
+      await fs.copyFile(tmpPath, dest);
+      await fs.unlink(tmpPath).catch(() => {});
+    } else { throw e; }
+  }
+}
+export function getVideoTmpDir() {
+  return path.join(IMAGES_DIR, '__video_tmp');
+}
 export async function deleteVideoFile(videoId, filename) {
   try { await fs.unlink(path.join(IMAGES_DIR, '__videos', videoId, filename)); } catch (_) {}
 }
