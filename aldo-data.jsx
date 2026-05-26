@@ -384,6 +384,17 @@ function _aldoToPublicProject(p) {
     crew: p.crew || '',
     location: p.location || '',
     images: imagesWeb,
+    // Individual crew credits (used by CrewIndex, CrewDetail, and project detail)
+    crewTalent:         p.crewTalent         || '',
+    crewStylist:        p.crewStylist        || '',
+    crewHair:           p.crewHair           || '',
+    crewMakeup:         p.crewMakeup         || '',
+    crewArtDirection:   p.crewArtDirection   || '',
+    crewSetDesign:      p.crewSetDesign      || '',
+    crewProduction:     p.crewProduction     || '',
+    crewAgency:         p.crewAgency         || '',
+    crewPhotoAssistant: p.crewPhotoAssistant || '',
+    crewDigitalTech:    p.crewDigitalTech    || '',
   };
 }
 
