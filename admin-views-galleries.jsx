@@ -142,6 +142,8 @@ function _normToCanvas(nx, ny, b) {
   return { x: b.ox + nx * b.rw, y: b.oy + ny * b.rh };
 }
 
+// V1 (legacy) — bounds relative to img element only. Used for markups stored
+// before the canvas-offset fix (no _v flag).
 function _getImgBounds(imgEl) {
   const { naturalWidth: nw, naturalHeight: nh } = imgEl;
   const { width: cw, height: ch } = imgEl.getBoundingClientRect();
@@ -149,6 +151,25 @@ function _getImgBounds(imgEl) {
   const scale = Math.min(cw / nw, ch / nh);
   const rw = nw * scale, rh = nh * scale;
   return { ox: (cw - rw) / 2, oy: (ch - rh) / 2, rw, rh };
+}
+
+// V2 — bounds in canvas coordinate space (adds canvas-to-image offset).
+// Used to draw markups stored with _v: 2 so they don't drift across viewport sizes.
+function _getImgBoundsV2(imgEl, canvas) {
+  const v1 = _getImgBounds(imgEl);
+  if (!v1) return null;
+  const cRect = canvas.getBoundingClientRect();
+  const iRect = imgEl.getBoundingClientRect();
+  return {
+    ox: v1.ox + (iRect.left - cRect.left),
+    oy: v1.oy + (iRect.top  - cRect.top),
+    rw: v1.rw,
+    rh: v1.rh,
+  };
+}
+// Pick the right bounds for a single markup.
+function _boundsFor(mk, imgEl, canvas) {
+  return mk?._v === 2 ? _getImgBoundsV2(imgEl, canvas) : _getImgBounds(imgEl);
 }
 
 function _drawShape(ctx, b, tool, shape, color, lw) {
@@ -213,9 +234,13 @@ function MarkupOverlay({ markups, imgRef, canvasRef }) {
       const ctx = canvas.getContext('2d');
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, rect.width, rect.height);
-      const b = _getImgBounds(img);
-      if (!b) return;
-      for (const mk of markups) _drawShape(ctx, b, mk.tool, mk.shape, mk.color, 1.5);
+      const bV1 = _getImgBounds(img);
+      const bV2 = _getImgBoundsV2(img, canvas);
+      if (!bV1 || !bV2) return;
+      for (const mk of markups) {
+        const b = mk._v === 2 ? bV2 : bV1;
+        _drawShape(ctx, b, mk.tool, mk.shape, mk.color, 1.5);
+      }
     }
 
     if (img.complete && img.naturalWidth) draw();
@@ -268,9 +293,13 @@ function GalleryLightbox({ img, sel, allImages, allSels, onClose, token, onVoice
       const ctx = canvas.getContext('2d');
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, rect.width, rect.height);
-      const b = _getImgBounds(image);
-      if (!b) return;
-      for (const mk of markups) _drawShape(ctx, b, mk.tool, mk.shape, mk.color, 2);
+      const bV1 = _getImgBounds(image);
+      const bV2 = _getImgBoundsV2(image, canvas);
+      if (!bV1 || !bV2) return;
+      for (const mk of markups) {
+        const b = mk._v === 2 ? bV2 : bV1;
+        _drawShape(ctx, b, mk.tool, mk.shape, mk.color, 2);
+      }
     }
 
     if (image.complete && image.naturalWidth) draw();

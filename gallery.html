@@ -155,8 +155,8 @@ async function flushSave() {
       stars:        s.stars,
       note:         s.note,
       markups:      s.markups,
-      voiceMarkups: (s.voiceMarkups || []).map(({ id, x, y, transcript, recordedAt, file, mime, size }) =>
-        ({ id, x, y, transcript, recordedAt, file, mime, size })),
+      voiceMarkups: (s.voiceMarkups || []).map(({ id, x, y, transcript, recordedAt, file, mime, size, _v }) =>
+        ({ id, x, y, transcript, recordedAt, file, mime, size, _v })),
     };
   });
   try {
@@ -212,7 +212,7 @@ function setNote(filename, note) {
 /* ------------------------------------------------------------------ */
 function addMarkup(filename, shape, comment) {
   const s = getOrInit(filename);
-  const mk = { id: uid(), color: state.color, tool: state.tool, shape, comment: comment || '', createdAt: new Date().toISOString() };
+  const mk = { id: uid(), _v: 2, color: state.color, tool: state.tool, shape, comment: comment || '', createdAt: new Date().toISOString() };
   s.markups.push(mk);
   state.activeMarkup = mk.id;
   state.pendingComment = '';
@@ -258,6 +258,11 @@ function filteredImages() {
 /* ------------------------------------------------------------------ */
 /* Canvas — image bounds helper                                        */
 /* ------------------------------------------------------------------ */
+/* V1 (LEGACY) — bounds relative to the IMG element only. This was the original
+   implementation and is INCORRECT when the canvas is larger than the img element
+   (which it is here: canvas fills the wrapper, img is letterboxed by object-fit).
+   We keep it ONLY to render markups that were stored under the old math (no _v).
+   DO NOT USE for new markups — use getImgBoundsV2. */
 function getImgBounds(imgEl) {
   const { naturalWidth: nw, naturalHeight: nh } = imgEl;
   const { width: cw, height: ch } = imgEl.getBoundingClientRect();
@@ -271,11 +276,27 @@ function getImgBounds(imgEl) {
   return { ox, oy, rw, rh };
 }
 
+/* V2 — bounds in CANVAS coordinate space. Adds the img element's offset within
+   the canvas, so click input and draw output both speak canvas pixels.
+   New markups are stored with _v: 2 and drawn through this. */
+function getImgBoundsV2(imgEl, canvas) {
+  const v1 = getImgBounds(imgEl);
+  if (!v1) return null;
+  const cRect = canvas.getBoundingClientRect();
+  const iRect = imgEl.getBoundingClientRect();
+  return {
+    ox: v1.ox + (iRect.left - cRect.left),
+    oy: v1.oy + (iRect.top  - cRect.top),
+    rw: v1.rw,
+    rh: v1.rh,
+  };
+}
+
 function clientToNorm(e, canvas, imgEl) {
   const rect = canvas.getBoundingClientRect();
   const cx   = (e.clientX ?? e.touches?.[0]?.clientX) - rect.left;
   const cy   = (e.clientY ?? e.touches?.[0]?.clientY) - rect.top;
-  const b    = getImgBounds(imgEl);
+  const b    = getImgBoundsV2(imgEl, canvas);
   if (!b) return null;
   return {
     x: (cx - b.ox) / b.rw,
@@ -290,10 +311,11 @@ function normToCanvas(nx, ny, b) {
 /* ------------------------------------------------------------------ */
 /* Canvas — draw all markups                                            */
 /* ------------------------------------------------------------------ */
-function drawVoicePins(ctx, b, voiceMarkups, activeId, pendingPt) {
+function drawVoicePins(ctx, bV1, bV2, voiceMarkups, activeId, pendingPt) {
   const items = [...(voiceMarkups || [])];
-  if (pendingPt) items.push({ id: '__pending__', x: pendingPt.x, y: pendingPt.y, _pending: true });
+  if (pendingPt) items.push({ id: '__pending__', x: pendingPt.x, y: pendingPt.y, _pending: true, _v: 2 });
   for (const vm of items) {
+    const b = vm._v === 2 ? bV2 : bV1;
     const pt = normToCanvas(vm.x, vm.y, b);
     const isActive  = vm.id === activeId;
     const isPending = !!vm._pending;
@@ -335,17 +357,20 @@ function redrawCanvas(canvas, imgEl, markups, activeId, previewShape, voiceMarku
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, rect.width, rect.height);
 
-  const b = getImgBounds(imgEl);
-  if (!b) return;
+  const bV1 = getImgBounds(imgEl);
+  const bV2 = getImgBoundsV2(imgEl, canvas);
+  if (!bV1 || !bV2) return;
 
   const all = [...(markups || [])];
-  if (previewShape) all.push({ id: '__preview__', color: state.color, tool: state.tool, shape: previewShape });
+  // Preview shape is brand-new input → always V2
+  if (previewShape) all.push({ id: '__preview__', _v: 2, color: state.color, tool: state.tool, shape: previewShape });
 
   for (const mk of all) {
     const isActive = mk.id === activeId || mk.id === '__preview__';
+    const b = mk._v === 2 ? bV2 : bV1;
     drawShape(ctx, b, mk.tool, mk.shape, mk.color, isActive);
   }
-  drawVoicePins(ctx, b, voiceMarkups, activeVoiceId, pendingVoicePt);
+  drawVoicePins(ctx, bV1, bV2, voiceMarkups, activeVoiceId, pendingVoicePt);
 }
 
 function drawShape(ctx, b, tool, shape, color, highlight) {
@@ -907,6 +932,7 @@ function buildLightbox() {
             );
             if (!r.ok) throw new Error(`${r.status}`);
             const { voiceMarkup } = await r.json();
+            voiceMarkup._v = 2; // new format — bounds include canvas-to-image offset
             getOrInit(rec.filename).voiceMarkups.push(voiceMarkup);
             state.activeVoiceMarkup = voiceMarkup.id;
             if (_voiceRecPanel) _voiceRecPanel.innerHTML = '';
