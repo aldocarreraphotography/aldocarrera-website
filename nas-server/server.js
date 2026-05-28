@@ -1514,12 +1514,13 @@ app.post('/api/gallery-portals', async (req, res) => {
 
     const data = await readGalleryPortals();
     const portal = {
-      token:     _nextPortalToken(),
-      projectId: body.projectId,
-      title:     body.title || '',
-      pin:       String(body.pin),
-      selects:   {},
-      createdAt: new Date().toISOString(),
+      token:            _nextPortalToken(),
+      projectId:        body.projectId,
+      title:            body.title || '',
+      pin:              String(body.pin),
+      downloadsEnabled: !!body.downloadsEnabled,
+      selects:          {},
+      createdAt:        new Date().toISOString(),
     };
     data.portals = [portal, ...(data.portals || [])];
     await writeGalleryPortals(data);
@@ -1542,6 +1543,28 @@ app.delete('/api/gallery-portals/:token', async (req, res) => {
     res.status(204).send();
   } catch (err) {
     console.error('[DELETE /api/gallery-portals/:token]', err?.message);
+    res.status(500).json({ error: 'internal', message: err?.message });
+  }
+});
+
+/* PATCH /api/gallery-portals/:token  — update portal settings (admin) */
+app.patch('/api/gallery-portals/:token', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  try {
+    const data = await readGalleryPortals();
+    const idx = (data.portals || []).findIndex(p => p.token === req.params.token);
+    if (idx === -1) return res.status(404).json({ error: 'not_found' });
+    const portal = data.portals[idx];
+
+    // Whitelist of admin-editable fields — never touch token/pin/selects/createdAt
+    if (typeof req.body?.downloadsEnabled === 'boolean') portal.downloadsEnabled = req.body.downloadsEnabled;
+    if (typeof req.body?.title === 'string')             portal.title            = req.body.title;
+
+    data.portals[idx] = portal;
+    await writeGalleryPortals(data);
+    res.json(portal);
+  } catch (err) {
+    console.error('[PATCH /api/gallery-portals/:token]', err?.message);
     res.status(500).json({ error: 'internal', message: err?.message });
   }
 });
@@ -1600,6 +1623,7 @@ app.get('/api/gallery-portals/:token/images', async (req, res) => {
       title: portal.title,
       projectId: portal.projectId,
       images,
+      downloadsEnabled: !!portal.downloadsEnabled,
       submitted: !!portal.submitted,
       submittedAt: portal.submittedAt || null,
     });
@@ -1751,6 +1775,99 @@ app.delete('/api/gallery-portals/:token/voice/:filename', async (req, res) => {
     await writeGalleryPortals(data);
   }
   res.json({ ok: true });
+});
+
+/* ------------------------------------------------------------------ */
+/* Portal downloads — single image + ZIP (PIN-gated, opt-in per portal)*/
+/* ------------------------------------------------------------------ */
+
+/* GET /api/gallery-portals/:token/download/:filename?key=KEY
+   Serves a single image as an attachment. PIN-gated; requires
+   portal.downloadsEnabled === true. */
+app.get('/api/gallery-portals/:token/download/:filename', async (req, res) => {
+  try {
+    const data = await readGalleryPortals();
+    const portal = (data.portals || []).find(p => p.token === req.params.token);
+    if (!portal) return res.status(404).end();
+
+    const key = req.query.key || req.headers['x-gallery-key'] || '';
+    if (key !== _portalKey(portal.token, portal.pin)) return res.status(403).end();
+    if (!portal.downloadsEnabled) return res.status(403).json({ error: 'downloads_disabled' });
+
+    // Verify the file is actually one of this portal's images (not a path-traversal attempt)
+    const projectsData = await readProjects();
+    const project = (projectsData.projects || []).find(p => p.id === portal.projectId);
+    if (!project) return res.status(404).json({ error: 'project_not_found' });
+    const allowed = new Set((project.images || []).filter(i => !i.rejected).map(i => i.filename));
+    if (!allowed.has(req.params.filename)) return res.status(404).json({ error: 'not_in_portal' });
+
+    const filePath = path.join(IMAGES_DIR, portal.projectId, req.params.filename);
+    if (!fs.existsSync(filePath)) return res.status(404).end();
+
+    res.setHeader('Content-Disposition', `attachment; filename="${req.params.filename}"`);
+    fs.createReadStream(filePath).pipe(res);
+  } catch (err) {
+    console.error('[GET portal download]', err?.message);
+    if (!res.headersSent) res.status(500).end();
+  }
+});
+
+/* GET /api/gallery-portals/:token/download-zip?key=KEY
+   Streams a ZIP of all images in the portal. PIN-gated; requires
+   portal.downloadsEnabled === true. */
+app.get('/api/gallery-portals/:token/download-zip', async (req, res) => {
+  try {
+    const data = await readGalleryPortals();
+    const portal = (data.portals || []).find(p => p.token === req.params.token);
+    if (!portal) return res.status(404).json({ error: 'not_found' });
+
+    const key = req.query.key || req.headers['x-gallery-key'] || '';
+    if (key !== _portalKey(portal.token, portal.pin)) return res.status(403).json({ error: 'forbidden' });
+    if (!portal.downloadsEnabled) return res.status(403).json({ error: 'downloads_disabled' });
+
+    const projectsData = await readProjects();
+    const project = (projectsData.projects || []).find(p => p.id === portal.projectId);
+    if (!project) return res.status(404).json({ error: 'project_not_found' });
+
+    const images = (project.images || []).filter(i => !i.rejected);
+    if (images.length === 0) return res.status(400).json({ error: 'no_images' });
+
+    const { default: archiver } = await import('archiver');
+    const archive = archiver('zip', { zlib: { level: 0 } }); // store-only (JPEGs don't compress further)
+
+    const safeTitle = (portal.title || portal.token).replace(/[^a-zA-Z0-9_\-]/g, '_');
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeTitle}.zip"`);
+
+    archive.on('error', (err) => {
+      console.error('[portal zip] archive error:', err.message);
+      if (!res.headersSent) res.status(500).end();
+    });
+
+    archive.pipe(res);
+
+    let added = 0;
+    for (const img of images) {
+      const filePath = path.join(IMAGES_DIR, portal.projectId, img.filename);
+      if (fs.existsSync(filePath)) {
+        archive.file(filePath, { name: img.filename });
+        added++;
+      } else {
+        console.warn('[portal zip] file not on disk:', filePath);
+      }
+    }
+
+    if (added === 0) {
+      res.removeHeader('Content-Disposition');
+      return res.status(400).json({ error: 'no_files' });
+    }
+
+    await archive.finalize();
+    console.log(`[portal zip] ${portal.token} — ${added} files`);
+  } catch (err) {
+    console.error('[portal zip] fatal:', err?.message);
+    if (!res.headersSent) res.status(500).json({ error: 'zip_failed', message: err?.message });
+  }
 });
 
 /* GET /api/admin/gallery-portals/:token/voice/:filename  — admin playback (JWT-auth) */

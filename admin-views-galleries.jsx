@@ -1168,6 +1168,23 @@ function ClientGalleryPortalsView({ navigate }) {
     }
   };
 
+  const toggleDownloads = async (portal) => {
+    const next = !portal.downloadsEnabled;
+    // Optimistic update
+    setPortals(ps => ps.map(p => p.token === portal.token ? { ...p, downloadsEnabled: next } : p));
+    try {
+      await window.AdminStore.apiFetch(`/api/gallery-portals/${portal.token}`, {
+        method: 'PATCH',
+        body:   JSON.stringify({ downloadsEnabled: next }),
+      });
+      toast(next ? 'Downloads enabled' : 'Downloads disabled', 'ok');
+    } catch (e) {
+      // Revert on failure
+      setPortals(ps => ps.map(p => p.token === portal.token ? { ...p, downloadsEnabled: !next } : p));
+      toast('Update failed: ' + (e.message || 'error'), 'error');
+    }
+  };
+
   return (
     <>
       <PageHeader
@@ -1200,6 +1217,7 @@ function ClientGalleryPortalsView({ navigate }) {
                 <th>Project</th>
                 <th>Status</th>
                 <th>Hearts</th>
+                <th>Downloads</th>
                 <th>Token · PIN</th>
                 <th>Created</th>
                 <th style={{ width: 1 }}></th>
@@ -1227,6 +1245,27 @@ function ClientGalleryPortalsView({ navigate }) {
                             ♥ {heartCount}{noteCount > 0 ? <span className="ad-muted"> · {noteCount} notes</span> : null}
                           </span>
                         : <span className="ad-muted">—</span>}
+                    </td>
+                    <td>
+                      <button
+                        className="ad-link"
+                        onClick={() => toggleDownloads(p)}
+                        title={p.downloadsEnabled ? 'Client can download images. Click to disable.' : 'Downloads disabled. Click to enable.'}
+                        style={{
+                          fontSize: 11,
+                          fontFamily: 'IBM Plex Mono, monospace',
+                          letterSpacing: '0.06em',
+                          textTransform: 'uppercase',
+                          padding: '3px 8px',
+                          border: '1px solid var(--rule-soft)',
+                          borderRadius: 3,
+                          background: p.downloadsEnabled ? 'var(--accent-soft, #ecf3ec)' : 'transparent',
+                          color: p.downloadsEnabled ? 'var(--accent, #2a7a3a)' : 'var(--ink-muted)',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {p.downloadsEnabled ? '● On' : '○ Off'}
+                      </button>
                     </td>
                     <td>
                       <code className="ad-mono" style={{ fontSize: 12, background: 'var(--paper-soft)', padding: '2px 6px' }}>

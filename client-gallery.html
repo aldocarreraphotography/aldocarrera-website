@@ -127,6 +127,32 @@
     }
     .cg-submit-btn:hover { opacity: 0.82; }
     .cg-submit-btn:disabled { opacity: 0.5; cursor: default; }
+    /* Download all button — quieter than submit (outline style) */
+    .cg-download-all-btn {
+      background: transparent; color: var(--ink);
+      border: 1px solid var(--ink); border-radius: 3px;
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 11px; letter-spacing: 0.07em; text-transform: uppercase;
+      padding: 7px 16px; cursor: pointer;
+      transition: background 140ms, color 140ms;
+    }
+    .cg-download-all-btn:hover { background: var(--ink); color: var(--paper); }
+    .cg-download-all-btn:disabled { opacity: 0.5; cursor: default; }
+    /* Per-image download button — bottom-left of card (heart is bottom-right) */
+    .cg-download-btn {
+      position: absolute; bottom: 10px; left: 10px;
+      width: 32px; height: 32px;
+      background: rgba(250,249,247,0.80); backdrop-filter: blur(4px);
+      border: 1px solid var(--rule); border-radius: 50%;
+      color: var(--ink); font-family: "IBM Plex Mono", monospace;
+      font-size: 15px; line-height: 1; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0; transition: opacity 180ms var(--easing), background 140ms;
+    }
+    .cg-card:hover .cg-download-btn { opacity: 1; }
+    .cg-download-btn:hover { background: var(--paper); }
+    /* Touch devices: always show — no hover */
+    @media (hover: none) { .cg-download-btn { opacity: 1; } }
     /* Toast notification */
     .cg-toast {
       position: fixed; top: 56px; left: 24px; z-index: 9999;

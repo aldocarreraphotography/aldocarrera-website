@@ -364,12 +364,15 @@ function GalleryView({ token, sessionKey, title }) {
   const [lbIdx, setLbIdx]         = useState(null); // null = closed
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast]           = useState(null); // null | string
+  const [downloadsEnabled, setDownloadsEnabled] = useState(false);
+  const [zipping, setZipping]       = useState(false);
 
   useEffect(() => {
     (async () => {
       try {
         const data = await apiFetch('GET', `/api/gallery-portals/${token}/images?key=${encodeURIComponent(sessionKey)}`);
         setImages(data.images || []);
+        setDownloadsEnabled(!!data.downloadsEnabled);
         // (submitted state handled via toast only)
         // hydrate selects map from returned per-image select data
         const sels = {};
@@ -381,6 +384,36 @@ function GalleryView({ token, sessionKey, title }) {
         setLoading(false);
       }
     })();
+  }, [token, sessionKey]);
+
+  const downloadAllZip = useCallback(async () => {
+    if (zipping) return;
+    setZipping(true);
+    showToast('Preparing ZIP…');
+    try {
+      const url = `${GALLERY_API}/api/gallery-portals/${token}/download-zip?key=${encodeURIComponent(sessionKey)}`;
+      // Use anchor click so the browser handles the download stream
+      const a = document.createElement('a');
+      a.href = url;
+      a.rel  = 'noopener';
+      a.click();
+      try { window.plausible && window.plausible('Gallery Download Zip', { props: { gallery: token || '' } }); } catch (_) {}
+      setTimeout(() => { setZipping(false); setToast(null); }, 1500);
+    } catch (err) {
+      console.error('[client-gallery] zip error', err);
+      showToast('Download failed — try again');
+      setZipping(false);
+    }
+  }, [token, sessionKey, zipping]);
+
+  const downloadOne = useCallback((filename) => {
+    const url = `${GALLERY_API}/api/gallery-portals/${token}/download/${encodeURIComponent(filename)}?key=${encodeURIComponent(sessionKey)}`;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.rel  = 'noopener';
+    a.click();
+    try { window.plausible && window.plausible('Gallery Download One', { props: { gallery: token || '' } }); } catch (_) {}
   }, [token, sessionKey]);
 
   const showToast = (msg) => {
@@ -462,6 +495,16 @@ function GalleryView({ token, sessionKey, title }) {
             <div className="cg-gallery-count">
               {images.length} images{heartedCount > 0 ? ` · ${heartedCount} hearted` : ''}
             </div>
+            {downloadsEnabled && images.length > 0 && (
+              <button
+                className="cg-download-all-btn"
+                onClick={downloadAllZip}
+                disabled={zipping}
+                title="Download all images as a ZIP"
+              >
+                {zipping ? 'Preparing…' : '↓ Download all'}
+              </button>
+            )}
             {heartedCount > 0 && (
               <button
                 className="cg-submit-btn"
@@ -493,6 +536,16 @@ function GalleryView({ token, sessionKey, title }) {
                     hearted={sel.hearted}
                     onClick={(e) => { e.stopPropagation(); handleHeart(img.filename, !sel.hearted); }}
                   />
+                  {downloadsEnabled && (
+                    <button
+                      className="cg-download-btn"
+                      onClick={(e) => { e.stopPropagation(); downloadOne(img.filename); }}
+                      title={`Download ${img.filename}`}
+                      aria-label="Download image"
+                    >
+                      ↓
+                    </button>
+                  )}
                 </div>
               );
             })}
