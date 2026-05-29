@@ -1783,15 +1783,16 @@ app.delete('/api/gallery-portals/:token/voice/:filename', async (req, res) => {
 
 /* GET /api/gallery-portals/:token/download/:filename?key=KEY
    Serves a single image as an attachment. PIN-gated; requires
-   portal.downloadsEnabled === true. */
+   portal.downloadsEnabled === true. Streams the original bytes on disk
+   (uncompressed, unmodified) — the same file the photographer uploaded. */
 app.get('/api/gallery-portals/:token/download/:filename', async (req, res) => {
   try {
     const data = await readGalleryPortals();
     const portal = (data.portals || []).find(p => p.token === req.params.token);
-    if (!portal) return res.status(404).end();
+    if (!portal) return res.status(404).json({ error: 'not_found' });
 
     const key = req.query.key || req.headers['x-gallery-key'] || '';
-    if (key !== _portalKey(portal.token, portal.pin)) return res.status(403).end();
+    if (key !== _portalKey(portal.token, portal.pin)) return res.status(403).json({ error: 'forbidden' });
     if (!portal.downloadsEnabled) return res.status(403).json({ error: 'downloads_disabled' });
 
     // Verify the file is actually one of this portal's images (not a path-traversal attempt)
@@ -1802,13 +1803,26 @@ app.get('/api/gallery-portals/:token/download/:filename', async (req, res) => {
     if (!allowed.has(req.params.filename)) return res.status(404).json({ error: 'not_in_portal' });
 
     const filePath = path.join(IMAGES_DIR, portal.projectId, req.params.filename);
-    if (!fs.existsSync(filePath)) return res.status(404).end();
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'file_missing_on_disk' });
 
-    res.setHeader('Content-Disposition', `attachment; filename="${req.params.filename}"`);
-    fs.createReadStream(filePath).pipe(res);
+    // Encode the filename for both legacy + RFC 5987 (handles non-ASCII filenames)
+    const safe   = req.params.filename.replace(/[\\"]/g, '_');
+    const encoded = encodeURIComponent(req.params.filename);
+    res.setHeader('Content-Disposition', `attachment; filename="${safe}"; filename*=UTF-8''${encoded}`);
+    res.setHeader('Content-Type',        contentTypeFor(req.params.filename));
+    res.setHeader('Cache-Control',       'private, max-age=0, no-store');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    // sendFile handles Content-Length, range requests, and stream errors properly
+    res.sendFile(filePath, (err) => {
+      if (err && !res.headersSent) {
+        console.error('[GET portal download] sendFile error:', err?.message);
+        res.status(500).end();
+      }
+    });
+    console.log(`[portal download] ${portal.token} → ${req.params.filename}`);
   } catch (err) {
     console.error('[GET portal download]', err?.message);
-    if (!res.headersSent) res.status(500).end();
+    if (!res.headersSent) res.status(500).json({ error: 'internal' });
   }
 });
 
