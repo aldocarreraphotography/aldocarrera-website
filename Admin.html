@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap"/>
 
-<link rel="stylesheet" href="admin-styles.css"/>
+<link rel="stylesheet" href="/admin-styles.css"/>
 
 <!-- NAS API base URL. Set to your NAS server address. Empty string = use relative /api/ paths. -->
 <script>window.API_BASE = 'https://api.aldocarrera.com';</script>
@@ -90,22 +90,22 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <!-- Public-site logo component, reused -->
-<script type="text/babel" src="logo.jsx"></script>
+<script type="text/babel" src="/logo.jsx"></script>
 
-<!-- Admin app -->
-<script type="text/babel" src="admin-exif.jsx"></script>
-<script type="text/babel" src="admin-store.jsx"></script>
-<script type="text/babel" src="admin-components.jsx"></script>
-<script type="text/babel" src="admin-views-auth.jsx"></script>
-<script type="text/babel" src="admin-views-projects.jsx"></script>
-<script type="text/babel" src="admin-views-content.jsx"></script>
-<script type="text/babel" src="admin-views-galleries.jsx"></script>
-<script type="text/babel" src="admin-views-videos.jsx"></script>
-<script type="text/babel" src="admin-views-prints.jsx"></script>
-<script type="text/babel" src="admin-views-analytics.jsx"></script>
-<script type="text/babel" src="admin-views-dropbox.jsx"></script>
-<script type="text/babel" src="admin-views-dispatches.jsx"></script>
-<script type="text/babel" src="admin-shell.jsx"></script>
+<!-- Admin app — absolute paths required (CLAUDE.md Rule 3): netlify rewrites /admin/* → Admin.html, so a relative src at /admin/anything resolves to /admin/admin-store.jsx and gets caught by that same rewrite, returning HTML in place of JS → blank admin -->
+<script type="text/babel" src="/admin-exif.jsx"></script>
+<script type="text/babel" src="/admin-store.jsx"></script>
+<script type="text/babel" src="/admin-components.jsx"></script>
+<script type="text/babel" src="/admin-views-auth.jsx"></script>
+<script type="text/babel" src="/admin-views-projects.jsx"></script>
+<script type="text/babel" src="/admin-views-content.jsx"></script>
+<script type="text/babel" src="/admin-views-galleries.jsx"></script>
+<script type="text/babel" src="/admin-views-videos.jsx"></script>
+<script type="text/babel" src="/admin-views-prints.jsx"></script>
+<script type="text/babel" src="/admin-views-analytics.jsx"></script>
+<script type="text/babel" src="/admin-views-dropbox.jsx"></script>
+<script type="text/babel" src="/admin-views-dispatches.jsx"></script>
+<script type="text/babel" src="/admin-shell.jsx"></script>
 
 <script type="text/babel">
   // Default to dashboard on first load
