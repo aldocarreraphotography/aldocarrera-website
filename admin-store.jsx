@@ -447,6 +447,18 @@ const AdminStore = {
     localStorage.removeItem('aldo_netlify_token'); // clear so re-login fetches a fresh one
     window.dispatchEvent(new CustomEvent('admin-store-changed'));
   },
+  async changePassword(currentPassword, newPassword) {
+    const token = localStorage.getItem(AUTH_KEY);
+    if (!token) throw new Error('Not signed in');
+    const r = await fetch(getAPI() + '/api/auth/change-password', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body:    JSON.stringify({ currentPassword, newPassword }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.message || `Server returned ${r.status}`);
+    return data;
+  },
   isAuthenticated() {
     const token = localStorage.getItem(AUTH_KEY);
     if (!token) return false;

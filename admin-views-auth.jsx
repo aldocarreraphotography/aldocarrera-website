@@ -1,11 +1,24 @@
-/* admin-views-auth.jsx — login screen */
+/* admin-views-auth.jsx — login screen
+ *
+ * Autofill is intentionally disabled here. This admin protects the entire
+ * studio (uploads, client galleries, settings) — saving creds in the OS
+ * password manager would let anyone with physical access to the laptop
+ * walk straight in. Browsers ignore autocomplete="off" on password fields,
+ * so we use autocomplete="new-password" (the only reliable opt-out) plus
+ * a randomized field name to defeat the "saved password" heuristics. */
 
 function LoginView({ onLogin }) {
-  const [username, setUsername] = React.useState('aldocarrera');
   const [password, setPassword] = React.useState('');
   const [remember, setRemember] = React.useState(true);
   const [error, setError] = React.useState(null);
   const [busy, setBusy] = React.useState(false);
+
+  // Random field name per render — prevents browsers from matching against
+  // saved entries that share the literal name "password".
+  const pwName = React.useMemo(
+    () => `aldo_pw_${Math.random().toString(36).slice(2, 10)}`,
+    []
+  );
 
   const submit = async (e) => {
     e.preventDefault();
@@ -32,23 +45,44 @@ function LoginView({ onLogin }) {
           </div>
         </div>
 
-        <form onSubmit={submit} className="ad-login-form" autoComplete="on" action="#" method="post">
-          <Field label="Username">
-            <input
-              type="text"
-              name="username"
-              autoComplete="username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className="ad-input"
-              disabled={busy}
-            />
-          </Field>
+        <form
+          onSubmit={submit}
+          className="ad-login-form"
+          autoComplete="off"
+          action="#"
+          method="post"
+          data-form-type="other"
+        >
+          {/* Honeypot — invisible inputs that catch overly-aggressive autofillers
+              (some browsers still autofill the first password field they see,
+              regardless of attributes). Anything stuffed in here is ignored. */}
+          <input
+            type="text"
+            name="username"
+            autoComplete="username"
+            tabIndex={-1}
+            aria-hidden="true"
+            style={{ position: 'absolute', left: '-9999px', width: 1, height: 1, opacity: 0 }}
+          />
+          <input
+            type="password"
+            name="password"
+            autoComplete="current-password"
+            tabIndex={-1}
+            aria-hidden="true"
+            style={{ position: 'absolute', left: '-9999px', width: 1, height: 1, opacity: 0 }}
+          />
+
           <Field label="Password" error={error}>
             <input
               type="password"
-              name="password"
-              autoComplete="current-password"
+              name={pwName}
+              autoComplete="new-password"
+              data-lpignore="true"
+              data-1p-ignore="true"
+              data-bwignore="true"
+              spellCheck="false"
+              autoCorrect="off"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
@@ -65,8 +99,8 @@ function LoginView({ onLogin }) {
         </form>
 
         <div className="ad-login-foot">
-          <span>Prototype build · localStorage only</span>
-          <a href="The Archive.html">← back to the archive</a>
+          <span>Aldo Carrera · Studio</span>
+          <a href="/">← back to the archive</a>
         </div>
       </div>
 

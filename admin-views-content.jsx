@@ -369,6 +369,11 @@ function SettingsEditorView({ navigate }) {
       </Card>
 
       <Card padding="lg" className="ad-mt-md">
+        <SectionHead eyebrow="Security" title="Change password" sub="Update the password you use to sign in. Stored hashed (scrypt) on the NAS — never in plaintext."/>
+        <ChangePasswordForm/>
+      </Card>
+
+      <Card padding="lg" className="ad-mt-md">
         <SectionHead eyebrow="Danger zone" title="Reset prototype data" sub="Wipes everything in localStorage and re-seeds with the original sample projects. Useful when testing flows."/>
         <Btn variant="ghost" onClick={() => {
           if (!confirm('Reset all admin data to seed? This cannot be undone.')) return;
@@ -378,6 +383,76 @@ function SettingsEditorView({ navigate }) {
         }}>Reset prototype data</Btn>
       </Card>
     </>
+  );
+}
+
+/* ============================================================
+   CHANGE PASSWORD FORM
+   ============================================================ */
+function ChangePasswordForm() {
+  const [current, setCurrent] = cS('');
+  const [next,    setNext]    = cS('');
+  const [confirm, setConfirm] = cS('');
+  const [busy,    setBusy]    = cS(false);
+  const [err,     setErr]     = cS(null);
+
+  const reset = () => { setCurrent(''); setNext(''); setConfirm(''); setErr(null); };
+
+  const submit = async (e) => {
+    e?.preventDefault?.();
+    setErr(null);
+    if (!current || !next || !confirm) { setErr('All fields required'); return; }
+    if (next.length < 8)               { setErr('New password must be at least 8 characters'); return; }
+    if (next !== confirm)              { setErr('New password and confirmation do not match'); return; }
+    if (next === current)              { setErr('New password must be different from current'); return; }
+
+    setBusy(true);
+    try {
+      await window.AdminStore.changePassword(current, next);
+      toast('Password changed', 'ok');
+      reset();
+    } catch (e2) {
+      setErr(e2?.message || 'Change failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form onSubmit={submit} autoComplete="off" className="ad-form-grid" style={{ maxWidth: 480 }}>
+      <Field label="Current password" wide>
+        <input
+          type="password" autoComplete="new-password"
+          data-lpignore="true" data-1p-ignore="true" data-bwignore="true"
+          value={current} onChange={(e) => setCurrent(e.target.value)}
+          className="ad-input" disabled={busy}
+        />
+      </Field>
+      <Field label="New password" wide hint="Minimum 8 characters.">
+        <input
+          type="password" autoComplete="new-password"
+          data-lpignore="true" data-1p-ignore="true" data-bwignore="true"
+          value={next} onChange={(e) => setNext(e.target.value)}
+          className="ad-input" disabled={busy}
+        />
+      </Field>
+      <Field label="Confirm new password" wide error={err}>
+        <input
+          type="password" autoComplete="new-password"
+          data-lpignore="true" data-1p-ignore="true" data-bwignore="true"
+          value={confirm} onChange={(e) => setConfirm(e.target.value)}
+          className="ad-input" disabled={busy}
+        />
+      </Field>
+      <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 8, marginTop: 4 }}>
+        <Btn type="submit" disabled={busy || !current || !next || !confirm}>
+          {busy ? 'Updating…' : 'Change password'}
+        </Btn>
+        {(current || next || confirm) && (
+          <Btn type="button" variant="ghost" onClick={reset} disabled={busy}>Clear</Btn>
+        )}
+      </div>
+    </form>
   );
 }
 

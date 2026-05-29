@@ -1,0 +1,106 @@
+/* utils/admin-auth.js — admin password storage with scrypt hashing.
+ *
+ * Layered authority:
+ *   1. If data/admin-auth.json exists with a {salt, hash} pair → use it.
+ *      (This is the case after the admin has changed their password via UI.)
+ *   2. Otherwise fall back to the ADMIN_PASSWORD env var.
+ *      (This is how the system bootstraps before any password change.)
+ *
+ * Recovery: if the admin forgets their changed password, deleting
+ * data/admin-auth.json (or renaming it) reverts auth to the env var.
+ *
+ * Hashing: Node's built-in crypto.scrypt with a 16-byte random salt
+ * and 64-byte derived key. No external deps. Constant-time compare
+ * via crypto.timingSafeEqual to defeat timing side channels.
+ */
+
+import fs     from 'node:fs/promises';
+import path   from 'node:path';
+import crypto from 'node:crypto';
+
+const DATA_DIR  = process.env.DATA_DIR || path.join(process.cwd(), 'data');
+const AUTH_FILE = path.join(DATA_DIR, 'admin-auth.json');
+
+/* ── Internal helpers ──────────────────────────────────────── */
+
+async function readStored() {
+  try {
+    const raw = await fs.readFile(AUTH_FILE, 'utf8');
+    return JSON.parse(raw);
+  } catch (_) {
+    return null; // not configured yet → fall back to env var
+  }
+}
+
+async function writeStored(data) {
+  await fs.mkdir(DATA_DIR, { recursive: true });
+  const tmp = AUTH_FILE + '.tmp';
+  await fs.writeFile(tmp, JSON.stringify(data, null, 2), 'utf8');
+  await fs.rename(tmp, AUTH_FILE); // atomic
+}
+
+function scryptHash(password, saltHex) {
+  return new Promise((resolve, reject) => {
+    const salt = Buffer.from(saltHex, 'hex');
+    crypto.scrypt(String(password), salt, 64, (err, derived) => {
+      if (err) reject(err);
+      else     resolve(derived.toString('hex'));
+    });
+  });
+}
+
+function safeEqualHex(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  const ab = Buffer.from(a, 'hex');
+  const bb = Buffer.from(b, 'hex');
+  if (ab.length !== bb.length) return false;
+  return crypto.timingSafeEqual(ab, bb);
+}
+
+function safeEqualPlain(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  // Pad shorter to longer so timingSafeEqual works on equal-length buffers
+  const len = Math.max(Buffer.byteLength(a), Buffer.byteLength(b));
+  const ab = Buffer.alloc(len);
+  const bb = Buffer.alloc(len);
+  ab.write(a); bb.write(b);
+  const ok = crypto.timingSafeEqual(ab, bb);
+  return ok && Buffer.byteLength(a) === Buffer.byteLength(b);
+}
+
+/* ── Public API ────────────────────────────────────────────── */
+
+/** True if the admin has changed their password from the env-var default. */
+export async function hasStoredPassword() {
+  const s = await readStored();
+  return !!(s && s.salt && s.hash);
+}
+
+/** Verify a plaintext attempt. Constant-time. Returns boolean. */
+export async function verifyPassword(plaintext) {
+  if (!plaintext) return false;
+  const stored = await readStored();
+  if (stored && stored.salt && stored.hash) {
+    const candidate = await scryptHash(plaintext, stored.salt);
+    return safeEqualHex(candidate, stored.hash);
+  }
+  // Bootstrap: env var
+  const envPw = process.env.ADMIN_PASSWORD;
+  if (!envPw) return false;
+  return safeEqualPlain(plaintext, envPw);
+}
+
+/** Hash and persist a new password. Throws on weak input. */
+export async function setPassword(plaintext) {
+  if (typeof plaintext !== 'string' || plaintext.length < 8) {
+    throw new Error('Password must be at least 8 characters');
+  }
+  const saltHex = crypto.randomBytes(16).toString('hex');
+  const hashHex = await scryptHash(plaintext, saltHex);
+  await writeStored({
+    salt:      saltHex,
+    hash:      hashHex,
+    algorithm: 'scrypt',
+    updatedAt: new Date().toISOString(),
+  });
+}

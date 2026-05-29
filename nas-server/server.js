@@ -19,6 +19,7 @@ import sharp    from 'sharp';
 import exifr    from 'exifr';
 
 import { issueToken, verifyToken, authMiddleware, requireAuth } from './utils/auth.js';
+import { verifyPassword as adminVerifyPassword, setPassword as adminSetPassword, hasStoredPassword as adminHasStoredPassword } from './utils/admin-auth.js';
 import { listFolder, getThumbnailBatch, downloadFile, isImageFile, isConfigured as isDropboxConfigured } from './utils/dropbox.js';
 import { Resend } from 'resend';
 import {
@@ -120,7 +121,8 @@ app.post('/api/auth/login', async (req, res) => {
   }
 
   const { password } = req.body || {};
-  if (!password || password !== process.env.ADMIN_PASSWORD) {
+  const ok = await adminVerifyPassword(password);
+  if (!ok) {
     bucket.push(now);
     loginAttempts.set(ip, bucket);
     return res.status(401).json({ error: 'invalid_password', message: 'Wrong password.' });
@@ -129,6 +131,29 @@ app.post('/api/auth/login', async (req, res) => {
   loginAttempts.delete(ip);
   const { token, expiresIn } = issueToken({ sub: 'aldo' });
   res.json({ token, expiresIn });
+});
+
+/* POST /api/auth/change-password — require old password + auth token. */
+app.post('/api/auth/change-password', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  try {
+    const { currentPassword, newPassword } = req.body || {};
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'validation', message: 'currentPassword and newPassword are required' });
+    }
+    if (newPassword.length < 8) {
+      return res.status(400).json({ error: 'weak_password', message: 'New password must be at least 8 characters' });
+    }
+    const ok = await adminVerifyPassword(currentPassword);
+    if (!ok) {
+      return res.status(401).json({ error: 'wrong_current_password', message: 'Current password is incorrect.' });
+    }
+    await adminSetPassword(newPassword);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[POST /api/auth/change-password]', err?.message);
+    res.status(500).json({ error: 'internal', message: err?.message });
+  }
 });
 
 app.all('/api/auth/verify', (req, res) => {
