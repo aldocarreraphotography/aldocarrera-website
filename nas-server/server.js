@@ -100,7 +100,7 @@ app.use(cors({
 app.use(express.json());
 app.use(authMiddleware);   // populates req.auth on every request
 
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100 * 1024 * 1024 } });
 
 /* ------------------------------------------------------------------ */
 /* Auth routes                                                         */
@@ -1864,7 +1864,11 @@ app.get('/api/gallery-portals/:token/download-zip', async (req, res) => {
     for (const img of images) {
       const filePath = path.join(IMAGES_DIR, portal.projectId, img.filename);
       if (fs.existsSync(filePath)) {
-        archive.file(filePath, { name: img.filename });
+        // mode: 0o644 → readable by all on the client side after extraction.
+        // Without this, archived files inherit Docker filesystem permissions
+        // (sometimes 0o600 / owner-only), which causes macOS Finder to show
+        // "You don't have permission to open" after the user unzips.
+        archive.file(filePath, { name: img.filename, mode: 0o644 });
         added++;
       } else {
         console.warn('[portal zip] file not on disk:', filePath);
