@@ -8,13 +8,18 @@
  * a randomized field name to defeat the "saved password" heuristics. */
 
 function LoginView({ onLogin }) {
+  const [username, setUsername] = React.useState('');
   const [password, setPassword] = React.useState('');
   const [remember, setRemember] = React.useState(true);
   const [error, setError] = React.useState(null);
   const [busy, setBusy] = React.useState(false);
 
-  // Random field name per render — prevents browsers from matching against
-  // saved entries that share the literal name "password".
+  // Random field names per render — prevents browsers from matching against
+  // saved entries that share the literal name "username" / "password".
+  const userName = React.useMemo(
+    () => `aldo_u_${Math.random().toString(36).slice(2, 10)}`,
+    []
+  );
   const pwName = React.useMemo(
     () => `aldo_pw_${Math.random().toString(36).slice(2, 10)}`,
     []
@@ -25,7 +30,7 @@ function LoginView({ onLogin }) {
     setError(null);
     setBusy(true);
     try {
-      await window.AdminStore.login(password);
+      await window.AdminStore.login(username.trim(), password);
       onLogin();
     } catch (err) {
       setError(err.message || 'Login failed');
@@ -73,6 +78,25 @@ function LoginView({ onLogin }) {
             style={{ position: 'absolute', left: '-9999px', width: 1, height: 1, opacity: 0 }}
           />
 
+          <Field label="Username">
+            <input
+              type="text"
+              name={userName}
+              autoComplete="off"
+              data-lpignore="true"
+              data-1p-ignore="true"
+              data-bwignore="true"
+              spellCheck="false"
+              autoCorrect="off"
+              autoCapitalize="off"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder=""
+              autoFocus
+              disabled={busy}
+              className="ad-input"
+            />
+          </Field>
           <Field label="Password" error={error}>
             <input
               type="password"
@@ -86,7 +110,6 @@ function LoginView({ onLogin }) {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
-              autoFocus
               disabled={busy}
               className="ad-input"
             />
@@ -95,7 +118,7 @@ function LoginView({ onLogin }) {
             <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
             <span>Remember me for 30 days</span>
           </label>
-          <Btn type="submit" disabled={busy || !password.trim()}>{busy ? 'Signing in…' : 'Sign in'}</Btn>
+          <Btn type="submit" disabled={busy || !username.trim() || !password.trim()}>{busy ? 'Signing in…' : 'Sign in'}</Btn>
         </form>
 
         <div className="ad-login-foot">

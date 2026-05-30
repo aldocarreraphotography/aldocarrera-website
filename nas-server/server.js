@@ -19,7 +19,7 @@ import sharp    from 'sharp';
 import exifr    from 'exifr';
 
 import { issueToken, verifyToken, authMiddleware, requireAuth } from './utils/auth.js';
-import { verifyPassword as adminVerifyPassword, setPassword as adminSetPassword, hasStoredPassword as adminHasStoredPassword } from './utils/admin-auth.js';
+import { verifyCredentials as adminVerifyCredentials, verifyPassword as adminVerifyPassword, setPassword as adminSetPassword, hasStoredPassword as adminHasStoredPassword } from './utils/admin-auth.js';
 import { listFolder, getThumbnailBatch, downloadFile, isImageFile, isConfigured as isDropboxConfigured } from './utils/dropbox.js';
 import { Resend } from 'resend';
 import {
@@ -120,12 +120,13 @@ app.post('/api/auth/login', async (req, res) => {
     return res.status(429).json({ error: 'rate_limited', message: 'Too many login attempts. Try again later.' });
   }
 
-  const { password } = req.body || {};
-  const ok = await adminVerifyPassword(password);
+  const { username, password } = req.body || {};
+  const ok = await adminVerifyCredentials(username, password);
   if (!ok) {
     bucket.push(now);
     loginAttempts.set(ip, bucket);
-    return res.status(401).json({ error: 'invalid_password', message: 'Wrong password.' });
+    // Single generic error — never tell the caller which field was wrong
+    return res.status(401).json({ error: 'invalid_credentials', message: 'Wrong username or password.' });
   }
 
   loginAttempts.delete(ip);

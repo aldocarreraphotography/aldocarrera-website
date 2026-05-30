@@ -385,7 +385,9 @@ window.addEventListener('beforeunload', () => {
 
 const AdminStore = {
   // Auth ----------------------------------------------------------------
-  async login(password) {
+  async login(username, password) {
+    // Back-compat: old callers passed just password as the single arg
+    if (password === undefined) { password = username; username = ''; }
     // First try the real backend. When functions are deployed (production
     // and `netlify dev`), this issues a JWT signed with JWT_SECRET that
     // every admin-only endpoint will accept.
@@ -393,7 +395,7 @@ const AdminStore = {
       const r = await fetch(getAPI() + '/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ username, password }),
       });
       if (r.ok) {
         const data = await r.json();
