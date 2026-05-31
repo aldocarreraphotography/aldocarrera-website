@@ -37,6 +37,7 @@ import {
 import {
   createGallery, readGalleries, findGallery, updateGallery, deleteGallery, isExpired,
 } from './utils/galleries.js';
+import * as UG from './utils/unified-galleries.js';
 import {
   createDeck, readDecks, findDeck, deleteDeck, incrementViews,
 } from './utils/decks.js';
@@ -2355,6 +2356,471 @@ function contentTypeFor(name) {
     webp: 'image/webp', gif: 'image/gif', heic: 'image/heic', avif: 'image/avif',
   })[ext] || 'application/octet-stream';
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   UNIFIED GALLERIES  (/api/ug/*)
+   New merged gallery system. Coexists with the legacy /api/galleries
+   and /api/gallery-portals routes until cutover (UNIFIED-GALLERY-PLAN.md).
+   ══════════════════════════════════════════════════════════════════ */
+
+/* Session key for client access. Derived from token + the secret
+   (pin or password). 'open' galleries need no key. */
+function _ugKey(gallery) {
+  const secret = gallery.auth?.type === 'pin' ? gallery.auth.pin
+               : gallery.auth?.type === 'password' ? gallery.auth.password
+               : '';
+  return Buffer.from(`ug:${gallery.token}:${secret}`).toString('base64url').slice(0, 20);
+}
+function _ugCheckKey(gallery, req) {
+  if (gallery.auth?.type === 'open') return true;
+  const key = req.query.key || req.body?.key || req.headers['x-gallery-key'] || '';
+  return key === _ugKey(gallery);
+}
+
+/* Disk-storage multer for gallery batch uploads — streams to a tmp dir so a
+   large batch never balloons RAM. Files moved into place by the route. */
+const ugUpload = multer({
+  storage: multer.diskStorage({
+    destination: async (req, file, cb) => {
+      const dir = path.join(IMAGES_DIR, '__ug_tmp');
+      try { await fs.promises.mkdir(dir, { recursive: true }); cb(null, dir); }
+      catch (e) { cb(e); }
+    },
+    filename: (req, file, cb) => cb(null, `${Date.now()}_${Math.random().toString(36).slice(2,8)}_${UG.sanitizeName(file.originalname)}`),
+  }),
+  limits: { fileSize: 150 * 1024 * 1024 }, // 150 MB/file; no count cap
+});
+
+/* Shape an image for the client view: main version src + feedback for that version. */
+function _ugViewImage(token, img) {
+  const main = UG.mainVersion(img);
+  return {
+    filename: img.filename,
+    src:      main?.blobPath || null,
+    versionId: main?.versionId || null,
+    versionCount: img.versions.length,
+    feedback: img.feedback?.[main?.versionId] || null,
+  };
+}
+
+/* ── Admin: list / create / read / update / delete ──────── */
+
+app.get('/api/ug', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  try {
+    const { galleries } = await UG.readUnifiedGalleries();
+    // Summary only — don't ship every markup in the list view
+    const list = galleries.map(g => {
+      const imgs = Object.values(g.images || {});
+      let feedbackCount = 0, markupCount = 0;
+      for (const im of imgs) {
+        for (const fb of Object.values(im.feedback || {})) {
+          if (fb.label || fb.stars || fb.note || fb.markups?.length || fb.voiceMarkups?.length || fb.voiceNote) feedbackCount++;
+          markupCount += (fb.markups?.length || 0);
+        }
+      }
+      return {
+        token: g.token, mode: g.mode, title: g.title, clientName: g.clientName,
+        projectId: g.projectId, authType: g.auth?.type, pin: g.auth?.pin || null,
+        features: g.features, imageCount: imgs.length, rounds: (g.rounds || []).length,
+        feedbackCount, markupCount, status: g.status, submitted: g.submitted,
+        submittedAt: g.submittedAt, createdAt: g.createdAt,
+      };
+    });
+    res.json({ galleries: list });
+  } catch (err) {
+    console.error('[GET /api/ug]', err?.message);
+    res.status(500).json({ error: 'internal' });
+  }
+});
+
+app.post('/api/ug', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  try {
+    const { mode, title, clientName, projectId, pin, features } = req.body || {};
+    if (mode && !['review', 'delivery'].includes(mode)) return res.status(422).json({ error: 'bad_mode' });
+    if (pin && !/^\d{4}$/.test(String(pin))) return res.status(422).json({ error: 'bad_pin', message: 'PIN must be 4 digits' });
+    const gallery = await UG.createUnified({ mode, title, clientName, projectId, pin, features });
+    res.status(201).json(gallery);
+  } catch (err) {
+    console.error('[POST /api/ug]', err?.message);
+    res.status(500).json({ error: 'internal', message: err?.message });
+  }
+});
+
+app.get('/api/ug/:token', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  try {
+    const g = await UG.findUnified(req.params.token);
+    if (!g) return res.status(404).json({ error: 'not_found' });
+    res.json({ ...g, sessionKey: _ugKey(g) }); // admin sees the client key (to preview/share)
+  } catch (err) {
+    console.error('[GET /api/ug/:token]', err?.message);
+    res.status(500).json({ error: 'internal' });
+  }
+});
+
+app.patch('/api/ug/:token', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  try {
+    const patch = {};
+    const b = req.body || {};
+    if (typeof b.title === 'string')      patch.title = b.title;
+    if (typeof b.clientName === 'string') patch.clientName = b.clientName;
+    if (b.mode && ['review','delivery'].includes(b.mode)) patch.mode = b.mode;
+    if (b.features && typeof b.features === 'object')      patch.features = b.features;
+    if (b.status && ['open','submitted','archived'].includes(b.status)) patch.status = b.status;
+    if (b.auth && typeof b.auth === 'object') {
+      if (b.auth.type === 'pin' && !/^\d{4}$/.test(String(b.auth.pin || ''))) {
+        return res.status(422).json({ error: 'bad_pin' });
+      }
+      patch.auth = b.auth;
+    }
+    const updated = await UG.updateUnified(req.params.token, patch);
+    if (!updated) return res.status(404).json({ error: 'not_found' });
+    res.json(updated);
+  } catch (err) {
+    console.error('[PATCH /api/ug/:token]', err?.message);
+    res.status(500).json({ error: 'internal', message: err?.message });
+  }
+});
+
+app.delete('/api/ug/:token', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  try {
+    const ok = await UG.deleteUnified(req.params.token);
+    if (!ok) return res.status(404).json({ error: 'not_found' });
+    // Best-effort: remove this gallery's owned image bytes
+    fs.promises.rm(path.join(IMAGES_DIR, '__galleries', UG.sanitizeName(req.params.token)), { recursive: true, force: true }).catch(() => {});
+    res.status(204).end();
+  } catch (err) {
+    console.error('[DELETE /api/ug/:token]', err?.message);
+    res.status(500).json({ error: 'internal' });
+  }
+});
+
+/* ── Admin: batch image upload (initial round or version layer) ──────
+   ?mode=initial → add everything as round 1
+   ?mode=version → match by filename, layer matched, ignore non-matching */
+app.post('/api/ug/:token/upload', ugUpload.array('files'), async (req, res) => {
+  if (!requireAuth(req, res)) {
+    // clean up any tmp files multer wrote before auth failed
+    for (const f of req.files || []) fs.promises.unlink(f.path).catch(() => {});
+    return;
+  }
+  try {
+    const data = await UG.readUnifiedGalleries();
+    const idx = data.galleries.findIndex(g => g.token === req.params.token);
+    if (idx === -1) {
+      for (const f of req.files || []) fs.promises.unlink(f.path).catch(() => {});
+      return res.status(404).json({ error: 'not_found' });
+    }
+    const gallery = data.galleries[idx];
+    const uploadMode = req.query.mode === 'version' ? 'version' : 'initial';
+    const files = req.files || [];
+    if (!files.length) return res.status(400).json({ error: 'no_files' });
+
+    // First, plan the layering on a clone to learn matched/ignored + the
+    // versionId each file will get — WITHOUT moving bytes for ignored files.
+    const incoming = files.map(f => ({ filename: f.originalname, _tmp: f.path }));
+
+    let report;
+    if (uploadMode === 'version') {
+      // Determine which match before moving bytes
+      const matchedSet = new Set(incoming.filter(i => gallery.images[i.filename]).map(i => i.filename));
+      // Discard ignored tmp files
+      for (const f of files) if (!matchedSet.has(f.originalname)) fs.promises.unlink(f.path).catch(() => {});
+      const toLayer = incoming.filter(i => matchedSet.has(i.filename));
+      // Move matched bytes into place + assign blobPath
+      const placed = [];
+      for (const it of toLayer) {
+        const img = gallery.images[it.filename];
+        const vid = UG.nextVersionId(img);
+        const dest = UG.galleryImagePath(gallery.token, it.filename, vid);
+        await fs.promises.mkdir(path.dirname(dest), { recursive: true });
+        await _moveFile(it._tmp, dest);
+        placed.push({ filename: it.filename, blobPath: `${PUBLIC_URL}/api/ug/${gallery.token}/image/${encodeURIComponent(it.filename)}?v=${vid}` });
+      }
+      report = UG.layerVersions(gallery, placed);
+    } else {
+      // initial: move all bytes, all become v1 (or a fresh version if re-adding)
+      const placed = [];
+      for (const f of files) {
+        const fn = f.originalname;
+        const existing = gallery.images[fn];
+        const vid = existing ? UG.nextVersionId(existing) : 'v1';
+        const dest = UG.galleryImagePath(gallery.token, fn, vid);
+        await fs.promises.mkdir(path.dirname(dest), { recursive: true });
+        await _moveFile(f.path, dest);
+        placed.push({ filename: fn, blobPath: `${PUBLIC_URL}/api/ug/${gallery.token}/image/${encodeURIComponent(fn)}?v=${vid}` });
+      }
+      report = UG.addInitialImages(gallery, placed);
+    }
+
+    data.galleries[idx] = gallery;
+    await UG.writeUnifiedGalleries(data);
+    res.json({ ok: true, mode: uploadMode, ...report });
+  } catch (err) {
+    for (const f of req.files || []) fs.promises.unlink(f.path).catch(() => {});
+    console.error('[POST /api/ug/:token/upload]', err?.message);
+    res.status(500).json({ error: 'internal', message: err?.message });
+  }
+});
+
+async function _moveFile(src, dest) {
+  try { await fs.promises.rename(src, dest); }
+  catch (e) {
+    if (e.code === 'EXDEV') { await fs.promises.copyFile(src, dest); await fs.promises.unlink(src).catch(() => {}); }
+    else throw e;
+  }
+}
+
+/* ── Admin: set which version is "main" for an image ──── */
+app.post('/api/ug/:token/images/:filename/set-main', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  try {
+    const data = await UG.readUnifiedGalleries();
+    const idx = data.galleries.findIndex(g => g.token === req.params.token);
+    if (idx === -1) return res.status(404).json({ error: 'not_found' });
+    const { versionId } = req.body || {};
+    const ok = UG.setMain(data.galleries[idx], req.params.filename, versionId);
+    if (!ok) return res.status(404).json({ error: 'image_or_version_not_found' });
+    await UG.writeUnifiedGalleries(data);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[POST set-main]', err?.message);
+    res.status(500).json({ error: 'internal' });
+  }
+});
+
+/* ── Image bytes (gallery-owned). ?v=versionId for a specific version,
+   else the main version. Optional ?w=NNN resize via the shared cache. ── */
+app.get('/api/ug/:token/image/:filename', async (req, res) => {
+  try {
+    const g = await UG.findUnified(req.params.token);
+    if (!g) return res.status(404).end();
+    const img = g.images?.[req.params.filename];
+    if (!img) return res.status(404).end();
+    const v = req.query.v
+      ? img.versions.find(x => x.versionId === req.query.v)
+      : UG.mainVersion(img);
+    if (!v) return res.status(404).end();
+    const filePath = UG.galleryImagePath(g.token, img.filename, v.versionId);
+    if (!fs.existsSync(filePath)) return res.status(404).end();
+
+    const w = parseInt(req.query.w, 10);
+    if (w > 0 && w < 4000) {
+      const bytes = await fs.promises.readFile(filePath);
+      const resized = await _resized(bytes, w);
+      res.setHeader('Content-Type', 'image/jpeg');
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      return res.send(resized);
+    }
+    res.setHeader('Content-Type', contentTypeFor(img.filename));
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    fs.createReadStream(filePath).pipe(res);
+  } catch (err) {
+    console.error('[GET /api/ug/:token/image]', err?.message);
+    if (!res.headersSent) res.status(500).end();
+  }
+});
+
+/* ── Client: unlock (pin/password) → session key ──────── */
+app.post('/api/ug/:token/unlock', async (req, res) => {
+  try {
+    const g = await UG.findUnified(req.params.token);
+    if (!g) return res.status(404).json({ error: 'not_found' });
+    if (g.auth?.type === 'open') {
+      return res.json({ ok: true, key: '', title: g.title, mode: g.mode, features: g.features });
+    }
+    const supplied = g.auth.type === 'pin' ? String(req.body?.pin || '') : String(req.body?.password || '');
+    const secret   = g.auth.type === 'pin' ? String(g.auth.pin || '')     : String(g.auth.password || '');
+    if (!supplied || supplied !== secret) return res.status(403).json({ error: 'wrong_credentials' });
+    res.json({ ok: true, key: _ugKey(g), title: g.title, mode: g.mode, features: g.features });
+  } catch (err) {
+    console.error('[POST /api/ug/:token/unlock]', err?.message);
+    res.status(500).json({ error: 'internal' });
+  }
+});
+
+/* ── Client: view (main versions + feedback + features) ── */
+app.get('/api/ug/:token/view', async (req, res) => {
+  try {
+    const g = await UG.findUnified(req.params.token);
+    if (!g) return res.status(404).json({ error: 'not_found' });
+    if (!_ugCheckKey(g, req)) return res.status(403).json({ error: 'forbidden' });
+    const images = Object.values(g.images || {})
+      .map(img => _ugViewImage(g.token, img));
+    res.json({
+      title: g.title, mode: g.mode, features: g.features,
+      images, submitted: g.submitted, submittedAt: g.submittedAt,
+    });
+  } catch (err) {
+    console.error('[GET /api/ug/:token/view]', err?.message);
+    res.status(500).json({ error: 'internal' });
+  }
+});
+
+/* ── Client: feedback on the MAIN version of an image ──── */
+app.patch('/api/ug/:token/feedback/:filename', async (req, res) => {
+  try {
+    const data = await UG.readUnifiedGalleries();
+    const idx = data.galleries.findIndex(g => g.token === req.params.token);
+    if (idx === -1) return res.status(404).json({ error: 'not_found' });
+    const g = data.galleries[idx];
+    if (!_ugCheckKey(g, req)) return res.status(403).json({ error: 'forbidden' });
+    const img = g.images?.[req.params.filename];
+    if (!img) return res.status(404).json({ error: 'image_not_found' });
+    const main = UG.mainVersion(img);
+    const fb = img.feedback[main.versionId] || (img.feedback[main.versionId] = { label:null,stars:0,note:'',markups:[],voiceMarkups:[],voiceNote:null });
+
+    const b = req.body || {};
+    if ('label' in b) fb.label = (['SELECT','ALT','KILL',null].includes(b.label)) ? b.label : fb.label;
+    if ('stars' in b) fb.stars = Math.max(0, Math.min(5, parseInt(b.stars, 10) || 0));
+    if ('note'  in b) fb.note  = String(b.note || '').slice(0, 1000);
+
+    await UG.writeUnifiedGalleries(data);
+    res.json({ ok: true, feedback: fb });
+  } catch (err) {
+    console.error('[PATCH /api/ug feedback]', err?.message);
+    res.status(500).json({ error: 'internal' });
+  }
+});
+
+/* ── Client: add / delete a markup on the MAIN version ─── */
+app.post('/api/ug/:token/feedback/:filename/markup', async (req, res) => {
+  try {
+    const data = await UG.readUnifiedGalleries();
+    const idx = data.galleries.findIndex(g => g.token === req.params.token);
+    if (idx === -1) return res.status(404).json({ error: 'not_found' });
+    const g = data.galleries[idx];
+    if (!_ugCheckKey(g, req)) return res.status(403).json({ error: 'forbidden' });
+    const img = g.images?.[req.params.filename];
+    if (!img) return res.status(404).json({ error: 'image_not_found' });
+    const main = UG.mainVersion(img);
+    const fb = img.feedback[main.versionId];
+    const { markup } = req.body || {};
+    if (!markup || !markup.tool) return res.status(400).json({ error: 'bad_markup' });
+    markup.id = markup.id || `mk_${Date.now()}_${Math.random().toString(36).slice(2,7)}`;
+    markup._v = 2;
+    fb.markups.push(markup);
+    await UG.writeUnifiedGalleries(data);
+    res.json({ ok: true, markup });
+  } catch (err) {
+    console.error('[POST /api/ug markup]', err?.message);
+    res.status(500).json({ error: 'internal' });
+  }
+});
+
+app.delete('/api/ug/:token/feedback/:filename/markup/:markupId', async (req, res) => {
+  try {
+    const data = await UG.readUnifiedGalleries();
+    const idx = data.galleries.findIndex(g => g.token === req.params.token);
+    if (idx === -1) return res.status(404).json({ error: 'not_found' });
+    const g = data.galleries[idx];
+    if (!_ugCheckKey(g, req)) return res.status(403).json({ error: 'forbidden' });
+    const img = g.images?.[req.params.filename];
+    if (!img) return res.status(404).json({ error: 'image_not_found' });
+    const main = UG.mainVersion(img);
+    const fb = img.feedback[main.versionId];
+    fb.markups = (fb.markups || []).filter(m => m.id !== req.params.markupId);
+    await UG.writeUnifiedGalleries(data);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[DELETE /api/ug markup]', err?.message);
+    res.status(500).json({ error: 'internal' });
+  }
+});
+
+/* ── Client: submit ─────────────────────────────────────── */
+app.post('/api/ug/:token/submit', async (req, res) => {
+  try {
+    const data = await UG.readUnifiedGalleries();
+    const idx = data.galleries.findIndex(g => g.token === req.params.token);
+    if (idx === -1) return res.status(404).json({ error: 'not_found' });
+    const g = data.galleries[idx];
+    if (!_ugCheckKey(g, req)) return res.status(403).json({ error: 'forbidden' });
+    g.submitted = true; g.submittedAt = new Date().toISOString(); g.status = 'submitted';
+    await UG.writeUnifiedGalleries(data);
+
+    // Reuse the portal email template (it reads title/token/projectId/submittedAt)
+    const feedback = [];
+    for (const img of Object.values(g.images)) {
+      const main = UG.mainVersion(img);
+      const fb = img.feedback?.[main?.versionId];
+      if (!fb) continue;
+      if (fb.label || (fb.note || '').trim() || fb.voiceNote?.file || fb.markups?.length) {
+        feedback.push({
+          filename: img.filename,
+          hearted: fb.label === 'SELECT',
+          note: (fb.note || '').trim() + (fb.markups?.length ? ` [${fb.markups.length} markup${fb.markups.length!==1?'s':''}]` : ''),
+          voiceTranscript: fb.voiceNote?.transcript || '',
+          hasVoice: !!fb.voiceNote?.file,
+        });
+      }
+    }
+    const heartedCount = feedback.filter(f => f.hearted).length;
+    _sendSubmitEmail({ portal: { title: g.title, token: g.token, projectId: g.projectId || '', submittedAt: g.submittedAt }, feedback, heartedCount })
+      .catch(e => console.error('[email] ug submit failed:', e?.message));
+
+    res.json({ ok: true, submittedAt: g.submittedAt });
+  } catch (err) {
+    console.error('[POST /api/ug/:token/submit]', err?.message);
+    res.status(500).json({ error: 'internal' });
+  }
+});
+
+/* ── Client: downloads (delivery / when enabled) ───────── */
+app.get('/api/ug/:token/download/:filename', async (req, res) => {
+  try {
+    const g = await UG.findUnified(req.params.token);
+    if (!g) return res.status(404).json({ error: 'not_found' });
+    if (!_ugCheckKey(g, req)) return res.status(403).json({ error: 'forbidden' });
+    if (!g.features?.downloads) return res.status(403).json({ error: 'downloads_disabled' });
+    const img = g.images?.[req.params.filename];
+    if (!img) return res.status(404).json({ error: 'not_found' });
+    const main = UG.mainVersion(img);
+    const filePath = UG.galleryImagePath(g.token, img.filename, main.versionId);
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'file_missing' });
+    const safe = img.filename.replace(/[\\"]/g, '_');
+    res.setHeader('Content-Disposition', `attachment; filename="${safe}"; filename*=UTF-8''${encodeURIComponent(img.filename)}`);
+    res.setHeader('Content-Type', contentTypeFor(img.filename));
+    fs.createReadStream(filePath).pipe(res);
+  } catch (err) {
+    console.error('[GET /api/ug download]', err?.message);
+    if (!res.headersSent) res.status(500).end();
+  }
+});
+
+app.get('/api/ug/:token/download-zip', async (req, res) => {
+  try {
+    const g = await UG.findUnified(req.params.token);
+    if (!g) return res.status(404).json({ error: 'not_found' });
+    if (!_ugCheckKey(g, req)) return res.status(403).json({ error: 'forbidden' });
+    if (!g.features?.downloads) return res.status(403).json({ error: 'downloads_disabled' });
+    const imgs = Object.values(g.images || {});
+    if (!imgs.length) return res.status(400).json({ error: 'no_images' });
+
+    const { default: archiver } = await import('archiver');
+    const archive = archiver('zip', { zlib: { level: 0 } });
+    const safeTitle = (g.title || g.token).replace(/[^a-zA-Z0-9_\-]/g, '_');
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeTitle}.zip"`);
+    archive.on('error', (e) => { console.error('[ug zip]', e.message); if (!res.headersSent) res.status(500).end(); });
+    archive.pipe(res);
+    let added = 0;
+    for (const img of imgs) {
+      const main = UG.mainVersion(img);
+      const fp = UG.galleryImagePath(g.token, img.filename, main.versionId);
+      if (fs.existsSync(fp)) { archive.file(fp, { name: img.filename, mode: 0o644 }); added++; }
+    }
+    if (!added) { res.removeHeader('Content-Disposition'); return res.status(400).json({ error: 'no_files' }); }
+    await archive.finalize();
+  } catch (err) {
+    console.error('[GET /api/ug zip]', err?.message);
+    if (!res.headersSent) res.status(500).json({ error: 'zip_failed' });
+  }
+});
 
 function buildDefaultProjects() {
   const P = {
