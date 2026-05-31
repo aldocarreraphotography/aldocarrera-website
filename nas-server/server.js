@@ -2377,6 +2377,19 @@ function _ugCheckKey(gallery, req) {
   return key === _ugKey(gallery);
 }
 
+/* Resolve the bytes for a version. New uploads live in the gallery-owned dir;
+   MIGRATED galleries' v1 references the source project's image bytes (no copy
+   was made), so fall back to the project dir by filename. */
+function _ugFilePath(gallery, img, version) {
+  const owned = UG.galleryImagePath(gallery.token, img.filename, version.versionId);
+  if (fs.existsSync(owned)) return owned;
+  if (gallery.projectId) {
+    const proj = path.join(IMAGES_DIR, gallery.projectId, img.filename);
+    if (fs.existsSync(proj)) return proj;
+  }
+  return owned; // caller checks existsSync → 404 if truly missing
+}
+
 /* Disk-storage multer for gallery batch uploads — streams to a tmp dir so a
    large batch never balloons RAM. Files moved into place by the route. */
 const ugUpload = multer({
@@ -2605,7 +2618,7 @@ app.get('/api/ug/:token/image/:filename', async (req, res) => {
       ? img.versions.find(x => x.versionId === req.query.v)
       : UG.mainVersion(img);
     if (!v) return res.status(404).end();
-    const filePath = UG.galleryImagePath(g.token, img.filename, v.versionId);
+    const filePath = _ugFilePath(g, img, v);
     if (!fs.existsSync(filePath)) return res.status(404).end();
 
     const w = parseInt(req.query.w, 10);
@@ -2780,7 +2793,7 @@ app.get('/api/ug/:token/download/:filename', async (req, res) => {
     const img = g.images?.[req.params.filename];
     if (!img) return res.status(404).json({ error: 'not_found' });
     const main = UG.mainVersion(img);
-    const filePath = UG.galleryImagePath(g.token, img.filename, main.versionId);
+    const filePath = _ugFilePath(g, img, main);
     if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'file_missing' });
     const safe = img.filename.replace(/[\\"]/g, '_');
     res.setHeader('Content-Disposition', `attachment; filename="${safe}"; filename*=UTF-8''${encodeURIComponent(img.filename)}`);
@@ -2811,7 +2824,7 @@ app.get('/api/ug/:token/download-zip', async (req, res) => {
     let added = 0;
     for (const img of imgs) {
       const main = UG.mainVersion(img);
-      const fp = UG.galleryImagePath(g.token, img.filename, main.versionId);
+      const fp = _ugFilePath(g, img, main);
       if (fs.existsSync(fp)) { archive.file(fp, { name: img.filename, mode: 0o644 }); added++; }
     }
     if (!added) { res.removeHeader('Content-Disposition'); return res.status(400).json({ error: 'no_files' }); }
