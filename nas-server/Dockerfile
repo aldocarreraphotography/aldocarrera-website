@@ -6,6 +6,7 @@ COPY package.json ./
 RUN npm install --omit=dev
 
 COPY utils/ ./utils/
+COPY scripts/ ./scripts/
 COPY server.js ./
 
 EXPOSE 3001
