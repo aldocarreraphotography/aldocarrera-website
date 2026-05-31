@@ -69,6 +69,10 @@ const FILES = [
   'client-gallery.html',
   'client-gallery.jsx',
 
+  // Unified gallery (merged review + delivery, /ug/:token) — Phase 1+
+  'unified-gallery.html',
+  'unified-gallery.jsx',
+
   // To-go deck (public slideshow)
   'deck.html',
   'deck-styles.css',

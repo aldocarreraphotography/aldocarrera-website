@@ -63,6 +63,16 @@
   to     = "/client-gallery.html"
   status = 200
 
+# Unified gallery (merged review + delivery)
+[[redirects]]
+  from   = "/ug"
+  to     = "/unified-gallery.html"
+  status = 200
+[[redirects]]
+  from   = "/ug/*"
+  to     = "/unified-gallery.html"
+  status = 200
+
 # Hidden /raw section — intentionally not in nav
 [[redirects]]
   from   = "/raw"
