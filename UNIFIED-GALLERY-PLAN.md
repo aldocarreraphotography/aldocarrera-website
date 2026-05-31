@@ -1,7 +1,16 @@
 # Unified Gallery — Plan & Spec
 
-Status: **Phase 0 in progress** (schema + dry-run migration)
+Status: **Phases 0–1 built locally (not deployed)**
 Owner: Aldo · Last updated by the merge work session
+
+## Build log
+- ✅ **Phase 0** — dry-run migration verified on live data: 76 markups, 26 labels, 28 images, 0 anomalies, lossless.
+- ✅ **Data layer** — `nas-server/utils/unified-galleries.js`, 22/22 self-tests pass.
+- ✅ **Server API** — `/api/ug/*` full surface in `server.js` (node --check clean). Dormant in prod.
+- ✅ **Client app** — `unified-gallery.{html,jsx}` at `/ug/:token`; canvas markup engine ported; babel-validated. Wired into build + netlify.toml.
+- ⏳ **Voice notes** — deferred follow-up: `/api/ug/.../voice` endpoints + recorder UI (positioned voice markups, like legacy). Feedback schema already has `voiceMarkups`/`voiceNote` slots.
+- ⏳ **Phase 3** — admin UI (create gallery, version-upload w/ match-ignore confirm, version history + set-main, feedback review, PDF/ZIP).
+- ⏳ **Phase 4** — write-migration (`scripts/migrate-galleries.mjs`, keeps backups) + old-link redirects + one rebuild/deploy to test.
 
 Merges the two gallery systems (legacy proofing `gallery.html` + PIN portal `/g/:token`)
 into one React app with one data model, one auth path, and image versioning.
