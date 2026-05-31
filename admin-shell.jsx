@@ -53,6 +53,10 @@ function parseRoute(hash) {
     if (!parts[1]) return { name: 'dispatches' };
     return { name: 'dispatch-edit', id: decodeURIComponent(parts[1]) };
   }
+  if (parts[0] === 'ug') {
+    if (!parts[1]) return { name: 'ug' };
+    return { name: 'ug-detail', token: decodeURIComponent(parts[1]) };
+  }
   return { name: 'dashboard' };
 }
 function navigate(to) {
@@ -67,6 +71,7 @@ const NAV = [
   { id: 'projects',   label: 'Projects',  match: ['projects','project-new','project-edit','project-upload','project-images'], hash: '#/projects' },
   { id: 'galleries',  label: 'Galleries',       match: ['galleries','gallery-detail'],  hash: '#/galleries' },
   { id: 'portals',   label: 'Client Portals', match: ['portals'],                     hash: '#/portals'   },
+  { id: 'ug',        label: 'Galleries 2.0',  match: ['ug','ug-detail'],              hash: '#/ug'        },
   { id: 'videos',    label: 'Videos',         match: ['videos'],                      hash: '#/videos'    },
   { id: 'prints',    label: 'Print Shop',     match: ['prints'],                      hash: '#/prints'    },
   { id: 'about',      label: 'About',     match: ['about'],                       hash: '#/about' },
@@ -99,11 +104,11 @@ function AdminSidebar({ route, onLogout }) {
           <SideLink key={item.id} item={item} route={route}/>
         ))}
         <div className="ad-side-section">Content</div>
-        {NAV.slice(3, 6).map(item => (
+        {NAV.slice(3, 7).map(item => (
           <SideLink key={item.id} item={item} route={route}/>
         ))}
         <div className="ad-side-section">System</div>
-        {NAV.slice(6).map(item => (
+        {NAV.slice(7).map(item => (
           <SideLink key={item.id} item={item} route={route}/>
         ))}
       </nav>
@@ -223,6 +228,8 @@ function AdminApp() {
     case 'dropbox':         view = <DropboxImportView      navigate={navigate}/>; break;
     case 'dispatches':      view = <DispatchesView         navigate={navigate}/>; break;
     case 'dispatch-edit':   view = <DispatchEditorView     dispatchId={route.id} navigate={navigate}/>; break;
+    case 'ug':              view = <UnifiedGalleriesView   navigate={navigate}/>; break;
+    case 'ug-detail':       view = <UnifiedGalleryDetailView token={route.token} navigate={navigate}/>; break;
     default:                view = <DashboardView          navigate={navigate}/>;
   }
 

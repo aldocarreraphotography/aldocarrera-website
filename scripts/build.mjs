@@ -60,6 +60,7 @@ const FILES = [
   'admin-views-prints.jsx',
   'admin-views-analytics.jsx',
   'admin-views-dropbox.jsx',
+  'admin-views-unified.jsx',
 
   // Client gallery (token-gated)
   'gallery.html',
