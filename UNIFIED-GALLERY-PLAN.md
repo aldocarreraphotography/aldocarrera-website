@@ -8,9 +8,20 @@ Owner: Aldo · Last updated by the merge work session
 - ✅ **Data layer** — `nas-server/utils/unified-galleries.js`, 22/22 self-tests pass.
 - ✅ **Server API** — `/api/ug/*` full surface in `server.js` (node --check clean). Dormant in prod.
 - ✅ **Client app** — `unified-gallery.{html,jsx}` at `/ug/:token`; canvas markup engine ported; babel-validated. Wired into build + netlify.toml.
-- ⏳ **Voice notes** — deferred follow-up: `/api/ug/.../voice` endpoints + recorder UI (positioned voice markups, like legacy). Feedback schema already has `voiceMarkups`/`voiceNote` slots.
-- ⏳ **Phase 3** — admin UI (create gallery, version-upload w/ match-ignore confirm, version history + set-main, feedback review, PDF/ZIP).
-- ⏳ **Phase 4** — write-migration (`scripts/migrate-galleries.mjs`, keeps backups) + old-link redirects + one rebuild/deploy to test.
+- ✅ **Admin UI** — `admin-views-unified.jsx` ("Galleries 2.0"): list, create modal, detail w/ chunked upload, client-side version match preview, version history + set-main, feedback review (markup overlay). babel-validated, wired into shell + Admin.html + build.
+- ✅ **Migrated-gallery fallback** — `_ugFilePath()` serves/downloads migrated galleries from project bytes (no duplication).
+- ✅ **Write-migration** — `scripts/migrate-galleries.mjs`: same canonical transforms as dry-run; safe by default (preview unless `--commit`, refuses clobber, backs up sources, never deletes).
+- ⏳ **Voice notes** — the one deferred feature: `/api/ug/.../voice` endpoints + recorder UI (positioned voice markups). Schema already has `voiceMarkups`/`voiceNote` slots. Additive — can land before or after cutover.
+- ⏳ **CUTOVER** — deploy (Netlify + NAS rebuild) → re-run dry-run → run write-migration `--commit` → test `/ug` end-to-end → add old-link redirects (`/g`, `/gallery` → `/ug`) once confident.
+
+## Cutover runbook (when ready)
+1. `git push` → Netlify deploys the `/ug` client + admin.
+2. On NAS: `git pull` → `sudo docker-compose up -d --build` (ships `/api/ug/*`, scripts/, unified module).
+3. Re-run the **dry-run** (read-only) to reconfirm numbers on current live data.
+4. Create a throwaway test gallery in admin → upload → open `/ug/<token>` → label/star/markup/submit → verify feedback shows in admin. Delete it.
+5. Run **write-migration `--commit`**. Verify migrated galleries open at `/ug/<token>` with markups intact.
+6. Only then: add redirects from `/g/*` and `/gallery` → `/ug/*` and retire the old admin views.
+Rollback at any point: delete `unified-galleries.json`; old stores + routes untouched.
 
 Merges the two gallery systems (legacy proofing `gallery.html` + PIN portal `/g/:token`)
 into one React app with one data model, one auth path, and image versioning.
