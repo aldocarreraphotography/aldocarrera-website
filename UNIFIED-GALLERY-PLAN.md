@@ -11,8 +11,11 @@ Owner: Aldo · Last updated by the merge work session
 - ✅ **Admin UI** — `admin-views-unified.jsx` ("Galleries 2.0"): list, create modal, detail w/ chunked upload, client-side version match preview, version history + set-main, feedback review (markup overlay). babel-validated, wired into shell + Admin.html + build.
 - ✅ **Migrated-gallery fallback** — `_ugFilePath()` serves/downloads migrated galleries from project bytes (no duplication).
 - ✅ **Write-migration** — `scripts/migrate-galleries.mjs`: same canonical transforms as dry-run; safe by default (preview unless `--commit`, refuses clobber, backs up sources, never deletes).
-- ⏳ **Voice notes** — the one deferred feature: `/api/ug/.../voice` endpoints + recorder UI (positioned voice markups). Schema already has `voiceMarkups`/`voiceNote` slots. Additive — can land before or after cutover.
-- ⏳ **CUTOVER** — deploy (Netlify + NAS rebuild) → re-run dry-run → run write-migration `--commit` → test `/ug` end-to-end → add old-link redirects (`/g`, `/gallery` → `/ug`) once confident.
+- ✅ **CUTOVER** — completed. 3 galleries migrated, 76 markups preserved, verified end-to-end with a throwaway gallery.
+- ✅ **Password-type galleries at /ug** — `GET /api/ug/:token/peek` returns auth type; unlock screen now shows PIN inputs OR a password field accordingly. Migrated Steve Aoki galleries open at `/ug` with their existing password.
+- ✅ **Admin auth editor** — Security card in the manage view lets you switch a gallery between PIN / password / open and edit the secret. Hits the existing `PATCH /api/ug/:token` (no new endpoint).
+- ✅ **Voice notes** — `POST/GET/DELETE /api/ug/:token/feedback/:filename/voice[/:id]` + an admin `GET /api/admin/ug/...` for parity. Client lightbox: 🎤 tool in the palette, tap-to-record-at-spot, pending-pin + timer + stop button, transcription via Whisper (best-effort, same path as legacy), voice list with playback + transcript + delete. Admin image row shows voice count and inline audio player using the gallery sessionKey (no Bearer-token-in-`<audio src>` problem).
+- ✅ **Old-link redirects** — `/gallery?token=X` → `/ug/X` (301) and `/g/:token` → `/ug/:token` (301). Tokens preserved by migration so the mapping is direct.
 
 ## Cutover runbook (when ready)
 1. `git push` → Netlify deploys the `/ug` client + admin.

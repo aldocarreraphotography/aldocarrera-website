@@ -45,25 +45,11 @@
 
 # Clean URLs for client-facing pages
 [[redirects]]
-  from   = "/gallery"
-  to     = "/gallery.html"
-  status = 200
-[[redirects]]
   from   = "/deck"
   to     = "/deck.html"
   status = 200
 
-# Client gallery portal
-[[redirects]]
-  from   = "/g"
-  to     = "/client-gallery.html"
-  status = 200
-[[redirects]]
-  from   = "/g/*"
-  to     = "/client-gallery.html"
-  status = 200
-
-# Unified gallery (merged review + delivery)
+# Unified gallery (merged review + delivery) — this is the live system.
 [[redirects]]
   from   = "/ug"
   to     = "/unified-gallery.html"
@@ -71,6 +57,30 @@
 [[redirects]]
   from   = "/ug/*"
   to     = "/unified-gallery.html"
+  status = 200
+
+# ── Legacy gallery URL preservation ─────────────────────────────────
+# /gallery?token=XYZ → /ug/XYZ (tokens preserved by migration)
+[[redirects]]
+  from   = "/gallery"
+  to     = "/ug/:token"
+  status = 301
+  force  = true
+  query  = { token = ":token" }
+# /gallery with no token (rare) → page that explains
+[[redirects]]
+  from   = "/gallery"
+  to     = "/gallery.html"
+  status = 200
+# /g/TOKEN → /ug/TOKEN
+[[redirects]]
+  from   = "/g/:token"
+  to     = "/ug/:token"
+  status = 301
+  force  = true
+[[redirects]]
+  from   = "/g"
+  to     = "/client-gallery.html"
   status = 200
 
 # Hidden /raw section — intentionally not in nav

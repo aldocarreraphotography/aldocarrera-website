@@ -2638,6 +2638,17 @@ app.get('/api/ug/:token/image/:filename', async (req, res) => {
   }
 });
 
+/* ── Client: peek (public, no secret) — tells the unlock screen which
+   credential to ask for. Leaks gallery existence + auth type only,
+   never the secret. ── */
+app.get('/api/ug/:token/peek', async (req, res) => {
+  try {
+    const g = await UG.findUnified(req.params.token);
+    if (!g) return res.status(404).json({ error: 'not_found' });
+    res.json({ exists: true, authType: g.auth?.type || 'open', title: g.title || '', mode: g.mode || 'review' });
+  } catch (err) { res.status(500).json({ error: 'internal' }); }
+});
+
 /* ── Client: unlock (pin/password) → session key ──────── */
 app.post('/api/ug/:token/unlock', async (req, res) => {
   try {
@@ -2743,6 +2754,117 @@ app.delete('/api/ug/:token/feedback/:filename/markup/:markupId', async (req, res
     console.error('[DELETE /api/ug markup]', err?.message);
     res.status(500).json({ error: 'internal' });
   }
+});
+
+/* ── Client: positioned voice markup (record audio at an x,y on the MAIN
+   version). Reuses the legacy voice-note storage convention. ── */
+app.post('/api/ug/:token/feedback/:filename/voice', upload.single('audio'), async (req, res) => {
+  try {
+    const data = await UG.readUnifiedGalleries();
+    const idx = data.galleries.findIndex(g => g.token === req.params.token);
+    if (idx === -1) return res.status(404).json({ error: 'not_found' });
+    const g = data.galleries[idx];
+    if (!_ugCheckKey(g, req)) return res.status(403).json({ error: 'forbidden' });
+    if (!req.file?.buffer) return res.status(400).json({ error: 'no_audio' });
+    const img = g.images?.[req.params.filename];
+    if (!img) return res.status(404).json({ error: 'image_not_found' });
+
+    const x = parseFloat(req.body.x), y = parseFloat(req.body.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return res.status(400).json({ error: 'bad_coords' });
+
+    const main = UG.mainVersion(img);
+    const fb   = img.feedback[main.versionId] || (img.feedback[main.versionId] = { label:null,stars:0,note:'',markups:[],voiceMarkups:[],voiceNote:null });
+    const id   = `v_${Date.now()}_${Math.random().toString(36).slice(2,7)}`;
+    const ext  = _audioExt(req.file.mimetype);
+    const audioFile = `${UG.sanitizeName(req.params.filename)}-${id}.${ext}`;
+    await writeBytes(`__ug-voice/${g.token}`, audioFile, req.file.buffer);
+
+    const transcript = await _transcribeAudio(req.file.buffer, req.file.mimetype);
+    const voiceMarkup = {
+      id, x, y,
+      file:       audioFile,
+      mime:       req.file.mimetype || 'audio/webm',
+      transcript: transcript,
+      size:       req.file.buffer.length,
+      recordedAt: new Date().toISOString(),
+      _v:         2,
+    };
+    fb.voiceMarkups = fb.voiceMarkups || [];
+    fb.voiceMarkups.push(voiceMarkup);
+    await UG.writeUnifiedGalleries(data);
+    res.json({ ok: true, voiceMarkup });
+  } catch (err) {
+    console.error('[POST /api/ug voice]', err?.message);
+    res.status(500).json({ error: 'internal', message: err?.message });
+  }
+});
+
+/* Serve audio (PIN-gated, public). */
+app.get('/api/ug/:token/feedback/:filename/voice/:id', async (req, res) => {
+  try {
+    const g = await UG.findUnified(req.params.token);
+    if (!g) return res.status(404).end();
+    if (!_ugCheckKey(g, req)) return res.status(403).end();
+    const img = g.images?.[req.params.filename];
+    if (!img) return res.status(404).end();
+    let vm = null;
+    for (const fb of Object.values(img.feedback || {})) {
+      const hit = (fb.voiceMarkups || []).find(v => v.id === req.params.id);
+      if (hit) { vm = hit; break; }
+    }
+    if (!vm) return res.status(404).end();
+    const bytes = await readBytes(`__ug-voice/${g.token}`, vm.file);
+    if (!bytes) return res.status(404).end();
+    res.setHeader('Content-Type', vm.mime || 'audio/webm');
+    res.send(bytes);
+  } catch (err) { if (!res.headersSent) res.status(500).end(); }
+});
+
+/* Delete a voice markup. */
+app.delete('/api/ug/:token/feedback/:filename/voice/:id', async (req, res) => {
+  try {
+    const data = await UG.readUnifiedGalleries();
+    const idx = data.galleries.findIndex(g => g.token === req.params.token);
+    if (idx === -1) return res.status(404).json({ error: 'not_found' });
+    const g = data.galleries[idx];
+    if (!_ugCheckKey(g, req)) return res.status(403).json({ error: 'forbidden' });
+    const img = g.images?.[req.params.filename];
+    if (!img) return res.status(404).json({ error: 'image_not_found' });
+    let removed = null;
+    for (const fb of Object.values(img.feedback || {})) {
+      const i = (fb.voiceMarkups || []).findIndex(v => v.id === req.params.id);
+      if (i !== -1) { removed = fb.voiceMarkups.splice(i, 1)[0]; break; }
+    }
+    if (!removed) return res.status(404).json({ error: 'not_found' });
+    await UG.writeUnifiedGalleries(data);
+    // Best-effort file removal
+    if (removed.file) deleteImage(`__ug-voice/${g.token}`, removed.file).catch(() => {});
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[DELETE /api/ug voice]', err?.message);
+    res.status(500).json({ error: 'internal' });
+  }
+});
+
+/* Admin playback (JWT-auth). */
+app.get('/api/admin/ug/:token/feedback/:filename/voice/:id', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  try {
+    const g = await UG.findUnified(req.params.token);
+    if (!g) return res.status(404).end();
+    const img = g.images?.[req.params.filename];
+    if (!img) return res.status(404).end();
+    let vm = null;
+    for (const fb of Object.values(img.feedback || {})) {
+      const hit = (fb.voiceMarkups || []).find(v => v.id === req.params.id);
+      if (hit) { vm = hit; break; }
+    }
+    if (!vm) return res.status(404).end();
+    const bytes = await readBytes(`__ug-voice/${g.token}`, vm.file);
+    if (!bytes) return res.status(404).end();
+    res.setHeader('Content-Type', vm.mime || 'audio/webm');
+    res.send(bytes);
+  } catch (err) { if (!res.headersSent) res.status(500).end(); }
 });
 
 /* ── Client: submit ─────────────────────────────────────── */

@@ -230,11 +230,18 @@ function UnifiedGalleryDetailView({ token, navigate }) {
 
       <Card padding="lg">
         <SectionHead title="Gallery"
-          sub={`${images.length} images · ${(g.rounds || []).length} round${(g.rounds || []).length !== 1 ? 's' : ''} · PIN ${g.auth?.pin || '— (open)'} · ${g.submitted ? 'submitted' : 'open'}`}/>
+          sub={`${images.length} images · ${(g.rounds || []).length} round${(g.rounds || []).length !== 1 ? 's' : ''} · ${g.auth?.type === 'pin' ? `PIN ${g.auth.pin}` : g.auth?.type === 'password' ? 'password-protected' : 'open'} · ${g.submitted ? 'submitted' : 'open'}`}/>
         <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
           <Toggle value={!!g.features?.downloads} onChange={toggleDownloads} label="Client downloads"/>
           <span className="ad-muted ad-mono" style={{ fontSize: 12 }}>Mode: {g.mode}</span>
         </div>
+      </Card>
+
+      {/* Auth (PIN / password / open) */}
+      <Card padding="lg" className="ad-mt-md">
+        <SectionHead eyebrow="Security" title="Client unlock"
+          sub="How the client opens this gallery at /ug. Migrated galleries can be password-type — switch to a PIN for a cleaner client experience."/>
+        <UnifiedAuthEditor gallery={g} onChanged={load}/>
       </Card>
 
       {/* Upload */}
@@ -286,7 +293,7 @@ function UnifiedGalleryDetailView({ token, navigate }) {
         {images.length === 0 ? <Empty title="No images yet" sub="Upload the first round above."/>
           : (
             <div className="ad-ug-images">
-              {images.map(img => <UnifiedImageRow key={img.filename} token={token} img={img} onSetMain={setMain}/>)}
+              {images.map(img => <UnifiedImageRow key={img.filename} token={token} sessionKey={g.sessionKey} img={img} onSetMain={setMain}/>)}
             </div>
           )}
       </Card>
@@ -295,7 +302,7 @@ function UnifiedGalleryDetailView({ token, navigate }) {
 }
 
 /* One image: main-version thumb (with markup overlay) + version chips + feedback summary. */
-function UnifiedImageRow({ token, img, onSetMain }) {
+function UnifiedImageRow({ token, sessionKey, img, onSetMain }) {
   const main = (img.versions || []).find(v => v.isMain) || (img.versions || [])[img.versions.length - 1];
   const fb   = img.feedback?.[main?.versionId] || {};
   const imgRef = ugR(null), canvasRef = ugR(null);
@@ -318,9 +325,21 @@ function UnifiedImageRow({ token, img, onSetMain }) {
           {fb.label && <Pill tone={fb.label === 'SELECT' ? 'ok' : 'neutral'}>{fb.label}</Pill>}
           {fb.stars > 0 && <span style={{ color: '#c89b3c' }}>{'★'.repeat(fb.stars)}</span>}
           {(fb.markups || []).length > 0 && <span className="ad-muted ad-mono" style={{ fontSize: 12 }}>{fb.markups.length} markup{fb.markups.length !== 1 ? 's' : ''}</span>}
-          {!fb.label && !fb.stars && !(fb.markups || []).length && !fb.note && <span className="ad-muted" style={{ fontSize: 12 }}>No feedback yet</span>}
+          {(fb.voiceMarkups || []).length > 0 && <span className="ad-muted ad-mono" style={{ fontSize: 12 }}>🎤 {fb.voiceMarkups.length}</span>}
+          {!fb.label && !fb.stars && !(fb.markups || []).length && !(fb.voiceMarkups || []).length && !fb.note && <span className="ad-muted" style={{ fontSize: 12 }}>No feedback yet</span>}
         </div>
         {fb.note && <div style={{ fontSize: 13, color: 'var(--ink-soft)', marginBottom: 8 }}>"{fb.note}"</div>}
+        {(fb.voiceMarkups || []).length > 0 && (
+          <div style={{ marginBottom: 8 }}>
+            {fb.voiceMarkups.map(vm => (
+              <div key={vm.id} style={{ marginBottom: 4 }}>
+                <audio controls preload="none" style={{ height: 28, verticalAlign: 'middle' }}
+                  src={`${_ugApi()}/api/ug/${token}/feedback/${encodeURIComponent(img.filename)}/voice/${vm.id}?key=${encodeURIComponent(sessionKey || '')}`}/>
+                {vm.transcript && <span style={{ fontSize: 12, fontStyle: 'italic', marginLeft: 8, color: 'var(--ink-soft)' }}>"{vm.transcript}"</span>}
+              </div>
+            ))}
+          </div>
+        )}
         <div className="ug-vstrip" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {(img.versions || []).map(v => (
             <button key={v.versionId}
@@ -338,6 +357,53 @@ function UnifiedImageRow({ token, img, onSetMain }) {
         </div>
       </div>
     </div>
+  );
+}
+
+/* Auth editor — flip between pin / password / open and edit the secret. */
+function UnifiedAuthEditor({ gallery, onChanged }) {
+  const [type, setType]   = ugS(gallery.auth?.type || 'open');
+  const [pin, setPin]     = ugS(gallery.auth?.pin || '');
+  const [pw, setPw]       = ugS(gallery.auth?.password || '');
+  const [busy, setBusy]   = ugS(false);
+
+  const save = async () => {
+    if (type === 'pin' && !/^\d{4}$/.test(pin)) { toast('PIN must be 4 digits', 'error'); return; }
+    if (type === 'password' && !pw.trim()) { toast('Password cannot be empty', 'error'); return; }
+    setBusy(true);
+    try {
+      const auth = type === 'pin' ? { type, pin, password: null }
+                : type === 'password' ? { type, pin: null, password: pw }
+                : { type: 'open', pin: null, password: null };
+      await window.AdminStore.apiFetch(`/api/ug/${gallery.token}`, { method: 'PATCH', body: JSON.stringify({ auth }) });
+      toast('Security updated', 'ok');
+      onChanged && onChanged();
+    } catch (e) { toast('Failed: ' + (e.message || ''), 'error'); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <>
+      <Field label="Type">
+        <Radio name="ugauth" value={type} onChange={setType}
+          options={[
+            { value: 'pin',      label: 'PIN (4 digits)' },
+            { value: 'password', label: 'Password' },
+            { value: 'open',     label: 'Open (no creds)' },
+          ]}/>
+      </Field>
+      {type === 'pin' && (
+        <Field label="PIN" hint="4 digits.">
+          <TextInput value={pin} onChange={(v) => setPin(v.replace(/\D/g, '').slice(0, 4))} placeholder="1234"/>
+        </Field>
+      )}
+      {type === 'password' && (
+        <Field label="Password" hint="Any string — sent literally on unlock.">
+          <TextInput value={pw} onChange={setPw} placeholder=""/>
+        </Field>
+      )}
+      <Btn onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save security'}</Btn>
+    </>
   );
 }
 
