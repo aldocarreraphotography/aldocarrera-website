@@ -15,27 +15,42 @@ const { useState: ugS, useEffect: ugE, useRef: ugR, useMemo: ugM } = React;
 const _ugApi   = () => (window.API_BASE || '');
 const _ugToken = () => localStorage.getItem('aldo_admin_token');
 
-/* Chunked multipart upload — keeps a big batch from becoming one giant request.
-   mode: 'initial' | 'version'. onProgress(done, total). Returns merged report. */
+/* Byte-budgeted multipart upload — Cloudflare's free-plan limit is 100 MB
+   per request body, so we pack files into chunks that stay safely under it.
+   Big files go one-per-request; small files batch together. */
 async function _ugUpload(token, files, mode, onProgress) {
-  const CHUNK = 8;
+  const BUDGET = 80 * 1024 * 1024; // 80 MB per request (leaves headroom for multipart overhead)
+  // Pack into chunks by total size
+  const chunks = [];
+  let cur = [], curBytes = 0;
+  for (const f of files) {
+    if (cur.length > 0 && curBytes + f.size > BUDGET) {
+      chunks.push(cur); cur = []; curBytes = 0;
+    }
+    cur.push(f); curBytes += f.size;
+  }
+  if (cur.length) chunks.push(cur);
+
   const merged = { matched: [], ignored: [], added: [] };
   let done = 0;
-  for (let i = 0; i < files.length; i += CHUNK) {
-    const slice = files.slice(i, i + CHUNK);
+  for (const chunk of chunks) {
     const fd = new FormData();
-    for (const f of slice) fd.append('files', f, f.name);
+    for (const f of chunk) fd.append('files', f, f.name);
     const r = await fetch(`${_ugApi()}/api/ug/${token}/upload?mode=${mode}`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${_ugToken()}` },
       body: fd,
     });
-    if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.message || e.error || `HTTP ${r.status}`); }
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      if (r.status === 413) throw new Error(`File too large for upload (${(chunk[0]?.size / 1024 / 1024).toFixed(0)} MB).`);
+      throw new Error(e.message || e.error || `HTTP ${r.status}`);
+    }
     const d = await r.json();
     if (d.matched) merged.matched.push(...d.matched);
     if (d.ignored) merged.ignored.push(...d.ignored);
     if (d.added)   merged.added.push(...d.added);
-    done += slice.length;
+    done += chunk.length;
     onProgress && onProgress(done, files.length);
   }
   return merged;
