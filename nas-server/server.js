@@ -99,7 +99,11 @@ app.use(cors({
   credentials: true,
 }));
 
-app.use(express.json());
+// JSON body limit bumped from default 100 KB. /api/admin/sync sends a full
+// admin-store snapshot (projects + images metadata + galleries) which is
+// ~1–2 MB once a studio has real work in it. 50 MB gives generous headroom
+// without enabling unbounded payloads.
+app.use(express.json({ limit: '50mb' }));
 app.use(authMiddleware);   // populates req.auth on every request
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100 * 1024 * 1024 } });
