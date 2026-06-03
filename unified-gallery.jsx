@@ -37,6 +37,16 @@ const keyStore = {
   set: (t, k) => { try { sessionStorage.setItem(`ug_key_${t}`, k); } catch {} },
 };
 
+/* Add a ?w=N query to a src so the server serves a resized JPEG.
+   Handles both unified-owned URLs (already have ?v=…) and migrated
+   project URLs (often have no query). Resized images are aggressively
+   cached server-side + at the CDN — each size renders once, then it's
+   instant for everyone forever. */
+function srcAtWidth(src, w) {
+  if (!src || !w) return src;
+  return src + (src.includes('?') ? '&' : '?') + 'w=' + w;
+}
+
 async function ugFetch(method, path, key, body) {
   const sep = path.includes('?') ? '&' : '?';
   const url = API + path + (key ? `${sep}key=${encodeURIComponent(key)}` : '');
@@ -357,7 +367,7 @@ function ReviewLightbox({ token, sessionKey, images, idx, setIdx, onClose, onFee
         {/* center: canvas */}
         <MarkupCanvas
           key={`${img.filename}:${img.versionId}`}
-          imgUrl={img.src}
+          imgUrl={srcAtWidth(img.src, 1600)}
           markups={fb.markups || []}
           voiceMarkups={voiceMarkups}
           activeVoiceId={activeVoiceId}
@@ -440,7 +450,7 @@ function DeliveryLightbox({ img, onClose, onDownload }) {
   return (
     <div className="ug-deliver-lb" onClick={onClose}>
       <button className="ug-deliver-close" onClick={onClose}>× close</button>
-      <img src={img.src} alt={img.filename} onClick={(e) => e.stopPropagation()}/>
+      <img src={srcAtWidth(img.src, 1600)} alt={img.filename} onClick={(e) => e.stopPropagation()}/>
       <button className="ug-btn" style={{ position: 'absolute', bottom: '1.5rem' }}
         onClick={(e) => { e.stopPropagation(); onDownload(img.filename); }}>↓ Download</button>
     </div>
@@ -650,7 +660,7 @@ function UnifiedGalleryApp() {
           <div className="ug-grid">
             {images.map((img, i) => (
               <div key={img.filename} className="ug-card" onClick={() => setLbIdx(i)}>
-                <img src={img.src} alt={img.filename} loading="lazy"/>
+                <img src={srcAtWidth(img.src, 600)} alt={img.filename} loading="lazy"/>
                 {!isDelivery && img.feedback?.label && <span className={`ug-card-badge ${img.feedback.label}`}>{img.feedback.label}</span>}
                 {img.versionCount > 1 && <span className="ug-card-ver">{img.versionId}/{img.versionCount}</span>}
                 {isDelivery && session.features?.downloads && (

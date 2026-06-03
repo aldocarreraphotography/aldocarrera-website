@@ -333,7 +333,9 @@ function UnifiedImageRow({ token, sessionKey, img, onSetMain }) {
   const main = (img.versions || []).find(v => v.isMain) || (img.versions || [])[img.versions.length - 1];
   const fb   = img.feedback?.[main?.versionId] || {};
   const imgRef = ugR(null), canvasRef = ugR(null);
-  const mainUrl = `${_ugApi()}/api/ug/${token}/image/${encodeURIComponent(img.filename)}?v=${main?.versionId}`;
+  // 400 px is plenty for the 120-px admin thumb (2× retina). Resized JPEGs
+  // are tiny, cached server-side + at the CDN, and generated once per size.
+  const mainUrl = `${_ugApi()}/api/ug/${token}/image/${encodeURIComponent(img.filename)}?v=${main?.versionId}&w=400`;
 
   return (
     <div className="ad-ug-image-row" style={{ display: 'flex', gap: 16, padding: '14px 0', borderTop: '1px solid var(--rule-soft)' }}>
