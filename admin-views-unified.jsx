@@ -176,11 +176,14 @@ function UnifiedGalleryDetailView({ token, navigate }) {
   ugE(() => { load(); }, [token]);
 
   const existingNames = ugM(() => new Set(Object.keys(g?.images || {})), [g]);
+  // Match the SAME sanitization the server applies on upload, so a local
+  // file like "Foo Bar 001.jpg" matches a stored "Foo_Bar_001.jpg".
+  const sanitize = (n) => String(n || '').replace(/[^A-Za-z0-9._-]+/g, '_');
 
   const onFiles = (files) => {
     if (uploadMode === 'version') {
-      const matched = files.filter(f => existingNames.has(f.name));
-      const ignored = files.filter(f => !existingNames.has(f.name));
+      const matched = files.filter(f => existingNames.has(sanitize(f.name)));
+      const ignored = files.filter(f => !existingNames.has(sanitize(f.name)));
       setPending({ files, matched, ignored });
     } else {
       doUpload(files, 'initial');
@@ -188,9 +191,9 @@ function UnifiedGalleryDetailView({ token, navigate }) {
   };
 
   const doUpload = async (files, mode) => {
-    setBusy(true); setPending(null); setProgress({ done: 0, total: mode === 'version' ? files.filter(f => existingNames.has(f.name)).length : files.length });
+    setBusy(true); setPending(null); setProgress({ done: 0, total: mode === 'version' ? files.filter(f => existingNames.has(sanitize(f.name))).length : files.length });
     try {
-      const toSend = mode === 'version' ? files.filter(f => existingNames.has(f.name)) : files;
+      const toSend = mode === 'version' ? files.filter(f => existingNames.has(sanitize(f.name))) : files;
       if (!toSend.length) { toast('Nothing to upload', 'error'); setBusy(false); setProgress(null); return; }
       const rep = await _ugUpload(token, toSend, mode, (done, total) => setProgress({ done, total }));
       toast(mode === 'version'
@@ -275,6 +278,15 @@ function UnifiedGalleryDetailView({ token, navigate }) {
               <div style={{ fontSize: 13, marginBottom: 10, color: 'var(--ink-muted)' }}>
                 <b>{pending.ignored.length}</b> ignored (no matching image):
                 <span className="ad-mono"> {pending.ignored.slice(0, 6).map(f => f.name).join(', ')}{pending.ignored.length > 6 ? ` +${pending.ignored.length - 6}` : ''}</span>
+              </div>
+            )}
+            {pending.matched.length === 0 && pending.ignored.length > 0 && (
+              <div style={{ fontSize: 12, marginBottom: 10, padding: 8, background: 'rgba(214,62,90,0.08)', border: '1px solid rgba(214,62,90,0.3)', borderRadius: 4 }}>
+                <b>Nothing matched.</b> The gallery has these filenames:
+                <div className="ad-mono" style={{ marginTop: 4, fontSize: 11, color: 'var(--ink-soft)' }}>
+                  {Array.from(existingNames).slice(0, 4).join(', ')}{existingNames.size > 4 ? ` … (${existingNames.size} total)` : ''}
+                </div>
+                <div style={{ marginTop: 4 }}>Re-export with these exact names, or use "Add more" instead to create new images.</div>
               </div>
             )}
             <div style={{ display: 'flex', gap: 8 }}>

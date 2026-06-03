@@ -2533,17 +2533,23 @@ app.post('/api/ug/:token/upload', ugUpload.array('files'), async (req, res) => {
     const files = req.files || [];
     if (!files.length) return res.status(400).json({ error: 'no_files' });
 
-    // First, plan the layering on a clone to learn matched/ignored + the
-    // versionId each file will get — WITHOUT moving bytes for ignored files.
-    const incoming = files.map(f => ({ filename: f.originalname, _tmp: f.path }));
+    // Normalize incoming names with the SAME sanitization the storage uses,
+    // so 'Foo Bar 001.jpg' coming off the user's disk matches a stored
+    // 'Foo_Bar_001.jpg'. We still echo the original name back in the report
+    // so the UI shows what the user uploaded.
+    const incoming = files.map(f => ({
+      original: f.originalname,
+      filename: UG.sanitizeName(f.originalname),
+      _tmp: f.path,
+    }));
 
     let report;
     if (uploadMode === 'version') {
-      // Determine which match before moving bytes
-      const matchedSet = new Set(incoming.filter(i => gallery.images[i.filename]).map(i => i.filename));
+      // Determine which match (by sanitized name) before moving bytes
+      const matchedSet = new Set(incoming.filter(i => gallery.images[i.filename]).map(i => i.original));
       // Discard ignored tmp files
       for (const f of files) if (!matchedSet.has(f.originalname)) fs.promises.unlink(f.path).catch(() => {});
-      const toLayer = incoming.filter(i => matchedSet.has(i.filename));
+      const toLayer = incoming.filter(i => matchedSet.has(i.original));
       // Move matched bytes into place + assign blobPath
       const placed = [];
       for (const it of toLayer) {
@@ -2558,13 +2564,13 @@ app.post('/api/ug/:token/upload', ugUpload.array('files'), async (req, res) => {
     } else {
       // initial: move all bytes, all become v1 (or a fresh version if re-adding)
       const placed = [];
-      for (const f of files) {
-        const fn = f.originalname;
+      for (const it of incoming) {
+        const fn = it.filename;
         const existing = gallery.images[fn];
         const vid = existing ? UG.nextVersionId(existing) : 'v1';
         const dest = UG.galleryImagePath(gallery.token, fn, vid);
         await fs.promises.mkdir(path.dirname(dest), { recursive: true });
-        await _moveFile(f.path, dest);
+        await _moveFile(it._tmp, dest);
         placed.push({ filename: fn, blobPath: `${PUBLIC_URL}/api/ug/${gallery.token}/image/${encodeURIComponent(fn)}?v=${vid}` });
       }
       report = UG.addInitialImages(gallery, placed);
