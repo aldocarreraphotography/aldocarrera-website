@@ -358,6 +358,16 @@ function UnifiedImageRow({ token, sessionKey, img, onSetMain }) {
           {!fb.label && !fb.stars && !(fb.markups || []).length && !(fb.voiceMarkups || []).length && !fb.note && <span className="ad-muted" style={{ fontSize: 12 }}>No feedback yet</span>}
         </div>
         {fb.note && <div style={{ fontSize: 13, color: 'var(--ink-soft)', marginBottom: 8 }}>"{fb.note}"</div>}
+        {(fb.markups || []).some(m => m.comment) && (
+          <div style={{ marginBottom: 8 }}>
+            {(fb.markups || []).filter(m => m.comment).map(m => (
+              <div key={m.id} style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: m.color, flexShrink: 0 }}/>
+                <span style={{ color: 'var(--ink-soft)' }}>"{m.comment}"</span>
+              </div>
+            ))}
+          </div>
+        )}
         {(fb.voiceMarkups || []).length > 0 && (
           <div style={{ marginBottom: 8 }}>
             {fb.voiceMarkups.map(vm => (

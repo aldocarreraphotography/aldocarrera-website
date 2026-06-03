@@ -263,7 +263,7 @@ function MarkupCanvas({ imgUrl, markups, voiceMarkups, activeVoiceId, pendingVoi
 /* ════════════════════════════════════════════════════════
    REVIEW LIGHTBOX
    ════════════════════════════════════════════════════════ */
-function ReviewLightbox({ token, sessionKey, images, idx, setIdx, onClose, onFeedback, onMarkupAdd, onMarkupDelete, onVoiceAdded, onVoiceDeleted, showToast }) {
+function ReviewLightbox({ token, sessionKey, images, idx, setIdx, onClose, onFeedback, onMarkupAdd, onMarkupDelete, onMarkupComment, onVoiceAdded, onVoiceDeleted, showToast }) {
   const [tool, setTool]   = useState('rect');
   const [color, setColor] = useState(COLORS[0]);
   const [recState, setRecState] = useState(null); // null | 'recording' | 'uploading'
@@ -399,10 +399,18 @@ function ReviewLightbox({ token, sessionKey, images, idx, setIdx, onClose, onFee
             {(fb.markups || []).length === 0
               ? <div className="gl-markup-empty">Draw on the image to add markup.</div>
               : (fb.markups || []).map(mk => (
-                <div key={mk.id} className="gl-markup-row">
-                  <span className="gl-markup-dot" style={{ background: mk.color }}/>
-                  <span className="gl-markup-tool mono">{mk.tool}</span>
-                  <button className="gl-markup-del" onClick={() => onMarkupDelete(img.filename, mk.id)}>×</button>
+                <div key={mk.id} className="gl-markup-row" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 0' }}>
+                  <span className="gl-markup-dot" style={{ background: mk.color, width: 10, height: 10, borderRadius: '50%', flexShrink: 0 }}/>
+                  <input
+                    className="gl-markup-input"
+                    type="text"
+                    defaultValue={mk.comment || ''}
+                    placeholder="Add a note…"
+                    onBlur={(e) => { if (e.target.value !== (mk.comment || '')) onMarkupComment(img.filename, mk.id, e.target.value); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
+                    style={{ flex: 1, minWidth: 0, background: 'transparent', border: 'none', borderBottom: '1px solid rgba(255,255,255,0.15)', color: 'inherit', fontFamily: 'inherit', fontSize: 12, padding: '2px 0', outline: 'none' }}
+                  />
+                  <button className="gl-markup-del" onClick={() => onMarkupDelete(img.filename, mk.id)} style={{ background: 'none', border: 'none', color: 'inherit', opacity: 0.5, cursor: 'pointer', padding: '0 4px', fontSize: 14 }}>×</button>
                 </div>
               ))}
           </div>
@@ -596,6 +604,14 @@ function UnifiedGalleryApp() {
     catch (e) { showToast('Delete failed'); }
   }, [token, session]);
 
+  const onMarkupComment = useCallback(async (filename, markupId, comment) => {
+    setImages(prev => prev.map(im => im.filename === filename
+      ? { ...im, feedback: { ...(im.feedback || {}), markups: ((im.feedback || {}).markups || []).map(m => m.id === markupId ? { ...m, comment } : m) } }
+      : im));
+    try { await ugFetch('PATCH', `/api/ug/${token}/feedback/${encodeURIComponent(filename)}/markup/${markupId}`, session.key, { comment }); }
+    catch (e) { showToast('Comment save failed'); }
+  }, [token, session]);
+
   const onVoiceAdded = useCallback((filename, vm) => {
     setImages(prev => prev.map(im => im.filename === filename
       ? { ...im, feedback: { ...(im.feedback || {}), voiceMarkups: [ ...((im.feedback || {}).voiceMarkups || []), vm ] } }
@@ -674,7 +690,7 @@ function UnifiedGalleryApp() {
       {lbIdx !== null && !isDelivery && (
         <ReviewLightbox token={token} sessionKey={session.key} images={images} idx={lbIdx} setIdx={setLbIdx}
           onClose={() => setLbIdx(null)} onFeedback={onFeedback} onMarkupAdd={onMarkupAdd} onMarkupDelete={onMarkupDelete}
-          onVoiceAdded={onVoiceAdded} onVoiceDeleted={onVoiceDeleted} showToast={showToast}/>
+          onMarkupComment={onMarkupComment} onVoiceAdded={onVoiceAdded} onVoiceDeleted={onVoiceDeleted} showToast={showToast}/>
       )}
       {lbIdx !== null && isDelivery && (
         <DeliveryLightbox img={images[lbIdx]} onClose={() => setLbIdx(null)} onDownload={downloadOne}/>

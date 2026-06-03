@@ -2742,6 +2742,31 @@ app.post('/api/ug/:token/feedback/:filename/markup', async (req, res) => {
   }
 });
 
+/* Update a markup (currently just its comment). */
+app.patch('/api/ug/:token/feedback/:filename/markup/:markupId', async (req, res) => {
+  try {
+    const data = await UG.readUnifiedGalleries();
+    const idx = data.galleries.findIndex(g => g.token === req.params.token);
+    if (idx === -1) return res.status(404).json({ error: 'not_found' });
+    const g = data.galleries[idx];
+    if (!_ugCheckKey(g, req)) return res.status(403).json({ error: 'forbidden' });
+    const img = g.images?.[req.params.filename];
+    if (!img) return res.status(404).json({ error: 'image_not_found' });
+    let target = null;
+    for (const fb of Object.values(img.feedback || {})) {
+      target = (fb.markups || []).find(m => m.id === req.params.markupId);
+      if (target) break;
+    }
+    if (!target) return res.status(404).json({ error: 'markup_not_found' });
+    if ('comment' in (req.body || {})) target.comment = String(req.body.comment || '').slice(0, 500);
+    await UG.writeUnifiedGalleries(data);
+    res.json({ ok: true, markup: target });
+  } catch (err) {
+    console.error('[PATCH /api/ug markup]', err?.message);
+    res.status(500).json({ error: 'internal' });
+  }
+});
+
 app.delete('/api/ug/:token/feedback/:filename/markup/:markupId', async (req, res) => {
   try {
     const data = await UG.readUnifiedGalleries();
