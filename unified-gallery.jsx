@@ -399,18 +399,20 @@ function ReviewLightbox({ token, sessionKey, images, idx, setIdx, onClose, onFee
             {(fb.markups || []).length === 0
               ? <div className="gl-markup-empty">Draw on the image to add markup.</div>
               : (fb.markups || []).map(mk => (
-                <div key={mk.id} className="gl-markup-row" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 0' }}>
-                  <span className="gl-markup-dot" style={{ background: mk.color, width: 10, height: 10, borderRadius: '50%', flexShrink: 0 }}/>
-                  <input
-                    className="gl-markup-input"
-                    type="text"
-                    defaultValue={mk.comment || ''}
-                    placeholder="Add a note…"
-                    onBlur={(e) => { if (e.target.value !== (mk.comment || '')) onMarkupComment(img.filename, mk.id, e.target.value); }}
-                    onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
-                    style={{ flex: 1, minWidth: 0, background: 'transparent', border: 'none', borderBottom: '1px solid rgba(255,255,255,0.15)', color: 'inherit', fontFamily: 'inherit', fontSize: 12, padding: '2px 0', outline: 'none' }}
-                  />
-                  <button className="gl-markup-del" onClick={() => onMarkupDelete(img.filename, mk.id)} style={{ background: 'none', border: 'none', color: 'inherit', opacity: 0.5, cursor: 'pointer', padding: '0 4px', fontSize: 14 }}>×</button>
+                <div key={mk.id} className="gl-markup-row">
+                  <span className="gl-markup-dot" style={{ background: mk.color }}/>
+                  <div className="gl-markup-body">
+                    <span className="gl-markup-tool mono">{mk.tool}</span>
+                    <input
+                      className="gl-markup-input"
+                      type="text"
+                      defaultValue={mk.comment || ''}
+                      placeholder="Add a note…"
+                      onBlur={(e) => { if (e.target.value !== (mk.comment || '')) onMarkupComment(img.filename, mk.id, e.target.value); }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
+                    />
+                  </div>
+                  <button className="gl-markup-del" onClick={() => onMarkupDelete(img.filename, mk.id)}>×</button>
                 </div>
               ))}
           </div>
