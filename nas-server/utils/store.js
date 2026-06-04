@@ -105,15 +105,13 @@ export async function writeVideoBytesFromPath(videoId, filename, tmpPath) {
   const dir  = path.join(IMAGES_DIR, '__videos', videoId);
   const dest = path.join(dir, filename);
   await fs.mkdir(dir, { recursive: true });
-  // Try rename first (same filesystem = instant), fall back to copy+unlink
-  try {
-    await fs.rename(tmpPath, dest);
-  } catch (e) {
-    if (e.code === 'EXDEV') {
-      await fs.copyFile(tmpPath, dest);
-      await fs.unlink(tmpPath).catch(() => {});
-    } else { throw e; }
-  }
+  // Always copy+unlink, never rename: on the Synology bind mount, fs.rename can
+  // silently no-op across the overlay (file never lands). copyFile is proven to
+  // work on this volume. Verify size before discarding the temp file.
+  await fs.copyFile(tmpPath, dest);
+  const st = await fs.stat(dest).catch(() => null);
+  if (!st || st.size === 0) throw new Error(`video copy verification failed for ${dest}`);
+  await fs.unlink(tmpPath).catch(() => {});
 }
 export function getVideoTmpDir() {
   return path.join(IMAGES_DIR, '__video_tmp');

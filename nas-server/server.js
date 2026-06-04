@@ -2591,11 +2591,16 @@ app.post('/api/ug/:token/upload', ugUpload.array('files'), async (req, res) => {
 });
 
 async function _moveFile(src, dest) {
-  try { await fs.promises.rename(src, dest); }
-  catch (e) {
-    if (e.code === 'EXDEV') { await fs.promises.copyFile(src, dest); await fs.promises.unlink(src).catch(() => {}); }
-    else throw e;
-  }
+  // IMPORTANT: do NOT use fs.rename here. On this Synology bind mount, rename
+  // can silently no-op across the overlay (the version record gets written but
+  // the bytes never land), and confirmed via test: cp/copyFile WORKS where
+  // rename doesn't. copyFile uses the same create-write semantics as the
+  // project-image writeBytes path, which is proven on this volume.
+  await fs.promises.copyFile(src, dest);
+  // Verify the destination actually has bytes before discarding the temp file.
+  const st = await fs.promises.stat(dest).catch(() => null);
+  if (!st || st.size === 0) throw new Error(`copy verification failed for ${dest}`);
+  await fs.promises.unlink(src).catch(() => {});
 }
 
 /* ── Admin: set which version is "main" for an image ──── */
