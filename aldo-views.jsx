@@ -88,7 +88,7 @@ function FeaturedStrip({ onOpenProject }) {
              the initial paint until the first img decodes. */
           <img
             key={s.blobPath || i}
-            src={s.blobPath}
+            src={window.aldoSized(s.blobPath, 1600)}
             alt={s.projectName}
             className={i === idx ? 'on' : ''}
             fetchpriority={i === 0 ? 'high' : 'low'}
@@ -146,9 +146,10 @@ function Portfolio({ view, onSetView, onOpenProject, onSetCrumb }) {
           >
             <div className="photo" style={placeholderStyle(p)}>
               <img
-                src={p.photo}
+                src={window.aldoSized(p.photo, 1200)}
                 alt={p.name}
                 loading="lazy"
+                decoding="async"
                 className="lazy-img"
                 style={focalImgStyle(p)}
                 onLoad={_markLoaded}
@@ -278,7 +279,7 @@ function ProjectDetail({ project, onOpenPhoto, onOpenVideo }) {
             return (
               <div key={img.filename} className="thumb" onClick={() => onOpenPhoto(it, viewerList)}>
                 <div className="pic" style={placeholderStyle(img)}>
-                  <img src={img.blobPath} alt={img.filename} loading="lazy" className="lazy-img" style={focalImgStyle(img)} onLoad={_markLoaded} ref={_onImgRef}/>
+                  <img src={window.aldoSized(img.blobPath, 800)} alt={img.filename} loading="lazy" decoding="async" className="lazy-img" style={focalImgStyle(img)} onLoad={_markLoaded} ref={_onImgRef}/>
                 </div>
                 <span className="name">{img.filename}</span>
                 <span className="sub">{[it.dims, it.size].filter(Boolean).join(' · ') || 'archive'}</span>
@@ -561,7 +562,7 @@ function Archive({ onOpenPhoto, onSetCrumb, initialFilter, onFilterChange, selec
                   }}
                 >
                   <div className="pic" style={placeholderStyle(it)}>
-                    <img src={it.photo} alt={it.name} loading="lazy" className="lazy-img" style={focalImgStyle(it)} onLoad={_markLoaded} ref={_onImgRef}/>
+                    <img src={window.aldoSized(it.photo, 800)} alt={it.name} loading="lazy" decoding="async" className="lazy-img" style={focalImgStyle(it)} onLoad={_markLoaded} ref={_onImgRef}/>
                     {selectionMode && (
                       <span className={`select-mark ${isSelected ? 'on' : ''}`}>
                         {isSelected ? selectedIds.indexOf(it.id) + 1 : ''}
@@ -600,7 +601,7 @@ function Archive({ onOpenPhoto, onSetCrumb, initialFilter, onFilterChange, selec
                     }}
                   >
                     <td>
-                      <span className="swatch"><img src={it.photo} alt=""/></span>
+                      <span className="swatch"><img src={window.aldoSized(it.photo, 200)} alt="" loading="lazy" decoding="async"/></span>
                       {selectionMode && isSelected && <span className="row-pip">{selectedIds.indexOf(it.id) + 1}</span>}
                     </td>
                     <td className="name">{it.name}</td>
@@ -635,7 +636,7 @@ function PhotoViewer({ photo, list, onPrev, onNext }) {
           {list && idx >= 0 && <> &nbsp;·&nbsp; {String(idx+1).padStart(2,'0')} / {String(list.length).padStart(2,'0')}</>}
         </div>
         {onPrev && <button className="nav prev" onClick={onPrev} aria-label="previous">‹</button>}
-        <img src={photo.photo || photo.src} alt={photo.name}/>
+        <img src={window.aldoSized(photo.photo || photo.src, 2000)} alt={photo.name} decoding="async"/>
         {onNext && <button className="nav next" onClick={onNext} aria-label="next">›</button>}
       </div>
       <div className="info-panel">
@@ -1222,9 +1223,10 @@ function CrewDetail({ name, onOpenProject, onBack }) {
           <article key={project.id} className="project" onClick={() => onOpenProject(project)}>
             <div className="photo" style={placeholderStyle(project)}>
               <img
-                src={project.photo}
+                src={window.aldoSized(project.photo, 1200)}
                 alt={project.name}
                 loading="lazy"
+                decoding="async"
                 className="lazy-img"
                 style={focalImgStyle(project)}
                 onLoad={_markLoaded}
@@ -1288,9 +1290,10 @@ function PrintShop({ onOpenPrint }) {
             <article key={p.id} className="print-card" onClick={() => onOpenPrint && onOpenPrint(p)}>
               <div className="print-photo" style={placeholderStyle(p)}>
                 <img
-                  src={p.blobPath}
+                  src={window.aldoSized(p.blobPath, 800)}
                   alt={p.title}
                   loading="lazy"
+                  decoding="async"
                   className="lazy-img"
                   style={focalImgStyle(p)}
                   onLoad={_markLoaded}
@@ -1324,9 +1327,10 @@ function PrintDetail({ print, onBack }) {
       <div className="print-detail-grid">
         <div className="print-detail-photo" style={placeholderStyle(print)}>
           <img
-            src={print.blobPath}
+            src={window.aldoSized(print.blobPath, 1600)}
             alt={print.title}
             loading="lazy"
+            decoding="async"
             className="lazy-img"
             style={focalImgStyle(print)}
             onLoad={_markLoaded}

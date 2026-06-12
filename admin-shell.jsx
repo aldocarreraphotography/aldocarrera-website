@@ -144,7 +144,7 @@ function SideLink({ item, route }) {
 /* ============================================================
    TOP MENUBAR
    ============================================================ */
-function AdminTopBar({ onLogout }) {
+function AdminTopBar({ onLogout, onMenu, menuOpen }) {
   const [now, setNow] = sS(new Date());
   sE(() => { const t = setInterval(() => setNow(new Date()), 30000); return () => clearInterval(t); }, []);
   const fmt = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
@@ -152,6 +152,14 @@ function AdminTopBar({ onLogout }) {
   return (
     <header className="ad-topbar">
       <div className="ad-topbar-left">
+        <button
+          className="ad-topbar-menu"
+          onClick={onMenu}
+          aria-label={menuOpen ? 'Close navigation' : 'Open navigation'}
+          aria-expanded={menuOpen}
+        >
+          {menuOpen ? '×' : '☰'}
+        </button>
         <span className="ad-topbar-brand"><AldoLogo size={14} fill="currentColor"/> Aldo Carrera · Admin</span>
       </div>
       <div className="ad-topbar-right">
@@ -171,9 +179,13 @@ function AdminTopBar({ onLogout }) {
 function AdminApp() {
   const [authed, setAuthed] = sS(window.AdminStore.isAuthenticated());
   const [route,  setRoute]  = sS(parseRoute(window.location.hash));
+  const [navOpen, setNavOpen] = sS(false);
 
   sE(() => {
-    const onHash = () => setRoute(parseRoute(window.location.hash));
+    const onHash = () => {
+      setRoute(parseRoute(window.location.hash));
+      setNavOpen(false); // navigating closes the mobile drawer
+    };
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
@@ -234,10 +246,11 @@ function AdminApp() {
   }
 
   return (
-    <div className="ad-shell">
-      <AdminTopBar onLogout={handleLogout}/>
+    <div className={`ad-shell ${navOpen ? 'nav-open' : ''}`}>
+      <AdminTopBar onLogout={handleLogout} onMenu={() => setNavOpen(o => !o)} menuOpen={navOpen}/>
       <div className="ad-shell-body">
         <AdminSidebar route={route} onLogout={handleLogout}/>
+        {navOpen && <div className="ad-nav-scrim" onClick={() => setNavOpen(false)}/>}
         <main className="ad-main">
           <div className="ad-main-inner">{view}</div>
         </main>

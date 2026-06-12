@@ -225,6 +225,27 @@ function ClientsEditorView({ navigate }) {
     toast('Client deleted', 'ok');
   };
 
+  /* ── Ordering: array order IS display order on the public site ── */
+  const applyOrder = (sorted, label) => {
+    window.AdminStore.setClientsOrder(sorted.map(c => c.slug));
+    try { window.AdminStore.forceSync(); } catch (_) {}
+    toast(`Sorted ${label}`, 'ok');
+  };
+  const sortAZ = () => applyOrder([...clients].sort((a, b) => a.name.localeCompare(b.name)), 'A–Z');
+  const sortNewest = () => applyOrder(
+    [...clients].sort((a, b) => Math.max(...(b.yearsActive || [0])) - Math.max(...(a.yearsActive || [0]))),
+    'newest first'
+  );
+  const moveClient = (slug, dir) => {
+    const idx = clients.findIndex(c => c.slug === slug);
+    const to = idx + dir;
+    if (idx === -1 || to < 0 || to >= clients.length) return;
+    const next = [...clients];
+    [next[idx], next[to]] = [next[to], next[idx]];
+    window.AdminStore.setClientsOrder(next.map(c => c.slug));
+    try { window.AdminStore.forceSync(); } catch (_) {}
+  };
+
   return (
     <>
       <PageHeader
@@ -237,7 +258,13 @@ function ClientsEditorView({ navigate }) {
         <SectionHead
           eyebrow={`${clients.length} ${clients.length === 1 ? 'client' : 'clients'}`}
           title="Clients"
-          sub="Select clients and collaborators."
+          sub="Order here = order on the public site. Use ↑↓ for manual placement, or one-click sorts."
+          actions={
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Btn variant="ghost" onClick={sortAZ}>Sort A–Z</Btn>
+              <Btn variant="ghost" onClick={sortNewest}>Newest first</Btn>
+            </div>
+          }
         />
         {clients.length === 0
           ? <Empty title="No clients yet" action={<Btn onClick={startNew}>New client</Btn>}/>
@@ -245,6 +272,7 @@ function ClientsEditorView({ navigate }) {
             <table className="ad-table">
               <thead>
                 <tr>
+                  <th style={{ width: 1 }}>Order</th>
                   <th>Name</th>
                   <th>Slug</th>
                   <th>Years active</th>
@@ -253,8 +281,14 @@ function ClientsEditorView({ navigate }) {
                 </tr>
               </thead>
               <tbody>
-                {clients.map(c => (
+                {clients.map((c, i) => (
                   <tr key={c.slug}>
+                    <td style={{ whiteSpace: 'nowrap', width: 1 }}>
+                      <button className="ad-link" onClick={() => moveClient(c.slug, -1)} disabled={i === 0} title="Move up"
+                        style={{ opacity: i === 0 ? 0.25 : 1, padding: '2px 6px' }}>↑</button>
+                      <button className="ad-link" onClick={() => moveClient(c.slug, +1)} disabled={i === clients.length - 1} title="Move down"
+                        style={{ opacity: i === clients.length - 1 ? 0.25 : 1, padding: '2px 6px' }}>↓</button>
+                    </td>
                     <td><b>{c.name}</b></td>
                     <td className="ad-mono ad-muted">{c.slug}</td>
                     <td className="ad-mono">{(c.yearsActive || []).length ? (c.yearsActive || []).join(' · ') : <span className="ad-muted">—</span>}</td>

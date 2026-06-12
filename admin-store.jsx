@@ -844,6 +844,18 @@ const AdminStore = {
     });
   },
   deleteClient(slug)        { patchStore(s => { s.clients = s.clients.filter(c => c.slug !== slug); }); },
+  /* Replace the clients array wholesale — used by the order controls
+     (A–Z / by year / manual move). The public site renders CLIENTS in
+     array order, so this is the single source of display order. */
+  setClientsOrder(slugsInOrder) {
+    patchStore(s => {
+      const bySlug = new Map(s.clients.map(c => [c.slug, c]));
+      const next = slugsInOrder.map(sl => bySlug.get(sl)).filter(Boolean);
+      // Anything not mentioned (race with a concurrent add) keeps its place at the end
+      for (const c of s.clients) if (!slugsInOrder.includes(c.slug)) next.push(c);
+      s.clients = next;
+    });
+  },
 
   getSettings()            { return readStore().settings; },
   setSettings(patch)       { patchStore(s => { s.settings = { ...s.settings, ...patch }; }); return this.getSettings(); },

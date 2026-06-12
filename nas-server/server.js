@@ -485,9 +485,18 @@ app.post('/api/projects/:id/generate-descriptions', async (req, res) => {
 /* Image serve / patch / delete                                        */
 /* ------------------------------------------------------------------ */
 
-// Simple LRU-style resize cache — keyed by "id/filename?w=N", capped at 200 entries.
+/* Three-tier resize cache:
+ *   1. In-memory LRU (600 entries ≈ 80 MB at ~130 KB/variant — fine with 5.7 GB RAM)
+ *   2. Disk (images/__resized/...) — survives container restarts, so the
+ *      Celeron only ever resizes each variant ONCE, ever
+ *   3. Cloudflare edge — immutable cache headers mean repeat visitors
+ *      worldwide never even reach the NAS
+ * Requested widths snap to fixed buckets so the caches stay dense and a
+ * malicious ?w=1..3999 sweep can't fragment them. */
 const _resizeCache = new Map();
-const _RESIZE_CAP  = 200;
+const _RESIZE_CAP  = 600;
+const _W_BUCKETS   = [200, 400, 800, 1200, 1600, 2000];
+const _snapW = (w) => _W_BUCKETS.find(b => b >= w) || 2000;
 async function _resized(bytes, w) {
   try {
     return await sharp(bytes)
@@ -497,25 +506,46 @@ async function _resized(bytes, w) {
       .toBuffer();
   } catch (_) { return bytes; }         // fall back to original on error
 }
+function _resizedDiskPath(id, filename, w) {
+  const safe = (s) => String(s).replace(/[^A-Za-z0-9._-]+/g, '_');
+  return path.join(IMAGES_DIR, '__resized', `w${w}`, safe(id), safe(filename) + '.jpg');
+}
+/* Returns the resized buffer via mem → disk → generate; populates both caches. */
+async function _resizedCached(id, filename, w, readOriginal) {
+  const cacheKey = `${id}/${filename}?w=${w}`;
+  let buf = _resizeCache.get(cacheKey);
+  if (buf) return buf;
+  const diskPath = _resizedDiskPath(id, filename, w);
+  buf = await fs.promises.readFile(diskPath).catch(() => null);
+  if (!buf) {
+    const original = await readOriginal();
+    if (!original) return null;
+    buf = await _resized(original, w);
+    // Persist best-effort — a failed disk write must not fail the request
+    fs.promises.mkdir(path.dirname(diskPath), { recursive: true })
+      .then(() => fs.promises.writeFile(diskPath, buf))
+      .catch(() => {});
+  }
+  if (_resizeCache.size >= _RESIZE_CAP) _resizeCache.delete(_resizeCache.keys().next().value);
+  _resizeCache.set(cacheKey, buf);
+  return buf;
+}
 
 app.get('/api/projects/:id/images/:filename', async (req, res) => {
   const { id, filename } = req.params;
-  const bytes = await readBytes(id, filename).catch(() => null);
-  if (!bytes) return res.status(404).send('Not found');
 
-  const w = parseInt(req.query.w, 10);
-  if (w > 0 && w < 4000) {
-    const cacheKey = `${id}/${filename}?w=${w}`;
-    let resized = _resizeCache.get(cacheKey);
-    if (!resized) {
-      resized = await _resized(bytes, w);
-      if (_resizeCache.size >= _RESIZE_CAP) _resizeCache.delete(_resizeCache.keys().next().value);
-      _resizeCache.set(cacheKey, resized);
-    }
+  const wRaw = parseInt(req.query.w, 10);
+  if (wRaw > 0 && wRaw < 4000) {
+    const w = _snapW(wRaw);
+    const resized = await _resizedCached(id, filename, w, () => readBytes(id, filename).catch(() => null));
+    if (!resized) return res.status(404).send('Not found');
     res.setHeader('Content-Type', 'image/jpeg');
     res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
     return res.send(resized);
   }
+
+  const bytes = await readBytes(id, filename).catch(() => null);
+  if (!bytes) return res.status(404).send('Not found');
 
   res.setHeader('Content-Type', contentTypeFor(filename));
   res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
@@ -2636,10 +2666,14 @@ app.get('/api/ug/:token/image/:filename', async (req, res) => {
     const filePath = _ugFilePath(g, img, v);
     if (!fs.existsSync(filePath)) return res.status(404).end();
 
-    const w = parseInt(req.query.w, 10);
-    if (w > 0 && w < 4000) {
-      const bytes = await fs.promises.readFile(filePath);
-      const resized = await _resized(bytes, w);
+    const wRaw = parseInt(req.query.w, 10);
+    if (wRaw > 0 && wRaw < 4000) {
+      const w = _snapW(wRaw);
+      const resized = await _resizedCached(
+        `ug_${g.token}`, `${img.filename}@${v.versionId}`, w,
+        () => fs.promises.readFile(filePath).catch(() => null)
+      );
+      if (!resized) return res.status(404).end();
       res.setHeader('Content-Type', 'image/jpeg');
       res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
       return res.send(resized);

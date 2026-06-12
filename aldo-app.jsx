@@ -403,7 +403,7 @@ function SelectionPanel({ selectedIds, archive, onRemove, onReorder, onClear, on
             onDragEnd={() => { setDragIdx(null); setHoverIdx(null); }}
           >
             <span className="ord">{i + 1}</span>
-            <img src={it.photo} alt={it.name} draggable={false}/>
+            <img src={window.aldoSized(it.photo, 200)} alt={it.name} draggable={false} loading="lazy" decoding="async"/>
             <button className="chip-remove" onClick={() => onRemove(it.id)} aria-label="Remove">×</button>
           </div>
         ))}
@@ -1951,6 +1951,15 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
     const preload = (el) => {
       if (preloadPromises.has(el)) return preloadPromises.get(el);
       el.loading = 'eager';
+      // If the network request itself fails (tunnel hiccup, dropped conn),
+      // retry ONCE with a cache-buster, then reveal regardless — the pixel
+      // placeholder must never wedge in the "loading" state.
+      el.addEventListener('error', function onErr() {
+        el.removeEventListener('error', onErr);
+        const retry = el.src + (el.src.includes('?') ? '&' : '?') + 'r=1';
+        el.addEventListener('error', () => el.classList.add('lazy-ready', 'lazy-revealed'), { once: true });
+        el.src = retry;
+      }, { once: true });
       const p = el.decode()
         .catch(() => { /* ignore decode failures — we'll still show the img */ })
         .then(() => { el.classList.add('lazy-ready'); });
@@ -1958,7 +1967,7 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
       return p;
     };
 
-    const HOLD_MS = 350; // how long the pixelated placeholder is visible
+    const HOLD_MS = 220; // how long the pixelated placeholder is visible
 
     const reveal = (el) => {
       if (el.classList.contains('lazy-revealed')) return;
@@ -1967,8 +1976,10 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
       Promise.all([preload(el), hold]).then(() => {
         requestAnimationFrame(() => el.classList.add('lazy-revealed'));
       });
-      // Hard fallback: never stay stuck longer than HOLD_MS + 3s
-      setTimeout(() => el.classList.add('lazy-revealed'), HOLD_MS + 3000);
+      // Hard fallback: never stay stuck longer than HOLD_MS + 2.5s — with
+      // sized images (~100-300 KB) anything still loading at that point is
+      // close enough to done that progressive paint beats frozen pixels.
+      setTimeout(() => el.classList.add('lazy-revealed'), HOLD_MS + 2500);
     };
 
     // Far observer: triggers preload well before image enters viewport
@@ -2053,7 +2064,7 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
         {projectImages.map((img) => (
           <div key={img.id} className="mp-project" onClick={() => setOpenPhoto({ photo: img, list: projectImages })}>
             <div className="photo" style={placeholderStyle(img)}>
-              <img src={img.photo} alt={img.name} className="lazy-img" style={focalImgStyle(img)} onLoad={_markLoaded} ref={_onImgRef}/>
+              <img src={window.aldoSized(img.photo, 800)} alt={img.name} decoding="async" className="lazy-img" style={focalImgStyle(img)} onLoad={_markLoaded} ref={_onImgRef}/>
             </div>
             <div className="info"><div className="name">{img.name}</div><div className="year">{img.date ? img.date.slice(0,7) : project.month}</div></div>
           </div>
@@ -2066,7 +2077,7 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
         {PROJECTS.map(p => (
           <div key={p.id} className="mp-project" onClick={() => openProject(p)}>
             <div className="photo" style={placeholderStyle(p)}>
-              <img src={p.photo} alt={p.name} className="lazy-img" style={focalImgStyle(p)} onLoad={_markLoaded} ref={_onImgRef}/>
+              <img src={window.aldoSized(p.photo, 800)} alt={p.name} decoding="async" className="lazy-img" style={focalImgStyle(p)} onLoad={_markLoaded} ref={_onImgRef}/>
             </div>
             <div className="info">
               <div className="name">{p.name}</div>
@@ -2093,7 +2104,7 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
                 {items.map(it => (
                   <div key={it.id} className="thumb" onClick={() => setOpenPhoto({ photo: it, list: items })}>
                     <div className="pic" style={placeholderStyle(it)}>
-                      <img src={it.photo} alt={it.name} className="lazy-img" style={focalImgStyle(it)} onLoad={_markLoaded} ref={_onImgRef}/>
+                      <img src={window.aldoSized(it.photo, 400)} alt={it.name} loading="lazy" decoding="async" className="lazy-img" style={focalImgStyle(it)} onLoad={_markLoaded} ref={_onImgRef}/>
                     </div>
                     <span className="name">{it.name}</span>
                     <span className="sub">{it.client} · {it.size}</span>
@@ -2201,7 +2212,7 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
               <span onClick={() => setOpenPhoto(null)} style={{cursor:'pointer', touchAction:'manipulation'}}>CLOSE ×</span>
             </div>
             <div className="stage">
-              <img src={openPhoto.photo.photo || openPhoto.photo.src} alt={openPhoto.photo.name}/>
+              <img src={window.aldoSized(openPhoto.photo.photo || openPhoto.photo.src, 1600)} alt={openPhoto.photo.name} decoding="async"/>
               {list.length > 1 && (
                 <div className="m-viewer-dots">
                   {list.map((_, di) => (

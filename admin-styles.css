@@ -1223,21 +1223,75 @@ body {
 /* ============================================================
    RESPONSIVE
    ============================================================ */
+/* ── Hamburger: hidden on desktop, shown ≤900px ── */
+.ad-topbar-menu {
+  display: none;
+  background: none; border: none; color: var(--ink);
+  font-size: 18px; line-height: 1; cursor: pointer;
+  padding: 4px 10px 4px 0;
+}
+
 @media (max-width: 900px) {
   .ad-shell-body { grid-template-columns: 1fr; }
-  .ad-sidebar    { display: none; }
+  .ad-topbar-menu { display: block; }
+
+  /* Sidebar becomes a slide-in drawer instead of vanishing */
+  .ad-sidebar {
+    position: fixed;
+    top: var(--ad-topbar-h);
+    left: 0; bottom: 0;
+    width: min(280px, 84vw);
+    z-index: 120;
+    background: var(--window, #faf9f7);
+    border-right: 1px solid var(--rule);
+    transform: translateX(-103%);
+    transition: transform 220ms cubic-bezier(.4,0,.2,1);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    box-shadow: 0 0 0 rgba(0,0,0,0);
+  }
+  .ad-shell.nav-open .ad-sidebar {
+    transform: translateX(0);
+    box-shadow: 12px 0 40px rgba(0,0,0,.18);
+  }
+  .ad-nav-scrim {
+    position: fixed; inset: var(--ad-topbar-h) 0 0 0;
+    z-index: 110;
+    background: rgba(20,17,14,.35);
+    backdrop-filter: blur(2px);
+  }
+
+  /* Bigger touch targets in the drawer */
+  .ad-side-link { padding: 12px 16px; font-size: 14px; }
+
   .ad-grid-2col  { grid-template-columns: 1fr; }
   .ad-stat-grid  { grid-template-columns: repeat(2, 1fr); }
   .ad-form-grid  { grid-template-columns: 1fr; }
   .ad-quick-grid { grid-template-columns: 1fr; }
+
+  /* Tables: never blow the page width — scroll within the card */
+  .ad-table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; white-space: nowrap; }
 }
 @media (max-width: 720px) {
-  .ad-main-inner { padding: 18px 18px 60px; }
-  .ad-page-title { font-size: 28px; }
+  .ad-main-inner { padding: 16px 14px 80px; }
+  .ad-page-title { font-size: 24px; }
+  .ad-page-head { flex-wrap: wrap; gap: 10px; }
   .ad-login { grid-template-columns: 1fr; }
   .ad-login-aside { display: none; }
   .ad-project-row { grid-template-columns: 56px 1fr; }
   .ad-project-counts, .ad-project-actions { grid-column: 1 / -1; }
+
+  /* Touch-friendly controls everywhere */
+  .ad-btn, button.ad-link { min-height: 40px; }
+  .ad-input, .ad-select, input.ad-input, select { min-height: 42px; font-size: 16px; } /* 16px stops iOS zoom-on-focus */
+  textarea.ad-input { font-size: 16px; }
+  .ad-row-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+
+  /* Topbar: drop the date/time clutter on small screens */
+  .ad-topbar-meta, .ad-topbar-sep { display: none; }
+
+  /* Cards breathe a little less on phones */
+  .ad-card { border-radius: 6px; }
 }
 
 /* ============================================================

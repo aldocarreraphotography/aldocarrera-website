@@ -241,6 +241,25 @@ const PRINTS = [];
 
 window.ALDO = { PROJECTS, ARCHIVE, CLIENTS, PHOTOS, SERVICES, ABOUT, SETTINGS, VIDEOS, PRINTS };
 
+/* ── Responsive image sizing ─────────────────────────────────────────────
+   The NAS serves on-the-fly resizes via ?w=N (cached server-side, immutable
+   cache headers → Cloudflare edge-caches every size worldwide). Originals
+   are now 3–8 MB+ full-res uploads; serving them raw is what made the
+   public site crawl. This helper rewrites any NAS image URL to a sized
+   variant. Static /photos/* seeds and data: URLs pass through untouched.
+   Widths snap to a small bucket set so the CDN cache stays dense — every
+   visitor requests the same few variants instead of fragmenting the cache. */
+const _ALDO_W_BUCKETS = [200, 400, 800, 1200, 1600, 2000];
+window.aldoSized = function (src, w) {
+  if (!src || typeof src !== 'string' || !w) return src;
+  if (!/\/api\/(projects|ug)\//.test(src)) return src; // only NAS-served images
+  // Scale by device pixels (capped at 2×): a 390px phone never needs 1600w.
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const ideal = Math.min(w * dpr, 2000);
+  const bucket = _ALDO_W_BUCKETS.find(b => b >= ideal) || 2000;
+  return src + (src.includes('?') ? '&' : '?') + 'w=' + bucket;
+};
+
 /* ============================================================================
    LIVE DATA SYNC — admin ↔ public site
    ============================================================================
