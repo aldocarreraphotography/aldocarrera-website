@@ -107,7 +107,7 @@ async function getAccessToken(legacyToken) {
  * `legacyToken` is optional — only used if refresh-token env vars are
  * not set. New code should pass null/undefined and rely on env config.
  */
-export async function listFolder(legacyToken, path = '') {
+export async function listFolder(legacyToken, path = '', opts = {}) {
   const entries = [];
   const token = await getAccessToken(legacyToken);
 
@@ -123,7 +123,10 @@ export async function listFolder(legacyToken, path = '') {
     body: JSON.stringify({
       path: normalizedPath,
       recursive: false,
-      include_media_info: true,
+      // media_info costs Dropbox extra work and fattens every page of the
+      // response. Callers that only need names/counts (the folder picker)
+      // pass { mediaInfo: false }; the curation flow keeps it on for EXIF.
+      include_media_info: opts.mediaInfo !== false,
     }),
   });
 

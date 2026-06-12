@@ -185,6 +185,10 @@ function ProjectsListView({ navigate }) {
   const [dragFrom, setDragFrom] = vS(null);
   const [dragOver, setDragOver] = vS(null);
 
+  // Pull NAS truth on mount so projects created server-side (Dropbox import,
+  // scripts) appear here — and aren't erased by the next localStorage sync.
+  vE(() => { window.AdminStore.pullFromAPI().catch(() => {}); }, []);
+
   const setSortMode = (mode) => {
     window.AdminStore.setSettings({ projectSort: mode });
   };
@@ -1017,7 +1021,11 @@ function ProjectImagesView({ projectId, navigate }) {
 
       {viewer && (
         <ImageViewer
-          image={viewer}
+          /* Resolve the FRESH image from the store at render time — `viewer`
+             is a snapshot captured when the modal opened, so tag toggles
+             (which update the store) would otherwise never highlight here
+             even though the grid behind shows them correctly. */
+          image={items.find(x => x.filename === viewer.filename) || viewer}
           project={project}
           onClose={() => setViewer(null)}
           onPrev={() => {

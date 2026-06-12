@@ -553,6 +553,13 @@ function ReviewView({ job, direct = false }) {
 
       if (res.projects) {
         const names = res.projects.map(p => p.name).join(', ');
+        // CRITICAL: pull the freshly-imported projects from the NAS into the
+        // admin's local store BEFORE navigating. The import wrote directly to
+        // the NAS; without this pull, localStorage doesn't know the new
+        // projects exist — the list won't show them AND the next admin sync
+        // (which pushes localStorage wholesale) would silently ERASE them.
+        setImportMsg('Refreshing project list…');
+        try { await window.AdminStore.pullFromAPI(); } catch (_) {}
         toast(`Created ${res.projects.length} project${res.projects.length !== 1 ? 's' : ''}: ${names}. ${res.totalImages} images imported.`, 'ok');
         // Navigate to projects
         window.location.hash = '#/projects';

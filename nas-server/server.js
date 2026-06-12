@@ -730,7 +730,26 @@ app.put('/api/admin/sync', async (req, res) => {
   const wrote = [];
 
   if (Array.isArray(body.projects)) {
-    work.push(writeProjects({ projects: body.projects }).then(() => wrote.push('projects')));
+    // Visibility guard: this endpoint REPLACES projects.json wholesale with
+    // the admin's localStorage snapshot. If the snapshot is stale (e.g. a
+    // Dropbox import wrote projects server-side that this browser never
+    // pulled), the sync would silently erase them. The client now pulls
+    // before syncing, but if a drop still happens, scream about it in the
+    // logs and report it in the response so it's never invisible again.
+    let droppedIds = [];
+    work.push(
+      readProjects()
+        .then(existing => {
+          const incoming = new Set(body.projects.map(p => p.id));
+          droppedIds = (existing.projects || []).map(p => p.id).filter(id => !incoming.has(id));
+          if (droppedIds.length) {
+            console.warn(`[admin/sync] ⚠ snapshot DROPS ${droppedIds.length} project(s) that exist on disk: ${droppedIds.join(', ')}`);
+          }
+        })
+        .catch(() => {})
+        .then(() => writeProjects({ projects: body.projects }))
+        .then(() => { wrote.push('projects'); if (droppedIds.length) wrote.push(`projects_dropped:${droppedIds.join(',')}`); })
+    );
   }
   if (body.about && typeof body.about === 'object') {
     work.push(writeAbout(body.about).then(() => wrote.push('about')));
@@ -3389,6 +3408,13 @@ function _makeJobId() {
 }
 
 /** GET /api/dropbox/folders — list root folders with image counts */
+/* Folder list is expensive: 1 root listing + 1 listing PER folder to count
+   images (50 folders ≈ 51 Dropbox round-trips ≈ many seconds). Cache the
+   result for 5 minutes — Dropbox contents don't churn mid-session, and
+   ?refresh=1 forces a re-fetch when they do. */
+let _dbxFoldersCache = { at: 0, folders: null };
+const _DBX_FOLDERS_TTL = 5 * 60 * 1000;
+
 app.get('/api/dropbox/folders', async (req, res) => {
   if (!requireAuth(req, res)) return;
   try {
@@ -3396,17 +3422,21 @@ app.get('/api/dropbox/folders', async (req, res) => {
       return res.json({ error: 'Dropbox not configured — set DROPBOX_APP_KEY + DROPBOX_APP_SECRET + DROPBOX_REFRESH_TOKEN', folders: [] });
     }
 
-    const rootEntries = await listFolder(null, '');
+    if (!req.query.refresh && _dbxFoldersCache.folders && Date.now() - _dbxFoldersCache.at < _DBX_FOLDERS_TTL) {
+      return res.json({ folders: _dbxFoldersCache.folders, cached: true });
+    }
+
+    const rootEntries = await listFolder(null, '', { mediaInfo: false });
     const folderEntries = rootEntries.filter(e => e['.tag'] === 'folder');
 
-    // Count images in each folder (parallel, cap concurrency to 5)
+    // Count images in each folder — lightweight listings, concurrency 10
     const folders = [];
-    const CONCURRENCY = 5;
+    const CONCURRENCY = 10;
     for (let i = 0; i < folderEntries.length; i += CONCURRENCY) {
       const chunk = folderEntries.slice(i, i + CONCURRENCY);
       const results = await Promise.all(chunk.map(async (folder) => {
         try {
-          const children = await listFolder(null, folder.path_display);
+          const children = await listFolder(null, folder.path_display, { mediaInfo: false });
           const imageCount = children.filter(e => e['.tag'] === 'file' && isImageFile(e.name)).length;
           return { name: folder.name, path: folder.path_display, imageCount };
         } catch (err) {
@@ -3418,6 +3448,7 @@ app.get('/api/dropbox/folders', async (req, res) => {
     }
 
     folders.sort((a, b) => a.name.localeCompare(b.name));
+    _dbxFoldersCache = { at: Date.now(), folders };
     res.json({ folders });
   } catch (err) {
     console.error('[dropbox/folders] FATAL:', err?.message, err?.stack);
