@@ -120,16 +120,22 @@
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
 
+# App code must revalidate on every load. With max-age=3600 a deploy did not
+# reach returning visitors for up to an hour — and worse, the browser could
+# mix FRESH and STALE files (e.g. new aldo-views.jsx calling a hook that only
+# exists in the new aldo-app.jsx), producing broken states that are almost
+# impossible to reproduce. must-revalidate + ETag means unchanged files still
+# return a cheap 304, but a deploy is picked up immediately.
 [[headers]]
   for = "/*.jsx"
   [headers.values]
     Content-Type  = "text/babel; charset=utf-8"
-    Cache-Control = "public, max-age=3600"
+    Cache-Control = "public, max-age=0, must-revalidate"
 
 [[headers]]
   for = "/*.css"
   [headers.values]
-    Cache-Control = "public, max-age=3600"
+    Cache-Control = "public, max-age=0, must-revalidate"
 
 [[headers]]
   for = "/*"

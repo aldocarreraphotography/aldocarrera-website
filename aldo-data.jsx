@@ -265,6 +265,14 @@ window.aldoSized = function (src, w) {
   return clean + (clean.includes('?') ? '&' : '?') + 'w=' + bucket;
 };
 
+/* Full-bleed images (mobile cards span the whole viewport). Passing a fixed
+   hint like 800 over-served phones badly: 800 × DPR2 = 1600px for a 375px
+   slot — roughly 3× the bytes needed. Size from the actual viewport instead. */
+window.aldoSizedFull = function (src) {
+  const vw = (typeof window !== 'undefined' && window.innerWidth) || 420;
+  return window.aldoSized(src, Math.min(vw, 560));
+};
+
 /* ============================================================================
    LIVE DATA SYNC — admin ↔ public site
    ============================================================================

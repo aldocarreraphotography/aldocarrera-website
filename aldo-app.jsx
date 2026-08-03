@@ -2090,7 +2090,7 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
         {projectImages.map((img) => (
           <div key={img.id} className="mp-project" onClick={() => setOpenPhoto({ photo: img, list: projectImages })}>
             <div className="photo" style={placeholderStyle(img)}>
-              <img src={window.aldoSized(img.photo, 800)} alt={img.name} decoding="async" className="lazy-img" style={focalImgStyle(img)} onLoad={_markLoaded} ref={_onImgRef}/>
+              <img src={window.aldoSizedFull(img.photo)} alt={img.name} decoding="async" className="lazy-img" style={focalImgStyle(img)} onLoad={_markLoaded} ref={_onImgRef}/>
             </div>
             <div className="info"><div className="name">{img.name}</div><div className="year">{img.date ? img.date.slice(0,7) : project.month}</div></div>
           </div>
@@ -2103,7 +2103,7 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
         {PROJECTS.map(p => (
           <div key={p.id} className="mp-project" onClick={() => openProject(p)}>
             <div className="photo" style={placeholderStyle(p)}>
-              <img src={window.aldoSized(p.photo, 800)} alt={p.name} decoding="async" className="lazy-img" style={focalImgStyle(p)} onLoad={_markLoaded} ref={_onImgRef}/>
+              <img src={window.aldoSizedFull(p.photo)} alt={p.name} decoding="async" className="lazy-img" style={focalImgStyle(p)} onLoad={_markLoaded} ref={_onImgRef}/>
             </div>
             <div className="info">
               <div className="name">{p.name}</div>
