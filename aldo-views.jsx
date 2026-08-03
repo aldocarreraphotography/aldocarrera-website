@@ -60,15 +60,38 @@ function _onImgRef(el) { if (el && el.complete && el.naturalWidth > 0) _revealNo
 /* ============================================================
    PORTFOLIO
    ============================================================ */
+/* Featured rotation.
+   Explicit highlights always win — if enough work is highlighted in admin,
+   that curation is used verbatim. But with only a handful highlighted the
+   strip loops the same 2–3 frames forever, which reads as a broken or
+   half-built homepage. Below MIN_POOL we top up with each project's cover
+   (its chosen cover, else its first frame) so the hero always cycles across
+   the body of work. Adding highlights in admin simply takes over. */
+const FEATURED_MIN_POOL = 8;
+const FEATURED_MAX_POOL = 14;
+
 function FeaturedStrip({ onOpenProject }) {
-  const stars = vsUseMemo(() =>
-    PROJECTS.flatMap(p =>
-      (p.images || [])
-        .filter(i => i.highlighted)
-        .map(i => ({ ...i, projectName: p.name, client: p.client, project: p }))
-    ),
-    []
-  );
+  const stars = vsUseMemo(() => {
+    const decorate = (img, p) => ({ ...img, projectName: p.name, client: p.client, project: p });
+
+    const highlighted = PROJECTS.flatMap(p =>
+      (p.images || []).filter(i => i.highlighted).map(i => decorate(i, p))
+    );
+    if (highlighted.length >= FEATURED_MIN_POOL) return highlighted.slice(0, FEATURED_MAX_POOL);
+
+    // Top up with one cover per project, skipping anything already highlighted.
+    const taken = new Set(highlighted.map(i => i.blobPath));
+    const covers = [];
+    for (const p of PROJECTS) {
+      const imgs = (p.images || []).filter(i => !i.rejected);
+      const cover = imgs.find(i => i.cover) || imgs[0];
+      if (cover && !taken.has(cover.blobPath)) {
+        taken.add(cover.blobPath);
+        covers.push(decorate(cover, p));
+      }
+    }
+    return [...highlighted, ...covers].slice(0, FEATURED_MAX_POOL);
+  }, []);
 
   const [idx, setIdx] = vsUseState(0);
 
@@ -96,12 +119,21 @@ function FeaturedStrip({ onOpenProject }) {
              via the `.on` class; adding lazy-img would override that.
              The pixel placeholder on the wrapper button still shows during
              the initial paint until the first img decodes. */
+          /* Only the current frame and its immediate neighbours get a src.
+             The pool can now be up to 14 images; giving them all a src would
+             fire 14 hero-sized requests on first paint. This keeps at most
+             three in flight while still preloading the next frame so the
+             crossfade never stutters. */
           <img
             key={s.blobPath || i}
-            src={window.aldoSized(s.blobPath, 1600)}
+            src={
+              (i === idx || i === (idx + 1) % stars.length || i === (idx - 1 + stars.length) % stars.length)
+                ? window.aldoSized(s.blobPath, 1600)
+                : undefined
+            }
             alt={s.projectName}
             className={i === idx ? 'on' : ''}
-            fetchpriority={i === 0 ? 'high' : 'low'}
+            fetchPriority={i === idx ? 'high' : 'low'}
             loading={i === 0 ? 'eager' : 'lazy'}
             decoding="async"
             style={focalImgStyle(s)}
@@ -289,7 +321,7 @@ function ProjectDetail({ project, onOpenPhoto, onOpenVideo }) {
             return (
               <div key={img.filename} className="thumb" onClick={() => onOpenPhoto(it, viewerList)}>
                 <div className="pic" style={placeholderStyle(img)}>
-                  <img src={window.aldoSized(img.blobPath, 800)} alt={img.filename} loading="lazy" decoding="async" className="lazy-img" style={focalImgStyle(img)} onLoad={_markLoaded} ref={_onImgRef}/>
+                  <img src={window.aldoSized(img.blobPath, 800)} alt={`${project.name}${project.client ? " — " + project.client : ""}`} loading="lazy" decoding="async" className="lazy-img" style={focalImgStyle(img)} onLoad={_markLoaded} ref={_onImgRef}/>
                 </div>
                 <span className="name">{img.filename}</span>
                 <span className="sub">{[it.dims, it.size].filter(Boolean).join(' · ') || 'archive'}</span>
