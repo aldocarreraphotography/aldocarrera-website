@@ -1937,13 +1937,20 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
     return () => window.removeEventListener('popstate', onPop);
   }, [project]);
 
-  /* ── Two-phase scroll reveal ──
-     Phase 1 (1500px out): force eager-load and pre-decode while still off-screen,
-       mark the image .lazy-ready when it's fully decoded.
-     Phase 2 (in viewport): if already .lazy-ready, snap visibility immediately;
-       otherwise the snap waits at most one paint frame after decode completes.
-     The placeholder (blurDataURL background on the wrapper) shows the whole
-     time the image is hidden — so the swap is pixelated → sharp, no fade. */
+  /* ── Pixel-placeholder reveal ──
+     DESIGN RULE: fail OPEN. The pixel placeholder is a loading affordance,
+     not a gate. An image that has loaded must never stay hidden — a frozen
+     pixel grid reads as "broken", which is worse than no effect at all.
+
+     Previous version gated reveal on IntersectionObserver firing. When IO
+     didn't fire (nested scroll containers, mobile shell remounts) images
+     stayed visibility:hidden FOREVER despite being fully loaded — 50 of 54
+     stuck on the mobile portfolio. Now reveal is driven by load state, with
+     three independent paths to visible:
+       1. onLoad / already-complete ref  (primary — always fires)
+       2. IntersectionObserver           (kept only to preload early)
+       3. periodic sweep                 (backstop for anything missed)
+     The pixel grid still shows during genuine loading, then snaps to sharp. */
   aUseEffect(() => {
     // Cache the decode promise so multiple callers can await the same load
     const preloadPromises = new WeakMap();
@@ -2011,16 +2018,35 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
           img.classList.add('lazy-revealed');
           return;
         }
+        // Already loaded (cache hit / loaded before we attached)? Reveal now.
+        if (img.complete && img.naturalWidth > 0) { reveal(img); return; }
         farObs.observe(img);
         nearObs.observe(img);
       });
     };
 
+    /* Expose the reveal so the img onLoad handler in aldo-views.jsx can call
+       it directly — the one signal guaranteed to fire for every image. */
+    window.__aldoReveal = reveal;
+
     observe();
     const mut = new MutationObserver(observe);
     mut.observe(document.body, { childList: true, subtree: true });
 
-    return () => { farObs.disconnect(); nearObs.disconnect(); mut.disconnect(); };
+    /* Backstop sweep: anything that finished loading but somehow never got
+       revealed gets caught within ~600ms. Cheap (a querySelectorAll over a
+       shrinking set) and guarantees the pixel grid can never freeze. */
+    const sweep = setInterval(() => {
+      const pending = document.querySelectorAll('img.lazy-img:not(.lazy-revealed)');
+      if (!pending.length) return;
+      pending.forEach(img => { if (img.complete && img.naturalWidth > 0) reveal(img); });
+    }, 600);
+
+    return () => {
+      farObs.disconnect(); nearObs.disconnect(); mut.disconnect();
+      clearInterval(sweep);
+      if (window.__aldoReveal === reveal) delete window.__aldoReveal;
+    };
   }, []);
 
   /* ── iOS-safe scroll lock when viewer/video is open ── */

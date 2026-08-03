@@ -42,10 +42,20 @@ function focalImgStyle(src) {
   if (fx == null || fy == null) return undefined;
   return { objectPosition: `${fx}% ${fy}%` };
 }
-/* `onLoad` handler — fades the img in once decoded. Also handles cached
-   images (browser may have already fired `load` before this attached). */
-function _markLoaded(e) { e.currentTarget.classList.add('loaded'); }
-function _onImgRef(el) { if (el && el.complete && el.naturalWidth > 0) el.classList.add('loaded'); }
+/* `onLoad` handler — reveals the img once it has actually loaded.
+   This is the PRIMARY reveal path: unlike IntersectionObserver it is
+   guaranteed to fire for every image that loads, so the pixel placeholder
+   can never freeze on a loaded image. `__aldoReveal` (installed by
+   aldo-app.jsx) applies the brief pixel hold before snapping to sharp;
+   the class fallback keeps images visible if that hook isn't mounted. */
+function _revealNow(el) {
+  if (!el) return;
+  el.classList.add('loaded');
+  if (window.__aldoReveal) window.__aldoReveal(el);
+  else el.classList.add('lazy-revealed');
+}
+function _markLoaded(e) { _revealNow(e.currentTarget); }
+function _onImgRef(el) { if (el && el.complete && el.naturalWidth > 0) _revealNow(el); }
 
 /* ============================================================
    PORTFOLIO
