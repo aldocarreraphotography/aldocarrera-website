@@ -39,9 +39,34 @@ async function writeJson(filename, data) {
 /* Image bytes helpers                                                 */
 /* ------------------------------------------------------------------ */
 
+/* Resolve <IMAGES_DIR>/<sub>/<filename> and refuse anything that could escape
+ * IMAGES_DIR. Route params arrive URL-decoded, so "..%2f..%2fetc%2fpasswd"
+ * reaches us as "../../etc/passwd" — before this guard, path.join happily
+ * walked out of the images tree on the public image/video routes.
+ *   sub      — project id or a caller-built subdir like '__vidposters/<id>';
+ *              may contain '/', but no segment may be empty, '.' or '..'
+ *   filename — must be a bare name (no separators), optional for dir ops
+ * Returns the absolute path, or null when the input is unsafe. */
+const IMAGES_ROOT = path.resolve(IMAGES_DIR);
+function safeImagePath(sub, filename) {
+  if (typeof sub !== 'string' || !sub || sub.includes('\0')) return null;
+  const segs = sub.split(/[\\/]+/);
+  if (segs.some(s => s === '' || s === '.' || s === '..')) return null;
+  if (filename !== undefined) {
+    if (typeof filename !== 'string' || !filename || filename.includes('\0')) return null;
+    if (filename === '.' || filename === '..' || /[\\/]/.test(filename)) return null;
+    segs.push(filename);
+  }
+  const abs = path.resolve(IMAGES_ROOT, ...segs);
+  if (abs === IMAGES_ROOT || !abs.startsWith(IMAGES_ROOT + path.sep)) return null;
+  return abs;
+}
+
 export async function readBytes(projectId, filename) {
+  const target = safeImagePath(projectId, filename);
+  if (!target) return null;
   try {
-    return await fs.readFile(path.join(IMAGES_DIR, projectId, filename));
+    return await fs.readFile(target);
   } catch (e) {
     if (e.code === 'ENOENT') return null;
     throw e;
@@ -49,17 +74,22 @@ export async function readBytes(projectId, filename) {
 }
 
 export async function writeBytes(projectId, filename, buffer) {
-  const dir = path.join(IMAGES_DIR, projectId);
-  await fs.mkdir(dir, { recursive: true });
-  await fs.writeFile(path.join(dir, filename), buffer);
+  const target = safeImagePath(projectId, filename);
+  if (!target) throw new Error('unsafe_path');
+  await fs.mkdir(path.dirname(target), { recursive: true });
+  await fs.writeFile(target, buffer);
 }
 
 export async function deleteImage(projectId, filename) {
-  try { await fs.unlink(path.join(IMAGES_DIR, projectId, filename)); } catch (_) {}
+  const target = safeImagePath(projectId, filename);
+  if (!target) return;
+  try { await fs.unlink(target); } catch (_) {}
 }
 
 export async function deleteProjectImages(projectId) {
-  try { await fs.rm(path.join(IMAGES_DIR, projectId), { recursive: true, force: true }); } catch (_) {}
+  const target = safeImagePath(projectId);
+  if (!target) return;
+  try { await fs.rm(target, { recursive: true, force: true }); } catch (_) {}
 }
 
 /* ------------------------------------------------------------------ */
@@ -93,17 +123,21 @@ export const readPrints  = () => readJson('prints.json').then(d => d || { prints
 export const writePrints = (d) => writeJson('prints.json', d);
 
 export async function readVideoBytes(videoId, filename) {
-  try { return await fs.readFile(path.join(IMAGES_DIR, '__videos', videoId, filename)); }
+  const target = safeImagePath('__videos/' + videoId, filename);
+  if (!target) return null;
+  try { return await fs.readFile(target); }
   catch (e) { if (e.code === 'ENOENT') return null; throw e; }
 }
 export async function writeVideoBytes(videoId, filename, buffer) {
-  const dir = path.join(IMAGES_DIR, '__videos', videoId);
-  await fs.mkdir(dir, { recursive: true });
-  await fs.writeFile(path.join(dir, filename), buffer);
+  const target = safeImagePath('__videos/' + videoId, filename);
+  if (!target) throw new Error('unsafe_path');
+  await fs.mkdir(path.dirname(target), { recursive: true });
+  await fs.writeFile(target, buffer);
 }
 export async function writeVideoBytesFromPath(videoId, filename, tmpPath) {
-  const dir  = path.join(IMAGES_DIR, '__videos', videoId);
-  const dest = path.join(dir, filename);
+  const dest = safeImagePath('__videos/' + videoId, filename);
+  if (!dest) throw new Error('unsafe_path');
+  const dir  = path.dirname(dest);
   await fs.mkdir(dir, { recursive: true });
   // Always copy+unlink, never rename: on the Synology bind mount, fs.rename can
   // silently no-op across the overlay (file never lands). copyFile is proven to
@@ -117,7 +151,9 @@ export function getVideoTmpDir() {
   return path.join(IMAGES_DIR, '__video_tmp');
 }
 export async function deleteVideoFile(videoId, filename) {
-  try { await fs.unlink(path.join(IMAGES_DIR, '__videos', videoId, filename)); } catch (_) {}
+  const target = safeImagePath('__videos/' + videoId, filename);
+  if (!target) return;
+  try { await fs.unlink(target); } catch (_) {}
 }
 
 export const readAbout    = () => readJson('about.json').then(d => d || defaultAbout());
