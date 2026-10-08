@@ -250,6 +250,38 @@ app.delete('/api/projects/:id', async (req, res) => {
   res.status(204).send();
 });
 
+/* Pixel placeholder: a 20px-wide PNG shown with image-rendering: pixelated
+   while the real image loads. PNG keeps hard pixel edges (JPEG/WebP at this
+   size go mushy); a 16-colour palette cuts each one from ~1.9 KB to ~0.5 KB,
+   which matters because /api/public/site ships one per image (433 images ≈
+   800 KB → ~220 KB) on every page load. */
+function _blurPipe(pipe) {
+  return pipe.resize({ width: 20 }).removeAlpha()
+    .png({ palette: true, colours: 16, dither: 0, compressionLevel: 9 });
+}
+async function makeBlurDataURL(input) {
+  const buf = await _blurPipe(sharp(input).rotate()).toBuffer();
+  return `data:image/png;base64,${buf.toString('base64')}`;
+}
+
+/* Existing records still hold full-colour placeholders. /api/public/site
+   serves compacted copies, memoised in memory and warmed at startup so the
+   first visitor after a restart doesn't pay for ~400 conversions. */
+const _compactBlurCache = new Map();
+async function compactBlur(dataUrl) {
+  if (!dataUrl || !dataUrl.startsWith('data:image/png;base64,')) return dataUrl;
+  const hit = _compactBlurCache.get(dataUrl);
+  if (hit) return hit;
+  let out = dataUrl;
+  try {
+    const buf = await _blurPipe(sharp(Buffer.from(dataUrl.slice(22), 'base64'))).toBuffer();
+    const compact = `data:image/png;base64,${buf.toString('base64')}`;
+    if (compact.length < dataUrl.length) out = compact;
+  } catch (_) { /* keep the original */ }
+  _compactBlurCache.set(dataUrl, out);
+  return out;
+}
+
 /* ------------------------------------------------------------------ */
 /* Image upload  (must come before /:id/images/:filename)             */
 /* ------------------------------------------------------------------ */
@@ -290,14 +322,7 @@ app.post('/api/projects/:id/images/upload', upload.single('file'), async (req, r
       const pipe  = sharp(req.file.buffer).rotate();
       const meta  = await pipe.metadata();
       if (meta.width && meta.height && !realDims) realDims = `${meta.width}×${meta.height}`;
-      // 20px PNG — keeps hard pixel edges when scaled up with image-rendering: pixelated.
-      // (JPEG at this size gets mushy from compression; PNG preserves the blocky SHOWstudio look.)
-      const blur  = await sharp(req.file.buffer)
-        .rotate()
-        .resize({ width: 20 })
-        .png()
-        .toBuffer();
-      blurDataURL = `data:image/png;base64,${blur.toString('base64')}`;
+      blurDataURL = await makeBlurDataURL(req.file.buffer);
     } catch (e) {
       console.warn('[upload] blur/meta gen failed:', e?.message);
     }
@@ -323,6 +348,7 @@ app.post('/api/projects/:id/images/upload', upload.single('file'), async (req, r
     project.updatedAt = new Date().toISOString();
     await writeProjects(data);
     res.status(201).json(record);
+    _prewarmResizes(projectId, finalName, req.file.buffer); // after responding — don't slow the upload
   } catch (err) {
     console.error('[upload] FATAL:', err?.message, err?.stack);
     res.status(500).json({ error: 'internal', message: err?.message || 'Unknown error' });
@@ -536,30 +562,55 @@ const _resizeCache = new Map();
 const _RESIZE_CAP  = 600;
 const _W_BUCKETS   = [200, 400, 800, 1200, 1600, 2000];
 const _snapW = (w) => _W_BUCKETS.find(b => b >= w) || 2000;
-async function _resized(bytes, w) {
+/* The public site asks for WebP (&f=webp): ~30% smaller than JPEG at the
+   same visual quality. Plain ?w= keeps returning JPEG for older links. */
+function _encode(pipe, fmt) {
+  return fmt === 'webp'
+    ? pipe.webp({ quality: 80, effort: 4 })
+    : pipe.jpeg({ quality: 82, mozjpeg: true });
+}
+async function _resized(bytes, w, fmt = 'jpeg') {
   try {
-    return await sharp(bytes)
+    return await _encode(sharp(bytes)
       .rotate()                          // auto-orient via EXIF
-      .resize({ width: w, withoutEnlargement: true })
-      .jpeg({ quality: 82, mozjpeg: true })
+      .resize({ width: w, withoutEnlargement: true }), fmt)
       .toBuffer();
   } catch (_) { return bytes; }         // fall back to original on error
 }
-function _resizedDiskPath(id, filename, w) {
+function _resizedDiskPath(id, filename, w, fmt = 'jpeg') {
   const safe = (s) => String(s).replace(/[^A-Za-z0-9._-]+/g, '_');
-  return path.join(IMAGES_DIR, '__resized', `w${w}`, safe(id), safe(filename) + '.jpg');
+  return path.join(IMAGES_DIR, '__resized', `w${w}`, safe(id), safe(filename) + (fmt === 'webp' ? '.webp' : '.jpg'));
 }
+
+/* Pre-generate the sizes the public site requests most, so the first
+   visitor doesn't wait while the NAS shrinks a 60MP original (~3s each).
+   Decodes the original once and writes straight to the disk cache. */
+const _PREWARM_WIDTHS = [400, 800, 1200, 1600];
+async function _prewarmResizes(id, filename, original) {
+  try {
+    const base = sharp(original).rotate();
+    for (const w of _PREWARM_WIDTHS) {
+      const buf = await _encode(base.clone().resize({ width: w, withoutEnlargement: true }), 'webp').toBuffer();
+      const diskPath = _resizedDiskPath(id, filename, w, 'webp');
+      await fs.promises.mkdir(path.dirname(diskPath), { recursive: true });
+      await fs.promises.writeFile(diskPath, buf);
+    }
+  } catch (err) {
+    console.warn('[prewarm] failed for', id, filename, err?.message);
+  }
+}
+
 /* Returns the resized buffer via mem → disk → generate; populates both caches. */
-async function _resizedCached(id, filename, w, readOriginal) {
-  const cacheKey = `${id}/${filename}?w=${w}`;
+async function _resizedCached(id, filename, w, readOriginal, fmt = 'jpeg') {
+  const cacheKey = `${id}/${filename}?w=${w}&f=${fmt}`;
   let buf = _resizeCache.get(cacheKey);
   if (buf) return buf;
-  const diskPath = _resizedDiskPath(id, filename, w);
+  const diskPath = _resizedDiskPath(id, filename, w, fmt);
   buf = await fs.promises.readFile(diskPath).catch(() => null);
   if (!buf) {
     const original = await readOriginal();
     if (!original) return null;
-    buf = await _resized(original, w);
+    buf = await _resized(original, w, fmt);
     // Persist best-effort — a failed disk write must not fail the request
     fs.promises.mkdir(path.dirname(diskPath), { recursive: true })
       .then(() => fs.promises.writeFile(diskPath, buf))
@@ -576,9 +627,10 @@ app.get('/api/projects/:id/images/:filename', async (req, res) => {
   const wRaw = parseInt(req.query.w, 10);
   if (wRaw > 0 && wRaw < 4000) {
     const w = _snapW(wRaw);
-    const resized = await _resizedCached(id, filename, w, () => readBytes(id, filename).catch(() => null));
+    const fmt = req.query.f === 'webp' ? 'webp' : 'jpeg';
+    const resized = await _resizedCached(id, filename, w, () => readBytes(id, filename).catch(() => null), fmt);
     if (!resized) return res.status(404).send('Not found');
-    res.setHeader('Content-Type', 'image/jpeg');
+    res.setHeader('Content-Type', fmt === 'webp' ? 'image/webp' : 'image/jpeg');
     res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
     return res.send(resized);
   }
@@ -886,7 +938,11 @@ app.get('/api/public/site', async (req, res) => {
       if (sortMode === 'client') return (a.client || '').localeCompare(b.client || '');
       return Number(b.year || 0) - Number(a.year || 0);
     });
-  const projects = pickArr(cleanedFromStore, DEFAULT_PROJECTS);
+  const projects = await Promise.all(pickArr(cleanedFromStore, DEFAULT_PROJECTS).map(async p => ({
+    ...p,
+    images: await Promise.all((p.images || []).map(async img =>
+      img.blurDataURL ? { ...img, blurDataURL: await compactBlur(img.blurDataURL) } : img)),
+  })));
 
   const videos = (videosFile?.videos || [])
     .filter(v => v.public !== false)
@@ -3742,6 +3798,7 @@ async function _runImportJob(job, specs) {
         const buffer = await downloadFile(null, dropboxPath);
 
         await writeBytes(projectId, finalName, buffer);
+        await _prewarmResizes(projectId, finalName, buffer);
 
         // Generate blur placeholder + dimensions (same pattern as upload route)
         let blurDataURL = '';
@@ -3750,12 +3807,7 @@ async function _runImportJob(job, specs) {
           const pipe = sharp(buffer).rotate();
           const meta = await pipe.metadata();
           if (meta.width && meta.height) realDims = `${meta.width}×${meta.height}`;
-          const blur = await sharp(buffer)
-            .rotate()
-            .resize({ width: 20 })
-            .png()
-            .toBuffer();
-          blurDataURL = `data:image/png;base64,${blur.toString('base64')}`;
+          blurDataURL = await makeBlurDataURL(buffer);
         } catch (e) {
           console.warn('[dropbox/import] blur/meta gen failed:', e?.message);
         }
@@ -4125,5 +4177,10 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, () => {
   console.log(`[nas-api] listening on port ${PORT}`);
+  // Warm the compact placeholder cache in the background (see compactBlur).
+  readProjects().then(async data => {
+    for (const p of data.projects || []) for (const img of p.images || []) await compactBlur(img.blurDataURL);
+    console.log(`[nas-api] compact placeholders ready (${_compactBlurCache.size})`);
+  }).catch(() => {});
   console.log(`[nas-api] PUBLIC_URL: ${PUBLIC_URL || '(not set — blobPaths will be relative)'}`);
 });

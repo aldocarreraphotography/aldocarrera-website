@@ -257,12 +257,15 @@ window.aldoSized = function (src, w) {
   // views pass through values that were already sized, which produced
   // '?w=800&w=2000' — the server read the FIRST w, so the intended size was
   // silently ignored and every duplicate spelling fragmented the CDN cache.
-  const clean = src.replace(/([?&])w=\d+(&|$)/g, '$1').replace(/[?&]$/, '');
+  const clean = src.replace(/([?&])(w=\d+|f=webp)(?=&|$)/g, '$1').replace(/&&+/g, '&').replace(/[?&]+$/, '').replace('?&', '?');
   // Scale by device pixels (capped at 2×): a 390px phone never needs 1600w.
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const ideal = Math.min(w * dpr, 2000);
   const bucket = _ALDO_W_BUCKETS.find(b => b >= ideal) || 2000;
-  return clean + (clean.includes('?') ? '&' : '?') + 'w=' + bucket;
+  // Project images come back as WebP (~30% smaller than JPEG); the NAS
+  // pre-generates the common widths at import/upload time.
+  const fmt = /\/api\/projects\//.test(clean) ? '&f=webp' : '';
+  return clean + (clean.includes('?') ? '&' : '?') + 'w=' + bucket + fmt;
 };
 
 /* Full-bleed images (mobile cards span the whole viewport). Passing a fixed
