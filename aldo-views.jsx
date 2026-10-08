@@ -237,7 +237,7 @@ function _fmtBytes(n) {
   return n + ' B';
 }
 
-function ProjectDetail({ project, onOpenPhoto, onOpenVideo }) {
+function ProjectDetail({ project, onOpenPhoto, onOpenVideo, onOpenReels }) {
   const images = vsUseMemo(() =>
     (project.images || [])
       .filter(i => !i.rejected)
@@ -345,7 +345,7 @@ function ProjectDetail({ project, onOpenPhoto, onOpenVideo }) {
   return (
     <div className="project-detail-shell">
       <div className="project-detail-main">{mainContent}</div>
-      <BtsPanel videos={btsVideos} onOpenVideo={onOpenVideo}/>
+      <BtsPanel videos={btsVideos} onOpenVideo={onOpenVideo} onOpenReels={onOpenReels}/>
     </div>
   );
 }
@@ -353,14 +353,25 @@ function ProjectDetail({ project, onOpenPhoto, onOpenVideo }) {
 /* ============================================================
    BTS / REELS SIDEBAR
    - Probes each uploaded video's aspect ratio on mount
-   - Vertical videos play INLINE in the sidebar
-   - Horizontal videos open in a properly-sized popup window
+   - Every video opens in a window sized to its aspect ratio, so it can be
+     maximised or made full screen (vertical ones used to play inline in
+     the narrow sidebar tile, with no way to make them bigger)
    ============================================================ */
-function BtsPanel({ videos, onOpenVideo }) {
-  const API_BASE_V = window.API_BASE || '';
+
+/* Poster URL for a video, or null when the browser can't show it. HEIC
+   posters (straight from an iPhone) only render in Safari — elsewhere the
+   tile falls back to a frame from the video itself. */
+const _CAN_SHOW_HEIC = /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent);
+function videoPosterUrl(v) {
+  if (!v.poster) return null;
+  if (/\.hei[cf]$/i.test(v.poster) && !_CAN_SHOW_HEIC) return null;
+  return v.poster.startsWith('__vidposters/')
+    ? `${window.API_BASE || ''}/api/videoposters/${v.poster.slice('__vidposters/'.length)}`
+    : v.poster;
+}
+function BtsPanel({ videos, onOpenVideo, onOpenReels }) {
   // orientations[videoId] = { orient: 'vertical'|'horizontal', w, h }
   const [orientations, setOrientations] = vsUseState({});
-  const [playingId, setPlayingId] = vsUseState(null);
 
   vsUseEffect(() => {
     let cancelled = false;
@@ -400,12 +411,8 @@ function BtsPanel({ videos, onOpenVideo }) {
 
   const handleTileClick = (v) => {
     const meta = orientations[v.id];
-    if (meta && meta.orient === 'vertical') {
-      setPlayingId(playingId === v.id ? null : v.id);
-    } else {
-      // Pass dims so the window can size to the actual aspect ratio (no black bars)
-      onOpenVideo && onOpenVideo(v, meta ? { w: meta.w, h: meta.h } : null);
-    }
+    // Pass dims so the window can size to the actual aspect ratio (no black bars)
+    onOpenVideo && onOpenVideo(v, meta ? { w: meta.w, h: meta.h } : null);
   };
 
   return (
@@ -414,34 +421,22 @@ function BtsPanel({ videos, onOpenVideo }) {
         BTS / REELS
       </div>
       {videos.map(v => {
-        const posterSrc = v.poster
-          ? (v.poster.startsWith('__vidposters/')
-              ? `${API_BASE_V}/api/videoposters/${v.poster.slice('__vidposters/'.length)}`
-              : v.poster)
-          : null;
+        const posterSrc = videoPosterUrl(v);
         const meta = orientations[v.id];
         const isVertical = meta?.orient === 'vertical';
-        const isPlaying = playingId === v.id;
         const fileSrc = v.embedUrl ? null : videoSrc(v);
 
         return (
-          <div key={v.id} className={`bts-tile ${isPlaying ? 'is-playing' : ''}`}>
+          <div key={v.id} className="bts-tile">
             <div
               className="bts-thumb"
               onClick={() => handleTileClick(v)}
               style={meta ? { aspectRatio: `${meta.w} / ${meta.h}` } : undefined}
             >
-              {isPlaying && isVertical && fileSrc ? (
-                <video
-                  className="bts-inline-video"
-                  src={fileSrc}
-                  autoPlay
-                  controls
-                  playsInline
-                  loop
-                />
-              ) : posterSrc ? (
+              {posterSrc ? (
                 <img src={posterSrc} alt={v.title} loading="lazy"/>
+              ) : fileSrc ? (
+                <video src={`${fileSrc}#t=0.5`} muted playsInline preload="metadata"/>
               ) : (
                 <div className="bts-thumb-placeholder">▶</div>
               )}
@@ -453,15 +448,10 @@ function BtsPanel({ videos, onOpenVideo }) {
                 {isVertical && <span className="bts-orient-tag"> · vertical</span>}
               </div>
             </div>
-            {isPlaying && (
-              <button className="bts-close-inline" onClick={() => setPlayingId(null)} aria-label="Stop">
-                ×
-              </button>
-            )}
           </div>
         );
       })}
-      <div className="project-bts-footer" onClick={() => handleTileClick(videos[0])}>
+      <div className="project-bts-footer" onClick={() => onOpenReels ? onOpenReels() : handleTileClick(videos[0])}>
         ↗ View all reels
       </div>
     </div>
@@ -1003,11 +993,7 @@ function videoSrc(v) {
 function ReelCard({ video, onOpen }) {
   const [hover, setHover] = vsUseState(false);
   const videoRef = vsUseRef(null);
-  const posterSrc = video.poster
-    ? (video.poster.startsWith('__vidposters/')
-        ? `${API_BASE_V}/api/videoposters/${video.poster.slice('__vidposters/'.length)}`
-        : video.poster)
-    : null;
+  const posterSrc = videoPosterUrl(video);
   const fileSrc = videoSrc(video);
   const embed   = getEmbedSrc(video.embedUrl);
   const canHoverPreview = !!(fileSrc || embed);
@@ -1030,7 +1016,9 @@ function ReelCard({ video, onOpen }) {
         {/* Layer 1: poster (always rendered, hidden when previewing) */}
         {posterSrc
           ? <img src={posterSrc} alt={video.title} className={`reel-poster ${hover && canHoverPreview ? 'is-hidden' : ''}`}/>
-          : <div className={`reel-thumb-placeholder ${hover && canHoverPreview ? 'is-hidden' : ''}`}>▶</div>
+          : fileSrc
+            ? <video src={`${fileSrc}#t=0.5`} muted playsInline preload="metadata" className={`reel-poster ${hover && canHoverPreview ? 'is-hidden' : ''}`}/>
+            : <div className={`reel-thumb-placeholder ${hover && canHoverPreview ? 'is-hidden' : ''}`}>▶</div>
         }
         {/* Layer 2: hover preview — self-hosted gets a muted <video>, embed gets an iframe with background=1 */}
         {hover && fileSrc && (

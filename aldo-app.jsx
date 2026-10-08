@@ -1605,6 +1605,7 @@ function ArchiveApp() {
               openWindow('project', { project: p });
             }}
             onOpenVideo={(v, dims) => openWindow('video', { video: v, dims })}
+            onOpenReels={() => openWindow('reels')}
             onOpenCrew={(name) => openWindow('crew', { crewName: name || null })}
             onOpenPrint={(p) => openWindow('prints', { print: p })}
             view={view} setView={setView}
@@ -1760,7 +1761,7 @@ function ArchiveApp() {
 /* ============================================================
    WINDOW HOST — content router
    ============================================================ */
-function WindowHost({ win, z, focused, minimized, onMove, onResize, onFocus, onClose, onMinimize, onMaximize, onOpenPhoto, onOpenProject, onOpenVideo, onOpenCrew, onOpenPrint, view, setView, archiveFilter, setArchiveFilter, selectionMode, setSelectionMode, selectedIds, toggleSelection }) {
+function WindowHost({ win, z, focused, minimized, onMove, onResize, onFocus, onClose, onMinimize, onMaximize, onOpenPhoto, onOpenProject, onOpenVideo, onOpenReels, onOpenCrew, onOpenPrint, view, setView, archiveFilter, setArchiveFilter, selectionMode, setSelectionMode, selectedIds, toggleSelection }) {
   let content, toolbar, statusbar;
   const baseCrumb = (parts) => (
     <div className="crumbs">
@@ -1848,7 +1849,7 @@ function WindowHost({ win, z, focused, minimized, onMove, onResize, onFocus, onC
         {baseCrumb(['~', 'portfolio', win.project.year, win.project.id])}
       </div>
     );
-    content = <ProjectDetail project={win.project} onOpenPhoto={onOpenPhoto} onOpenVideo={onOpenVideo}/>;
+    content = <ProjectDetail project={win.project} onOpenPhoto={onOpenPhoto} onOpenVideo={onOpenVideo} onOpenReels={onOpenReels}/>;
     const projImgCount = (win.project.images || []).filter(i => !i.rejected).length;
     statusbar = (
       <div className="window-statusbar">
@@ -2183,13 +2184,7 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
       </div>
     );
   } else if (active === 'reels') {
-    const apiBase = window.API_BASE || '';
-    const posterFor = (v) => {
-      if (!v.poster) return null;
-      return v.poster.startsWith('__vidposters/')
-        ? `${apiBase}/api/videoposters/${v.poster.slice('__vidposters/'.length)}`
-        : v.poster;
-    };
+    const posterFor = videoPosterUrl; // null for HEIC outside Safari → video frame below
     body = (
       <div className="mobile-page reels">
         {VIDEOS.length === 0 ? (
@@ -2205,7 +2200,9 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
                 <div className="m-reel-thumb">
                   {p
                     ? <img src={p} alt={v.title}/>
-                    : <div className="m-reel-placeholder">▶</div>
+                    : videoSrc(v)
+                      ? <video src={`${videoSrc(v)}#t=0.5`} muted playsInline preload="metadata"/>
+                      : <div className="m-reel-placeholder">▶</div>
                   }
                   <div className="m-reel-play">▶</div>
                 </div>
