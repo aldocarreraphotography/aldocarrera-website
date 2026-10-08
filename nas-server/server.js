@@ -16,12 +16,14 @@ import multer   from 'multer';
 import path     from 'node:path';
 import fs       from 'node:fs';
 import sharp    from 'sharp';
+import crypto   from 'node:crypto';
 import exifr    from 'exifr';
 import Anthropic from '@anthropic-ai/sdk';
 
 import { issueToken, verifyToken, authMiddleware, requireAuth } from './utils/auth.js';
 import { verifyCredentials as adminVerifyCredentials, verifyPassword as adminVerifyPassword, setPassword as adminSetPassword, hasStoredPassword as adminHasStoredPassword } from './utils/admin-auth.js';
-import { listFolder, getThumbnailBatch, downloadFile, isImageFile, isConfigured as isDropboxConfigured } from './utils/dropbox.js';
+import { listFolder, getThumbnailBatch, downloadFile, isImageFile, isConfigured as isDropboxConfigured, getAccessToken as getDropboxToken } from './utils/dropbox.js';
+import { backupStatus, runBackup, scheduleBackups } from './utils/backup.js';
 import { Resend } from 'resend';
 import {
   readProjects, writeProjects,
@@ -47,6 +49,7 @@ const app        = express();
 const PORT       = process.env.PORT       || 3001;
 const PUBLIC_URL = (process.env.PUBLIC_URL || '').replace(/\/$/, '');
 const IMAGES_DIR = process.env.IMAGES_DIR || path.join(process.cwd(), 'images');
+const DATA_DIR   = process.env.DATA_DIR   || path.join(process.cwd(), 'data');
 
 if (!process.env.ADMIN_PASSWORD) throw new Error('ADMIN_PASSWORD env var is required');
 
@@ -1660,11 +1663,40 @@ app.get('/api/deck/:token', async (req, res) => {
 /* Gallery Portals — PIN-gated /g/:token pages (admin + public)       */
 /* ------------------------------------------------------------------ */
 
+/* Gallery session keys are HMACs under the server secret: the old
+   base64(token:pin) could be computed by anyone who knew the token and
+   guessed the 4-character PIN. Changing JWT_SECRET re-locks every gallery
+   (clients just re-enter the PIN). */
+function _galleryHmac(text) {
+  return crypto.createHmac('sha256', process.env.JWT_SECRET || 'dev-only').update(text).digest('base64url');
+}
 function _portalKey(token, pin) {
-  return Buffer.from(`${token}:${pin}`).toString('base64').slice(0, 16);
+  return _galleryHmac(`portal:${token}:${pin}`).slice(0, 24);
 }
 function _nextPortalToken() {
-  return Math.random().toString(36).slice(2, 9).toUpperCase();
+  return crypto.randomBytes(9).toString('base64url'); // was 7 chars of Math.random
+}
+
+/* PINs are short, so unlock attempts are rate-limited per IP + gallery:
+   10 wrong guesses per 15 minutes, then 429 until the window passes. */
+const _unlockFails = new Map();
+const _UNLOCK_WINDOW = 15 * 60 * 1000;
+const _UNLOCK_MAX = 10;
+function _clientIp(req) {
+  return req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || 'unknown';
+}
+function _unlockBlocked(req, res, token) {
+  const key = `${_clientIp(req)}|${token}`;
+  const recent = (_unlockFails.get(key) || []).filter(t => Date.now() - t < _UNLOCK_WINDOW);
+  _unlockFails.set(key, recent);
+  if (recent.length < _UNLOCK_MAX) return false;
+  res.status(429).json({ error: 'rate_limited', message: 'Too many attempts. Try again in a few minutes.' });
+  return true;
+}
+function _unlockFailed(req, token) {
+  const key = `${_clientIp(req)}|${token}`;
+  _unlockFails.set(key, [...(_unlockFails.get(key) || []), Date.now()]);
+  if (_unlockFails.size > 5000) _unlockFails.delete(_unlockFails.keys().next().value);
 }
 
 /* GET /api/gallery-portals  — list all portals (admin) */
@@ -1751,9 +1783,13 @@ app.post('/api/gallery-portals/:token/unlock', async (req, res) => {
     const portal = (data.portals || []).find(p => p.token === req.params.token);
     if (!portal) return res.status(404).json({ error: 'not_found' });
 
+    if (_unlockBlocked(req, res, portal.token)) return;
     const { pin } = req.body || {};
     if (!pin) return res.status(400).json({ error: 'pin required' });
-    if (String(pin) !== String(portal.pin)) return res.status(403).json({ error: 'wrong_pin' });
+    if (String(pin) !== String(portal.pin)) {
+      _unlockFailed(req, portal.token);
+      return res.status(403).json({ error: 'wrong_pin' });
+    }
 
     const key = _portalKey(portal.token, portal.pin);
 
@@ -2459,6 +2495,9 @@ function _fmtPortalBytes(n) {
 /* ------------------------------------------------------------------ */
 
 app.get('/api/debug', async (req, res) => {
+  // Public callers (the Docker healthcheck) only learn that the server is up;
+  // the project inventory below includes private project IDs.
+  if (!req.auth?.valid) return res.json({ ok: true, server: 'nas-express' });
   const { readProjects: rp } = await import('./utils/store.js');
   let projectsState = null;
   try {
@@ -2482,6 +2521,43 @@ app.get('/api/debug', async (req, res) => {
       publicUrl:         PUBLIC_URL || '(not set)',
     },
   });
+});
+
+/* ------------------------------------------------------------------ */
+/* Health + backups                                                    */
+/* ------------------------------------------------------------------ */
+
+/* GET /api/health — public, for the uptime monitor (.github/workflows).
+   200 when everything checks out, 503 with the failing checks otherwise.
+   Reveals nothing beyond pass/fail per check. */
+app.get('/api/health', async (req, res) => {
+  const checks = {};
+  const t = async (name, fn) => {
+    try { checks[name] = (await fn()) ?? true; } catch (err) { checks[name] = false; console.warn(`[health] ${name}:`, err?.message); }
+  };
+  await t('data', async () => (await readProjects()).projects.length > 0);
+  await t('disk', async () => {
+    const st = await fs.promises.statfs(IMAGES_DIR);
+    return (st.bavail * st.bsize) / (1024 ** 3) > 20;     // > 20 GB free
+  });
+  await t('dropbox', async () => !!(await getDropboxToken()));
+  // Backups: fail only when one is overdue (>36h), not before the first run.
+  checks.backup = !backupStatus.lastSuccessAt
+    || (Date.now() - Date.parse(backupStatus.lastSuccessAt)) < 36 * 3600 * 1000;
+  const ok = Object.values(checks).every(Boolean);
+  res.setHeader('Cache-Control', 'no-store');
+  res.status(ok ? 200 : 503).json({ ok, checks });
+});
+
+app.get('/api/admin/backup-status', (req, res) => {
+  if (!requireAuth(req, res)) return;
+  res.json(backupStatus);
+});
+
+app.post('/api/admin/backup-now', (req, res) => {
+  if (!requireAuth(req, res)) return;
+  if (!backupStatus.running) runBackup({ dataDir: DATA_DIR, imagesDir: IMAGES_DIR });
+  res.status(202).json({ started: true });
 });
 
 /* ------------------------------------------------------------------ */
@@ -2517,7 +2593,7 @@ function _ugKey(gallery) {
   const secret = gallery.auth?.type === 'pin' ? gallery.auth.pin
                : gallery.auth?.type === 'password' ? gallery.auth.password
                : '';
-  return Buffer.from(`ug:${gallery.token}:${secret}`).toString('base64url').slice(0, 20);
+  return _galleryHmac(`ug:${gallery.token}:${secret}`).slice(0, 24);
 }
 function _ugCheckKey(gallery, req) {
   if (gallery.auth?.type === 'open') return true;
@@ -2820,9 +2896,13 @@ app.post('/api/ug/:token/unlock', async (req, res) => {
     if (g.auth?.type === 'open') {
       return res.json({ ok: true, key: '', title: g.title, mode: g.mode, features: g.features });
     }
+    if (_unlockBlocked(req, res, g.token)) return;
     const supplied = g.auth.type === 'pin' ? String(req.body?.pin || '') : String(req.body?.password || '');
     const secret   = g.auth.type === 'pin' ? String(g.auth.pin || '')     : String(g.auth.password || '');
-    if (!supplied || supplied !== secret) return res.status(403).json({ error: 'wrong_credentials' });
+    if (!supplied || supplied !== secret) {
+      _unlockFailed(req, g.token);
+      return res.status(403).json({ error: 'wrong_credentials' });
+    }
     res.json({ ok: true, key: _ugKey(g), title: g.title, mode: g.mode, features: g.features });
   } catch (err) {
     console.error('[POST /api/ug/:token/unlock]', err?.message);
@@ -4177,6 +4257,7 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, () => {
   console.log(`[nas-api] listening on port ${PORT}`);
+  scheduleBackups({ dataDir: DATA_DIR, imagesDir: IMAGES_DIR });
   // Warm the compact placeholder cache in the background (see compactBlur).
   readProjects().then(async data => {
     for (const p of data.projects || []) for (const img of p.images || []) await compactBlur(img.blurDataURL);

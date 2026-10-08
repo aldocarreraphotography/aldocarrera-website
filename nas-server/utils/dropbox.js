@@ -254,6 +254,44 @@ export async function downloadFile(legacyToken, path) {
 }
 
 /**
+ * Upload (overwrite) a file to Dropbox. Files over 150 MB need upload
+ * sessions, which nothing here produces — callers skip those.
+ */
+export async function uploadFile(path, bytes) {
+  const token = await getAccessToken();
+  const res = await fetch('https://content.dropboxapi.com/2/files/upload', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/octet-stream',
+      // Dropbox-API-Arg must be ASCII: escape anything outside it.
+      'Dropbox-API-Arg': JSON.stringify({ path, mode: 'overwrite', mute: true })
+        .replace(/[\u007f-\uffff]/g, c => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0')),
+    },
+    body: bytes,
+  });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`Dropbox upload failed (${res.status}) for ${path}: ${txt.slice(0, 300)}`);
+  }
+  return res.json();
+}
+
+/** Delete a file or folder (recursively) in Dropbox. */
+export async function deletePath(path) {
+  const token = await getAccessToken();
+  const res = await fetch('https://api.dropboxapi.com/2/files/delete_v2', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path }),
+  });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`Dropbox delete failed (${res.status}) for ${path}: ${txt.slice(0, 300)}`);
+  }
+}
+
+/**
  * True if Dropbox is configured at all (either refresh-token or legacy access-token).
  * Use in route handlers to bail with 503 before doing real work.
  */

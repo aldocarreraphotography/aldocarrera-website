@@ -315,17 +315,6 @@ async function pushToAPI() {
     });
     _lastSync = { at: Date.now(), ok: r.ok };
 
-    // Mirror to Netlify Blobs so gallery portals can read project + image data.
-    // Fire-and-forget — doesn't affect the main sync result.
-    const netlifyToken = localStorage.getItem('aldo_netlify_token');
-    if (netlifyToken) {
-      fetch('/.netlify/functions/admin-sync', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${netlifyToken}` },
-        body: payload,
-      }).catch(() => {});
-    }
-
     return r.ok;
   } catch (_) {
     _lastSync = { at: Date.now(), ok: false };

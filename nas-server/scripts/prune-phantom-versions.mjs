@@ -12,7 +12,7 @@
  *   sudo docker exec -w /app $(sudo docker-compose ps -q api) node scripts/prune-phantom-versions.mjs
  *   sudo docker exec -w /app $(sudo docker-compose ps -q api) node scripts/prune-phantom-versions.mjs --commit
  *   # limit to one gallery:
- *   ... node scripts/prune-phantom-versions.mjs --commit --token X5hHUsX8tjQGgmbTckE
+ *   ... node scripts/prune-phantom-versions.mjs --commit --token <GALLERY_TOKEN>
  */
 
 import fs   from 'node:fs/promises';
