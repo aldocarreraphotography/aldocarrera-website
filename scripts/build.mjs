@@ -18,6 +18,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import Babel from '@babel/standalone';
+import { buildSeo } from './seo.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
@@ -297,9 +298,12 @@ async function main() {
   const nCompiled = await precompilePages();
   console.log(`  ${nCompiled} scripts → dist/build/`);
 
+  console.log('• building SEO pages');
+  const seoSitemap = await buildSeo({ fs, path, DIST });
+
   console.log('• writing robots.txt + sitemap.xml + 404.html');
   await fs.writeFile(path.join(DIST, 'robots.txt'),  ROBOTS);
-  await fs.writeFile(path.join(DIST, 'sitemap.xml'), SITEMAP);
+  await fs.writeFile(path.join(DIST, 'sitemap.xml'), seoSitemap || SITEMAP);
   await fs.writeFile(path.join(DIST, '404.html'),    NOT_FOUND);
 
   // Friendly /admin URL with no extension — a static stub for direct hits,

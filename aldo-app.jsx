@@ -1386,6 +1386,7 @@ function ArchiveApp() {
   }, [deck]);
 
   /* hash routing — for embedding in mobile preview (?mode=mobile&section=portfolio) */
+  const deepLinkedRef = aUseRef(null);
   aUseEffect(() => {
     const applyHash = () => {
       const hash = window.location.hash.replace(/^#/, '');
@@ -1393,6 +1394,19 @@ function ArchiveApp() {
       if (hash.startsWith('crew/')) {
         const name = decodeURIComponent(hash.slice(5));
         if (name) openWindow('crew', { crewName: name });
+        return;
+      }
+      // Project deep link: #project/ID (from the static /work/ pages). Data
+      // may still be loading — the effect re-runs as openWindow changes, and
+      // deepLinkedRef stops it reopening once handled.
+      if (hash.startsWith('project/')) {
+        const id = decodeURIComponent(hash.slice(8));
+        const p = PROJECTS.find(x => x.id === id);
+        if (p && deepLinkedRef.current !== hash) {
+          deepLinkedRef.current = hash;
+          openWindow('project', { project: p });
+          setMobileProject && setMobileProject(p);
+        }
         return;
       }
       const params = new URLSearchParams(hash);
@@ -1403,7 +1417,11 @@ function ArchiveApp() {
     };
     applyHash();
     window.addEventListener('hashchange', applyHash);
-    return () => window.removeEventListener('hashchange', applyHash);
+    window.addEventListener('aldo-data-updated', applyHash);
+    return () => {
+      window.removeEventListener('hashchange', applyHash);
+      window.removeEventListener('aldo-data-updated', applyHash);
+    };
   }, [openWindow]);
 
   /* apply tweaks */
