@@ -1,26 +1,25 @@
 /**
- * scripts/seo.mjs — static, crawlable pages for search engines.
+ * seo.js — crawlable pages for search engines.
  *
  * The public site is a single-page "desktop" app: before JavaScript runs,
  * the homepage contains ~24 characters of text and no links, and every
  * project lives behind an onClick inside a window. Search engines had one
- * thin URL to index. At build time this module fetches the public site data
- * from the NAS and writes:
+ * thin URL to index. This module renders, from the public site data:
  *
- *   /work/<slug>/index.html  one real page per public project (title,
- *                            client, year, credits, description, photos)
- *   /work/index.html         an index of all projects
- *   sitemap.xml              every page, with image entries
- *   + a plain-HTML project index inside #root of index.html, which React
- *     replaces on mount but crawlers read for link discovery.
+ *   /work/<slug>/   one real page per public project (title, client, year,
+ *                   credits, description, photos) — renderProjectPage
+ *   /work/          an index of all projects — renderWorkIndex
+ *   sitemap.xml     every page, with image entries — renderSitemap
+ *   homepage block  a plain-HTML project index for #root — renderHomepageIndex
  *
- * Each project page links to /#project/<ID>, which opens that project in
- * the archive. If the NAS is unreachable at build time the build carries on
- * with the homepage-only sitemap — a deploy is never blocked on SEO.
+ * The NAS serves the first three live (server.js, /seo/*; Netlify proxies
+ * /work/* and /sitemap.xml to it), so a newly published project is
+ * crawlable at once, without a Netlify deploy. scripts/build.mjs uses
+ * renderHomepageIndex to put real links in index.html at deploy time.
+ * Each project page links to /#project/<ID>, which opens it in the archive.
  */
 
 const SITE = 'https://aldocarrera.com';
-const API  = 'https://api.aldocarrera.com';
 
 const CREW_FIELDS = [
   ['Talent', 'crewTalent'], ['Styling', 'crewStylist'], ['Hair', 'crewHair'],
@@ -41,18 +40,7 @@ const slugify = (s) => String(s || '')
 const sized = (url, w, webp = true) =>
   url ? `${url}${url.includes('?') ? '&' : '?'}w=${w}${webp ? '&f=webp' : ''}` : '';
 
-export async function fetchSiteData() {
-  try {
-    const r = await fetch(`${API}/api/public/site?build=${Date.now()}`, { signal: AbortSignal.timeout(30000) });
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    return await r.json();
-  } catch (err) {
-    console.warn(`  ! SEO pages skipped — could not load site data: ${err.message}`);
-    return null;
-  }
-}
-
-function projectPages(data) {
+export function projectPages(data) {
   const used = new Set();
   return (data.projects || [])
     .filter(p => p.public !== false && (p.images || []).length)
@@ -267,23 +255,11 @@ ${[
 `;
 }
 
-/** Writes the SEO pages into dist. Returns the sitemap XML, or null if skipped. */
-export async function buildSeo({ fs, path, DIST }) {
-  const data = await fetchSiteData();
-  if (!data) return null;
+export function renderProjectPage(data, slug) {
   const pages = projectPages(data);
-  for (const page of pages) {
-    const dir = path.join(DIST, 'work', page.slug);
-    await fs.mkdir(dir, { recursive: true });
-    await fs.writeFile(path.join(dir, 'index.html'), projectPage(data, page, pages));
-  }
-  await fs.writeFile(path.join(DIST, 'work', 'index.html'), workIndex(data, pages));
-
-  const indexFile = path.join(DIST, 'index.html');
-  const html = await fs.readFile(indexFile, 'utf8');
-  if (!html.includes('<div id="root"></div>')) throw new Error('index.html: #root placeholder not found');
-  await fs.writeFile(indexFile, html.replace('<div id="root"></div>', `<div id="root">${homepageIndex(data, pages)}</div>`));
-
-  console.log(`  ${pages.length} project pages → dist/work/`);
-  return sitemap(pages);
+  const page = pages.find(x => x.slug === slug);
+  return page ? projectPage(data, page, pages) : null;
 }
+export const renderWorkIndex      = (data) => workIndex(data, projectPages(data));
+export const renderSitemap        = (data) => sitemap(projectPages(data));
+export const renderHomepageIndex  = (data) => homepageIndex(data, projectPages(data));

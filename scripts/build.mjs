@@ -18,7 +18,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import Babel from '@babel/standalone';
-import { buildSeo } from './seo.mjs';
+import { renderHomepageIndex } from '../nas-server/utils/seo.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
@@ -261,6 +261,29 @@ async function precompilePages() {
   return compiled.size;
 }
 
+// ---------------------------------------------------------------- SEO
+
+/* Before JavaScript runs the homepage had ~24 characters and no links. Put a
+   plain-HTML project index inside #root (React replaces it on mount) so
+   crawlers can follow links to the /work/ pages. Skipped, not fatal, if the
+   NAS can't be reached during the build. */
+async function injectHomepageIndex() {
+  let data;
+  try {
+    const r = await fetch(`https://api.aldocarrera.com/api/public/site?build=${Date.now()}`, { signal: AbortSignal.timeout(30000) });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    data = await r.json();
+  } catch (err) {
+    console.warn(`  ! skipped — could not load site data: ${err.message}`);
+    return;
+  }
+  const file = path.join(DIST, 'index.html');
+  const html = await fs.readFile(file, 'utf8');
+  if (!html.includes('<div id="root"></div>')) throw new Error('index.html: #root placeholder not found');
+  await fs.writeFile(file, html.replace('<div id="root"></div>', `<div id="root">${renderHomepageIndex(data)}</div>`));
+  console.log(`  ${data.projects?.length || 0} projects linked`);
+}
+
 // ---------------------------------------------------------------- main
 
 async function main() {
@@ -298,12 +321,14 @@ async function main() {
   const nCompiled = await precompilePages();
   console.log(`  ${nCompiled} scripts → dist/build/`);
 
-  console.log('• building SEO pages');
-  const seoSitemap = await buildSeo({ fs, path, DIST });
+  console.log('• adding crawlable links to the homepage');
+  await injectHomepageIndex();
 
   console.log('• writing robots.txt + sitemap.xml + 404.html');
   await fs.writeFile(path.join(DIST, 'robots.txt'),  ROBOTS);
-  await fs.writeFile(path.join(DIST, 'sitemap.xml'), seoSitemap || SITEMAP);
+  // Fallback only: netlify.toml proxies /sitemap.xml (and /work/*) to the
+  // NAS, which renders them live from current data.
+  await fs.writeFile(path.join(DIST, 'sitemap.xml'), SITEMAP);
   await fs.writeFile(path.join(DIST, '404.html'),    NOT_FOUND);
 
   // Friendly /admin URL with no extension — a static stub for direct hits,

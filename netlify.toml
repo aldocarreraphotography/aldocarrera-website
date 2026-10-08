@@ -38,6 +38,27 @@
 ################################################################
 
 # Admin uses a hash router — any /admin/* path serves Admin.html
+# Crawlable project pages + sitemap, rendered live by the NAS from current
+# data (nas-server/utils/seo.js), so new projects reach Google without a
+# deploy. force: dist/sitemap.xml exists only as a fallback.
+[[redirects]]
+  from   = "/work"
+  to     = "https://api.aldocarrera.com/seo/work"
+  status = 200
+  force  = true
+
+[[redirects]]
+  from   = "/work/*"
+  to     = "https://api.aldocarrera.com/seo/work/:splat"
+  status = 200
+  force  = true
+
+[[redirects]]
+  from   = "/sitemap.xml"
+  to     = "https://api.aldocarrera.com/seo/sitemap.xml"
+  status = 200
+  force  = true
+
 [[redirects]]
   from   = "/admin"
   to     = "/Admin.html"

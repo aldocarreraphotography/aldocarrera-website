@@ -25,6 +25,7 @@ import { verifyCredentials as adminVerifyCredentials, verifyPassword as adminVer
 import { listFolder, getThumbnailBatch, downloadFile, isImageFile, isConfigured as isDropboxConfigured, getAccessToken as getDropboxToken } from './utils/dropbox.js';
 import { backupStatus, runBackup, scheduleBackups } from './utils/backup.js';
 import { videoJobs, queueVideo, queueUnprocessed } from './utils/video.js';
+import { renderProjectPage, renderWorkIndex, renderSitemap } from './utils/seo.js';
 import { Resend } from 'resend';
 import {
   readProjects, writeProjects,
@@ -915,7 +916,9 @@ const DEFAULT_SETTINGS = {
   accentColor: '#d63e5a',
 };
 
-app.get('/api/public/site', async (req, res) => {
+/* Everything a public visitor (or the SEO pages) may see: public projects,
+   videos, prints and site content. */
+async function publicSiteData() {
   const safe = async (fn) => { try { return await fn(); } catch (_) { return null; } };
 
   const [projectsFile, aboutFile, clientsFile, servicesFile, settingsFile, videosFile] = await Promise.all([
@@ -958,10 +961,7 @@ app.get('/api/public/site', async (req, res) => {
     .filter(p => p.active !== false)
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
-  res.setHeader('Content-Type', 'application/json');
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
-  res.setHeader('x-aldo-served', new Date().toISOString());
-  res.json({
+  return {
     projects,
     videos,
     prints,
@@ -969,7 +969,39 @@ app.get('/api/public/site', async (req, res) => {
     clients,
     services: services.slice().sort((a, b) => (a.order || 0) - (b.order || 0)),
     settings,
-  });
+  };
+}
+
+app.get('/api/public/site', async (req, res) => {
+  const data = await publicSiteData();
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+  res.setHeader('x-aldo-served', new Date().toISOString());
+  res.json(data);
+});
+
+/* Crawlable pages, rendered live from the same data (utils/seo.js).
+   Netlify proxies aldocarrera.com/work/* and /sitemap.xml here, so new
+   projects reach Google without a deploy. Short cache: edits show within
+   five minutes. */
+const _sendSeo = (res, type, body) => {
+  res.setHeader('Content-Type', type);
+  res.setHeader('Cache-Control', 'public, max-age=300');
+  res.send(body);
+};
+app.get('/seo/sitemap.xml', async (req, res) => {
+  _sendSeo(res, 'application/xml; charset=utf-8', renderSitemap(await publicSiteData()));
+});
+app.get('/seo/work', async (req, res) => {
+  _sendSeo(res, 'text/html; charset=utf-8', renderWorkIndex(await publicSiteData()));
+});
+app.get('/seo/work/:slug', async (req, res) => {
+  const html = renderProjectPage(await publicSiteData(), req.params.slug);
+  if (!html) {
+    res.status(404);
+    return _sendSeo(res, 'text/html; charset=utf-8', '<!doctype html><title>Not found — Aldo Carrera</title><p>This project isn\'t here. <a href="https://aldocarrera.com/work/">See all work</a></p>');
+  }
+  _sendSeo(res, 'text/html; charset=utf-8', html);
 });
 
 /* ------------------------------------------------------------------ */
