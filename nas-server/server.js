@@ -337,9 +337,34 @@ app.post('/api/projects/:id/images/upload', upload.single('file'), async (req, r
    curation). The SDK reads ANTHROPIC_API_KEY and retries 429/5xx itself. */
 const anthropic = process.env.ANTHROPIC_API_KEY ? new Anthropic({ maxRetries: 4 }) : null;
 
-/* The 5.5 models always think, so a reply can open with thinking blocks —
-   read the text block by type (never content[0]), after checking that the
-   request wasn't declined or cut off. */
+/* Every AI feature runs on Anthropic's most capable model at its highest
+   effort. Those turns can take minutes, so both callers run as background
+   jobs (Cloudflare drops requests after 100s) and stream the reply, which
+   keeps a long request from hitting the SDK's HTTP timeout. */
+const CLAUDE_MODEL  = 'claude-fable-5-1';
+const CLAUDE_EFFORT = 'max';
+
+async function _askClaudeJSON({ system, content, schema }) {
+  const msg = await anthropic.beta.messages.stream({
+    model: CLAUDE_MODEL,
+    max_tokens: 64000,
+    // On a safety-classifier decline, re-run on Anthropic's recommended
+    // fallback model instead of failing.
+    betas: ['server-side-fallback-2026-07-01'],
+    fallbacks: 'default',
+    output_config: {
+      effort: CLAUDE_EFFORT,
+      format: { type: 'json_schema', schema },
+    },
+    system,
+    messages: [{ role: 'user', content }],
+  }).finalMessage();
+  return { data: JSON.parse(_replyText(msg)), usage: msg.usage };
+}
+
+/* Replies can open with thinking blocks — read the text block by type
+   (never content[0]), after checking that the request wasn't declined or
+   cut off. */
 function _replyText(msg) {
   if (msg.stop_reason === 'refusal') {
     const category = msg.stop_details?.category;
@@ -405,6 +430,16 @@ const DESCRIPTIONS_SCHEMA = {
   additionalProperties: false,
 };
 
+/* Descriptions run as a background job the admin polls — see CLAUDE_MODEL. */
+const _descJobs = new Map();
+
+app.get('/api/projects/:id/generate-descriptions/:jobId', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  const job = _descJobs.get(req.params.jobId);
+  if (!job) return res.status(404).json({ error: 'job_not_found' });
+  res.json(job);
+});
+
 app.post('/api/projects/:id/generate-descriptions', async (req, res) => {
   if (!requireAuth(req, res)) return;
   try {
@@ -459,45 +494,26 @@ app.post('/api/projects/:id/generate-descriptions', async (req, res) => {
       `\nGenerate 6 distinct description variants per the system prompt.`,
     ].filter(Boolean).join('\n');
 
-    let msg;
-    try {
-      msg = await anthropic.beta.messages.create({
-        model: 'claude-sonnet-5-5',
-        max_tokens: 16000,
-        // On a safety-classifier decline, re-run on Anthropic's recommended
-        // fallback model instead of failing the request.
-        betas: ['server-side-fallback-2026-07-01'],
-        fallbacks: 'default',
-        output_config: {
-          // Medium keeps the round trip well inside Cloudflare's 100s limit.
-          effort: 'medium',
-          format: { type: 'json_schema', schema: DESCRIPTIONS_SCHEMA },
-        },
-        system: AC_VOICE_SYSTEM,
-        messages: [{
-          role: 'user',
-          content: [...cleanImages, { type: 'text', text: userText }],
-        }],
-      });
-    } catch (err) {
-      if (!(err instanceof Anthropic.APIError)) throw err;
-      console.error('[anthropic]', err.status, err.message?.slice(0, 500));
-      return res.status(502).json({ error: 'anthropic_error', status: err.status, message: err.message?.slice(0, 500) });
-    }
+    _sweepJobs(_descJobs);
+    const jobId = _makeJobId('describe');
+    const job = { id: jobId, status: 'running', result: null, error: null, finishedAt: null };
+    _descJobs.set(jobId, job);
 
-    let variants;
-    try {
-      variants = JSON.parse(_replyText(msg)).variants
-        .filter(v => v && typeof v.text === 'string' && v.text.trim());
-    } catch (e) {
-      console.error('[anthropic reply]', e.message);
-      return res.status(502).json({ error: 'parse_failed', message: e.message });
-    }
+    _askClaudeJSON({
+      system: AC_VOICE_SYSTEM,
+      content: [...cleanImages, { type: 'text', text: userText }],
+      schema: DESCRIPTIONS_SCHEMA,
+    }).then(({ data, usage }) => {
+      const variants = data.variants.filter(v => v && typeof v.text === 'string' && v.text.trim());
+      job.result = { variants, meta: { imagesAnalyzed: cleanImages.length, usage: usage || null } };
+      job.status = 'done';
+    }).catch(err => {
+      console.error('[generate-descriptions]', err?.status || '', err?.message?.slice(0, 500));
+      job.error = err?.message?.slice(0, 500) || 'Unknown error';
+      job.status = 'error';
+    }).finally(() => { job.finishedAt = Date.now(); });
 
-    res.json({
-      variants,
-      meta: { imagesAnalyzed: cleanImages.length, usage: msg.usage || null },
-    });
+    res.json({ jobId });
   } catch (err) {
     console.error('[generate-descriptions] FATAL:', err?.message, err?.stack);
     res.status(500).json({ error: 'internal', message: err?.message || 'Unknown error' });
@@ -3858,21 +3874,7 @@ async function _askClaude(text, photos, schema) {
     content.push({ type: 'text', text: `[${id}] ${shot.label}` });
     content.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: thumbnail } });
   }
-  const msg = await anthropic.beta.messages.create({
-    model: 'claude-opus-5-5',
-    max_tokens: 16000,
-    // On a safety-classifier decline, re-run on Anthropic's recommended
-    // fallback model instead of losing the batch.
-    betas: ['server-side-fallback-2026-07-01'],
-    fallbacks: 'default',
-    output_config: {
-      effort: 'medium',
-      format: { type: 'json_schema', schema },
-    },
-    system: CURATION_SYSTEM,
-    messages: [{ role: 'user', content }],
-  });
-  return JSON.parse(_replyText(msg));
+  return (await _askClaudeJSON({ system: CURATION_SYSTEM, content, schema })).data;
 }
 
 /* Batches are rated independently, so scores bunch up (several 9s per

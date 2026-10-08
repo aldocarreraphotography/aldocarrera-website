@@ -896,10 +896,19 @@ const AdminStore = {
      Returns { variants: [{tone, text}], meta: {imagesAnalyzed, usage} }.
      Throws on auth/server/parse failure — caller shows toast. */
   async generateDescriptions(projectId, brief = '') {
-    return this.apiFetch(`/api/projects/${encodeURIComponent(projectId)}/generate-descriptions`, {
+    const base = `/api/projects/${encodeURIComponent(projectId)}/generate-descriptions`;
+    const res = await this.apiFetch(base, {
       method: 'POST',
       body: JSON.stringify({ brief }),
     });
+    if (!res?.jobId) return res; // older server answered synchronously
+    // Generation runs as a background job on the server (it can take minutes).
+    for (;;) {
+      await new Promise(r => setTimeout(r, 3000));
+      const job = await this.apiFetch(`${base}/${res.jobId}`);
+      if (job.status === 'done') return job.result;
+      if (job.status === 'error') throw new Error(job.error || 'Generation failed');
+    }
   },
 
   /* Multipart upload — does NOT set Content-Type (browser sets the boundary).
