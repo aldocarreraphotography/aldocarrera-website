@@ -147,6 +147,14 @@ export async function writeVideoBytesFromPath(videoId, filename, tmpPath) {
   if (!st || st.size === 0) throw new Error(`video copy verification failed for ${dest}`);
   await fs.unlink(tmpPath).catch(() => {});
 }
+/** Absolute, traversal-checked path of a video file (null if unsafe). */
+export function videoFilePath(videoId, filename) {
+  return safeImagePath('__videos/' + videoId, filename);
+}
+/** Absolute, traversal-checked path under IMAGES_DIR (null if unsafe). */
+export function imageSubPath(sub, filename) {
+  return safeImagePath(sub, filename);
+}
 export function getVideoTmpDir() {
   return path.join(IMAGES_DIR, '__video_tmp');
 }

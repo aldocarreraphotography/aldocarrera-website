@@ -2,6 +2,9 @@ FROM node:24-alpine
 
 WORKDIR /app
 
+# ffmpeg: web versions + poster frames for uploaded videos (utils/video.js)
+RUN apk add --no-cache ffmpeg
+
 COPY package.json ./
 RUN npm install --omit=dev
 

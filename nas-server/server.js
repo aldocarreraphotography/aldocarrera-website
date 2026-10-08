@@ -24,6 +24,7 @@ import { issueToken, verifyToken, authMiddleware, requireAuth } from './utils/au
 import { verifyCredentials as adminVerifyCredentials, verifyPassword as adminVerifyPassword, setPassword as adminSetPassword, hasStoredPassword as adminHasStoredPassword } from './utils/admin-auth.js';
 import { listFolder, getThumbnailBatch, downloadFile, isImageFile, isConfigured as isDropboxConfigured, getAccessToken as getDropboxToken } from './utils/dropbox.js';
 import { backupStatus, runBackup, scheduleBackups } from './utils/backup.js';
+import { videoJobs, queueVideo, queueUnprocessed } from './utils/video.js';
 import { Resend } from 'resend';
 import {
   readProjects, writeProjects,
@@ -32,7 +33,7 @@ import {
   readServices, writeServices,
   readSettings, writeSettings,
   readBytes, writeBytes, deleteImage, deleteProjectImages,
-  readVideos, writeVideos, readVideoBytes, writeVideoBytes, writeVideoBytesFromPath, getVideoTmpDir, deleteVideoFile,
+  readVideos, writeVideos, readVideoBytes, writeVideoBytes, writeVideoBytesFromPath, getVideoTmpDir, deleteVideoFile, videoFilePath,
   readGalleryPortals, writeGalleryPortals,
   readPrints, writePrints,
   readDispatches, writeDispatches,
@@ -1262,9 +1263,12 @@ app.post('/api/videos/:id/upload', videoUpload.single('file'), handleMulterError
     const safeName = (req.file.originalname || `video_${Date.now()}.mp4`).replace(/[^A-Za-z0-9._-]+/g, '_');
     await writeVideoBytesFromPath(video.id, safeName, req.file.path);
     video.blobPath = `__videos/${video.id}/${safeName}`;
+    delete video.originalBlobPath;
     video.updatedAt = new Date().toISOString();
     await writeVideos(data);
     res.json({ blobPath: video.blobPath });
+    // Web version + poster in the background (utils/video.js).
+    queueVideo(video.id, { force: true }).catch(err => console.error('[video] queue failed:', err?.message));
   } catch (err) {
     console.error('[POST /api/videos/:id/upload]', err?.message);
     res.status(500).json({ error: 'internal', message: err?.message || 'Upload failed' });
@@ -1298,30 +1302,46 @@ app.get('/api/videoposters/:videoId/:filename', async (req, res) => {
   res.send(bytes);
 });
 
+/* Streams just the requested byte range from disk. This used to read the
+   whole file into memory for every range request — 90 MB per seek on a 4K
+   clip — which made playback slow to start and stutter. */
 app.get('/api/videos/:id/file/:filename', async (req, res) => {
-  const bytes = await readVideoBytes(req.params.id, req.params.filename).catch(() => null);
-  if (!bytes) return res.status(404).send('Not found');
+  const file = videoFilePath(req.params.id, req.params.filename);
+  const st = file && await fs.promises.stat(file).catch(() => null);
+  if (!st || !st.isFile()) return res.status(404).send('Not found');
   const ext  = req.params.filename.split('.').pop().toLowerCase();
   const mime = ext === 'webm' ? 'video/webm' : ext === 'mov' ? 'video/quicktime' : ext === 'ogg' ? 'video/ogg' : 'video/mp4';
-  const total = bytes.length;
-  const range = req.headers.range;
-  if (range) {
-    const [startStr, endStr] = range.replace(/bytes=/, '').split('-');
-    const start = parseInt(startStr, 10);
-    const end   = endStr ? parseInt(endStr, 10) : total - 1;
+  const total = st.size;
+  res.setHeader('Content-Type',  mime);
+  res.setHeader('Accept-Ranges', 'bytes');
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  const m = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
+  if (m) {
+    let start = m[1] === '' ? total - parseInt(m[2] || '0', 10) : parseInt(m[1], 10);
+    let end   = m[1] !== '' && m[2] !== '' ? parseInt(m[2], 10) : total - 1;
+    start = Math.max(0, start); end = Math.min(end, total - 1);
+    if (!(start <= end)) {
+      res.setHeader('Content-Range', `bytes */${total}`);
+      return res.status(416).end();
+    }
     res.status(206);
     res.setHeader('Content-Range',  `bytes ${start}-${end}/${total}`);
-    res.setHeader('Accept-Ranges',  'bytes');
     res.setHeader('Content-Length', end - start + 1);
-    res.setHeader('Content-Type',   mime);
-    res.send(bytes.slice(start, end + 1));
-  } else {
-    res.setHeader('Content-Type',   mime);
-    res.setHeader('Content-Length', total);
-    res.setHeader('Accept-Ranges',  'bytes');
-    res.setHeader('Cache-Control',  'public, max-age=3600');
-    res.send(bytes);
+    return fs.createReadStream(file, { start, end }).pipe(res);
   }
+  res.setHeader('Content-Length', total);
+  fs.createReadStream(file).pipe(res);
+});
+
+/* Video processing status / re-run (admin) — see utils/video.js. */
+app.get('/api/admin/videos/jobs', (req, res) => {
+  if (!requireAuth(req, res)) return;
+  res.json(videoJobs);
+});
+app.post('/api/admin/videos/process', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  if (req.body?.id) await queueVideo(String(req.body.id), { force: true });
+  res.status(202).json({ queued: req.body?.id ? 1 : await queueUnprocessed() });
 });
 
 /* ------------------------------------------------------------------ */
@@ -4258,6 +4278,8 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
   console.log(`[nas-api] listening on port ${PORT}`);
   scheduleBackups({ dataDir: DATA_DIR, imagesDir: IMAGES_DIR });
+  // Pick up videos that predate processing (or arrived while it was down).
+  setTimeout(() => queueUnprocessed().catch(err => console.warn('[video] startup queue:', err?.message)), 3 * 60 * 1000);
   // Warm the compact placeholder cache in the background (see compactBlur).
   readProjects().then(async data => {
     for (const p of data.projects || []) for (const img of p.images || []) await compactBlur(img.blurDataURL);
