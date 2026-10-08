@@ -15,7 +15,9 @@
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import Babel from '@babel/standalone';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
@@ -190,6 +192,74 @@ const NOT_FOUND = `<!doctype html>
 </html>
 `;
 
+// ---------------------------------------------------------------- precompile
+
+/* The source pages load .jsx through @babel/standalone, compiling in every
+   visitor's browser (~3 MB of compiler + compile time before first paint).
+   The deployed copy is compiled here instead, with the SAME Babel version
+   and the options @babel/standalone uses for <script type="text/babel">
+   (presets react + env, its three default plugins), so behaviour matches.
+   Output goes to /build/<name>.<hash>.js — content-hashed, so netlify.toml
+   can cache it for a year — loaded with `defer`, which runs the scripts in
+   document order after parsing, like Babel did on DOMContentLoaded.
+   Source files are untouched; local dev keeps working without a build. */
+const BABEL_OPTIONS = {
+  presets: ['react', 'env'],
+  plugins: ['transform-class-properties', 'transform-object-rest-spread', 'transform-flow-strip-types'],
+  targets: { browsers: undefined },
+  comments: false,
+};
+
+// React's production builds: ~140 KB vs ~1.1 MB for the development builds.
+const REACT_PROD = {
+  'react': '<script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" integrity="sha384-DGyLxAyjq0f9SPpVevD6IgztCFlnMF6oW/XQGmfe+IsZ8TqEiDrcHkMLKI6fiB/Z" crossorigin="anonymous"></script>',
+  'react-dom': '<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" integrity="sha384-gTGxhz21lVGYNMcdJOyq01Edg0jhn/c22nsx0kyqP0TxaV5WVdsSH1fSDUf5YJj1" crossorigin="anonymous"></script>',
+};
+
+async function writeCompiled(name, code) {
+  const out = Babel.transform(code, { ...BABEL_OPTIONS, filename: name + '.jsx' }).code;
+  const hash = crypto.createHash('sha256').update(out).digest('hex').slice(0, 10);
+  const rel = `build/${name}.${hash}.js`;
+  await fs.mkdir(path.join(DIST, 'build'), { recursive: true });
+  await fs.writeFile(path.join(DIST, rel), out);
+  return '/' + rel;
+}
+
+async function precompilePages() {
+  const compiled = new Map(); // jsx path → /build/... url
+  const pages = (await fs.readdir(DIST)).filter(f => f.endsWith('.html'));
+  for (const page of pages) {
+    const file = path.join(DIST, page);
+    let html = await fs.readFile(file, 'utf8');
+    if (!/text\/babel/.test(html)) continue;
+
+    // External <script type="text/babel" src="x.jsx">
+    for (const m of [...html.matchAll(/<script type="text\/babel" src="\/?([^"]+\.jsx)"><\/script>/g)]) {
+      const rel = m[1];
+      if (!compiled.has(rel)) {
+        const code = await fs.readFile(path.join(DIST, rel), 'utf8');
+        compiled.set(rel, await writeCompiled(rel.replace(/\.jsx$/, ''), code));
+      }
+      html = html.replace(m[0], `<script defer src="${compiled.get(rel)}"></script>`);
+    }
+    // Inline <script type="text/babel"> blocks
+    let n = 0;
+    for (const m of [...html.matchAll(/<script type="text\/babel">([\s\S]*?)<\/script>/g)]) {
+      const url = await writeCompiled(`${page.replace(/\.html$/, '')}-inline-${++n}`, m[1]);
+      html = html.replace(m[0], `<script defer src="${url}"></script>`);
+    }
+    if (/text\/babel/.test(html)) throw new Error(`${page}: unhandled text/babel script`);
+
+    html = html
+      .replace(/<script src="https:\/\/unpkg\.com\/@babel\/standalone@[^"]+"[^>]*><\/script>\n?/g, '')
+      .replace(/<script src="https:\/\/unpkg\.com\/react@18\.3\.1\/umd\/react\.development\.js"[^>]*><\/script>/g, REACT_PROD['react'])
+      .replace(/<script src="https:\/\/unpkg\.com\/react-dom@18\.3\.1\/umd\/react-dom\.development\.js"[^>]*><\/script>/g, REACT_PROD['react-dom']);
+    await fs.writeFile(file, html);
+    console.log(`  · ${page}: compiled`);
+  }
+  return compiled.size;
+}
+
 // ---------------------------------------------------------------- main
 
 async function main() {
@@ -222,6 +292,10 @@ async function main() {
     }
     await copyDir(src, dest);
   }
+
+  console.log('• precompiling JSX');
+  const nCompiled = await precompilePages();
+  console.log(`  ${nCompiled} scripts → dist/build/`);
 
   console.log('• writing robots.txt + sitemap.xml + 404.html');
   await fs.writeFile(path.join(DIST, 'robots.txt'),  ROBOTS);

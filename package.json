@@ -20,6 +20,7 @@
     "jsonwebtoken": "^9.0.2"
   },
   "devDependencies": {
+    "@babel/standalone": "^7.29.0",
     "netlify-cli": "^17.36.0",
     "serve": "^14.2.4"
   }

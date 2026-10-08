@@ -10,6 +10,10 @@
   command  = "npm run build"
   publish  = "dist"
   functions = "functions"
+  # Each production deploy costs 15 Netlify credits. Skip the build when a
+  # push only touches the NAS server (deployed separately via docker) or
+  # docs — exit 0 = nothing changed for Netlify = no deploy.
+  ignore = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- . ':(exclude)nas-server' ':(exclude)*.md'"
 
 [functions]
   node_bundler = "esbuild"
@@ -126,6 +130,14 @@
 # exists in the new aldo-app.jsx), producing broken states that are almost
 # impossible to reproduce. must-revalidate + ETag means unchanged files still
 # return a cheap 304, but a deploy is picked up immediately.
+# Precompiled app code (scripts/build.mjs). Filenames carry a content hash,
+# so a deploy always ships new URLs and these can be cached for a year —
+# returning visitors make no requests to Netlify for them at all.
+[[headers]]
+  for = "/build/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
 [[headers]]
   for = "/*.jsx"
   [headers.values]
