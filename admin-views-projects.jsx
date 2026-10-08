@@ -572,7 +572,7 @@ function ProjectEditorView({ projectId, navigate }) {
             <Field label="Production">
               <TextInput value={draft.crewProduction || ''} onChange={(v) => set('crewProduction', v)} placeholder=""/>
             </Field>
-            <Field label="Photo Assistant(s)">
+            <Field label="Agency">
               <TextInput value={draft.crewAgency || ''} onChange={(v) => set('crewAgency', v)} placeholder=""/>
             </Field>
             <Field label="Photo Assistant(s)">
