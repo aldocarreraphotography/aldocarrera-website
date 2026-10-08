@@ -9,6 +9,7 @@
     "dev": "node --watch server.js"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.132.1",
     "@google-analytics/data": "^4.0.0",
     "archiver": "^7.0.1",
     "cors": "^2.8.5",

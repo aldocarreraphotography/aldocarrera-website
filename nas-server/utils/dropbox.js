@@ -102,7 +102,8 @@ async function getAccessToken(legacyToken) {
 
 /**
  * List files/folders in a Dropbox path. Auto-paginates.
- * Returns array of Dropbox metadata entries.
+ * Returns array of Dropbox metadata entries. Pass { recursive: true } to
+ * include everything below `path`, not just its direct children.
  *
  * `legacyToken` is optional — only used if refresh-token env vars are
  * not set. New code should pass null/undefined and rely on env config.
@@ -122,7 +123,9 @@ export async function listFolder(legacyToken, path = '', opts = {}) {
     },
     body: JSON.stringify({
       path: normalizedPath,
-      recursive: false,
+      // Shoots are usually delivered as subfolders (FULL RES / LOW RES,
+      // Selects, Look 1…), so curation lists the whole tree.
+      recursive: !!opts.recursive,
       // media_info costs Dropbox extra work and fattens every page of the
       // response. Callers that only need names/counts (the folder picker)
       // pass { mediaInfo: false }; the curation flow keeps it on for EXIF.

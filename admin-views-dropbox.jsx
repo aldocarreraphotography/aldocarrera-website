@@ -45,6 +45,7 @@ const { useState: dbS, useEffect: dbE, useRef: dbRef } = React;
   margin-bottom: 12px; flex-wrap: wrap; }
 .dbx-folder-count { font-family: "IBM Plex Mono", monospace; font-size: 11px;
   color: var(--ink-muted); margin-left: auto; }
+.dbx-folder-search { width: 260px; }
 
 .dbx-folder-table { width: 100%; border-collapse: collapse; }
 .dbx-folder-row { border-bottom: 1px solid var(--rule); }
@@ -88,6 +89,7 @@ const { useState: dbS, useEffect: dbE, useRef: dbRef } = React;
   border-bottom: 1px solid var(--rule); }
 .dbx-folder-title { font-size: 16px; font-weight: 600; margin: 0 0 4px; }
 .dbx-folder-meta { font-size: 12px; font-family: "IBM Plex Mono", monospace; color: var(--ink-muted); }
+.dbx-folder-warning { font-size: 12px; color: #b45309; margin-top: 4px; max-width: 420px; }
 .dbx-folder-fields { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; flex: 1; }
 .dbx-field-group { display: flex; flex-direction: column; gap: 4px; }
 .dbx-field-label { font-size: 10px; text-transform: uppercase; letter-spacing: .08em;
@@ -210,15 +212,24 @@ function FolderPicker({ onAnalyze }) {
   const [analyzing, setAnalyzing]   = dbS(false);
   const [noToken, setNoToken]       = dbS(false);
   const [mode, setMode]             = dbS('ai');    // 'ai' | 'direct'
+  const [filter, setFilter]         = dbS('');
+  // path → photo count (subfolders included) | 'loading' | 'error'. Counted
+  // on demand: the Dropbox root has hundreds of folders, and counting them
+  // all up front took about a minute.
+  const [counts, setCounts]         = dbS({});
 
   dbE(() => {
     window.AdminStore.apiFetch('/api/dropbox/folders')
       .then(res => {
-        if (res.error === 'DROPBOX_ACCESS_TOKEN not configured') {
+        if (res.error && /not configured/i.test(res.error)) {
           setNoToken(true);
           setFolders([]);
         } else {
-          setFolders(res.folders || []);
+          const list = res.folders || [];
+          const known = {};
+          for (const f of list) if (typeof f.imageCount === 'number') known[f.path] = f.imageCount;
+          setCounts(known);
+          setFolders(list);
         }
       })
       .catch(err => {
@@ -227,7 +238,16 @@ function FolderPicker({ onAnalyze }) {
       });
   }, []);
 
+  const countFolder = (path) => {
+    if (counts[path] !== undefined) return;
+    setCounts(prev => ({ ...prev, [path]: 'loading' }));
+    window.AdminStore.apiFetch(`/api/dropbox/folder-count?path=${encodeURIComponent(path)}`)
+      .then(res => setCounts(prev => ({ ...prev, [path]: res.imageCount })))
+      .catch(() => setCounts(prev => ({ ...prev, [path]: 'error' })));
+  };
+
   const toggleFolder = (path) => {
+    if (!checked.has(path)) countFolder(path);
     setChecked(prev => {
       const next = new Set(prev);
       next.has(path) ? next.delete(path) : next.add(path);
@@ -235,8 +255,14 @@ function FolderPicker({ onAnalyze }) {
     });
   };
 
+  const q = filter.trim().toLowerCase();
+  const shownFolders = (folders || []).filter(f => !q || f.name.toLowerCase().includes(q));
+
   const selectAll = () => {
-    if (folders) setChecked(new Set(folders.map(f => f.path)));
+    // Counting is one recursive Dropbox listing per folder — don't fire
+    // hundreds at once when everything is selected.
+    if (shownFolders.length <= 50) shownFolders.forEach(f => countFolder(f.path));
+    setChecked(prev => new Set([...prev, ...shownFolders.map(f => f.path)]));
   };
 
   const deselectAll = () => setChecked(new Set());
@@ -317,24 +343,40 @@ function FolderPicker({ onAnalyze }) {
     );
   }
 
-  const foldersWithImages = folders.filter(f => f.imageCount > 0);
-  const totalImages = foldersWithImages.reduce((s, f) => s + f.imageCount, 0);
+  const selectedImages = Array.from(checked)
+    .reduce((s, p) => s + (typeof counts[p] === 'number' ? counts[p] : 0), 0);
+
+  const countLabel = (path) => {
+    const c = counts[path];
+    if (c === undefined) return null;
+    if (c === 'loading') return 'counting…';
+    if (c === 'error') return 'count failed';
+    return `${c.toLocaleString()} images`;
+  };
 
   return (
     <div className="dbx-wizard">
       <StepIndicator current={1} />
 
       <div className="dbx-folder-controls">
-        <Btn variant="ghost" size="sm" onClick={selectAll}>Select all</Btn>
+        <input
+          className="dbx-input dbx-folder-search"
+          type="search"
+          placeholder="Search folders…"
+          value={filter}
+          onChange={e => setFilter(e.target.value)}
+        />
+        <Btn variant="ghost" size="sm" onClick={selectAll}>{q ? 'Select shown' : 'Select all'}</Btn>
         <Btn variant="ghost" size="sm" onClick={deselectAll}>Deselect all</Btn>
         <span className="dbx-folder-count">
-          {folders.length} folders · {totalImages.toLocaleString()} images total
+          {q ? `${shownFolders.length} of ${folders.length}` : folders.length} folders
+          {checked.size > 0 && ` · ${checked.size} selected · ${selectedImages.toLocaleString()} images (subfolders included)`}
         </span>
       </div>
 
       <table className="dbx-folder-table">
         <tbody>
-          {folders.map(folder => (
+          {shownFolders.map(folder => (
             <tr
               key={folder.path}
               className={`dbx-folder-row ${checked.has(folder.path) ? 'is-checked' : ''}`}
@@ -354,7 +396,7 @@ function FolderPicker({ onAnalyze }) {
                 <div className="dbx-folder-name">{folder.name}</div>
               </td>
               <td className="dbx-folder-cell" style={{ textAlign: 'right' }}>
-                <span className="dbx-img-badge">{folder.imageCount} images</span>
+                {countLabel(folder.path) && <span className="dbx-img-badge">{countLabel(folder.path)}</span>}
               </td>
             </tr>
           ))}
@@ -424,6 +466,12 @@ function ProcessingView({ jobId, onDone }) {
           clearInterval(pollRef.current);
         }
       } catch (err) {
+        if (err?.status === 404) {
+          // The server restarted (jobs live in memory) — polling won't bring it back.
+          clearInterval(pollRef.current);
+          setJob({ status: 'error', error: 'This analysis is no longer on the server (it may have restarted). Start over to run it again.' });
+          return;
+        }
         // keep polling on transient errors
         console.warn('[poll]', err?.message);
       }
@@ -492,6 +540,7 @@ function ReviewView({ job, direct = false }) {
   const [folderState, setFolderState] = dbS(initFolderState);
   const [importing, setImporting]     = dbS(false);
   const [importMsg, setImportMsg]     = dbS('');
+  const [importProgress, setImportProgress] = dbS(null); // { done, total } while importing
 
   const totalSelected = Object.values(folderState)
     .reduce((s, f) => s + f.selected.size, 0);
@@ -546,10 +595,34 @@ function ReviewView({ job, direct = false }) {
     setImportMsg(`Downloading and importing ${totalCount} images… This may take a few minutes.`);
 
     try {
-      const res = await window.AdminStore.apiFetch('/api/dropbox/import', {
+      let res = await window.AdminStore.apiFetch('/api/dropbox/import', {
         method: 'POST',
         body: JSON.stringify({ foldersToImport }),
       });
+
+      // The server imports in the background and returns a job to poll.
+      if (res.jobId) {
+        const jobId = res.jobId;
+        for (;;) {
+          await new Promise(r => setTimeout(r, 2000));
+          let j;
+          try {
+            j = await window.AdminStore.apiFetch(`/api/dropbox/import/${jobId}`);
+          } catch (err) {
+            if (err?.status === 404) throw new Error('The import job is no longer on the server (it may have restarted). Check the Projects list for what was imported.');
+            console.warn('[import poll]', err?.message);
+            continue;
+          }
+          setImportProgress({ done: j.done, total: j.total });
+          setImportMsg(j.phase || 'Importing…');
+          if (j.status === 'error') throw new Error(j.error || 'Import failed');
+          if (j.status === 'done') {
+            res = j;
+            if (j.failed?.length) toast(`${j.failed.length} image${j.failed.length !== 1 ? 's' : ''} failed to import — see the server log.`, 'error');
+            break;
+          }
+        }
+      }
 
       if (res.projects) {
         const names = res.projects.map(p => p.name).join(', ');
@@ -571,6 +644,7 @@ function ReviewView({ job, direct = false }) {
     } finally {
       setImporting(false);
       setImportMsg('');
+      setImportProgress(null);
     }
   };
 
@@ -592,7 +666,9 @@ function ReviewView({ job, direct = false }) {
                 <div className="dbx-folder-meta">
                   {selectedCount} selected / {result.total} total
                   {!direct && result.total > 0 && ` · Claude picked ${result.selected.length}`}
+                  {result.duplicates > 0 && ` · ${result.duplicates} duplicate copies skipped`}
                 </div>
+                {result.warning && <div className="dbx-folder-warning">{result.warning}</div>}
               </div>
               <div className="dbx-folder-fields">
                 <div className="dbx-field-group">
@@ -639,7 +715,7 @@ function ReviewView({ job, direct = false }) {
                       key={img.dropboxPath}
                       className={`dbx-thumb-wrap ${isOn ? 'is-selected' : 'is-deselected'}`}
                       onClick={() => toggleImage(result.folderPath, img.dropboxPath)}
-                      title={img.reason}
+                      title={img.reason ? `${img.filename}\n${img.reason}` : img.filename}
                     >
                       {img.thumbnailDataUrl ? (
                         <img
@@ -699,6 +775,11 @@ function ReviewView({ job, direct = false }) {
               <div className="dbx-spinner" />
             </div>
             <div className="dbx-import-msg">{importMsg}</div>
+            {importProgress && importProgress.total > 0 && (
+              <div className="dbx-progress-bar-track" style={{ margin: '0 auto 16px' }}>
+                <div className="dbx-progress-bar-fill" style={{ width: `${Math.round((importProgress.done / importProgress.total) * 100)}%` }} />
+              </div>
+            )}
             <div style={{ fontSize: 12, color: 'var(--ink-muted)' }}>
               Full-resolution images are being downloaded from Dropbox and processed.
             </div>
