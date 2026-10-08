@@ -458,9 +458,14 @@ function ProjectEditorView({ projectId, navigate }) {
       }
     }
   };
-  const remove = () => {
+  const remove = async () => {
     if (!confirm(`Delete ${existing.name}? This removes all ${existing.images.length} images.`)) return;
-    window.AdminStore.deleteProject(existing.id);
+    try {
+      await window.AdminStore.deleteProject(existing.id);
+    } catch (err) {
+      toast('Failed to delete project: ' + (err?.message || 'unknown'), 'error');
+      return;
+    }
     toast('Project deleted', 'ok');
     navigate('#/projects');
   };

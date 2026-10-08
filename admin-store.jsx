@@ -540,7 +540,17 @@ const AdminStore = {
     });
     return this.getProject(id);
   },
-  deleteProject(id) {
+  /* Delete on the NAS first (removes projects.json entry + image files),
+     then locally. Removing it only from localStorage left the project and
+     its images on the server until some later wholesale sync. */
+  async deleteProject(id) {
+    if (_isRealJWT(_getAuthToken())) {
+      try {
+        await this.apiFetch(`/api/projects/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      } catch (err) {
+        if (err?.status !== 404) throw err; // 404 = already gone on the server
+      }
+    }
     patchStore(s => { s.projects = s.projects.filter(p => p.id !== id); });
   },
   /* Set explicit display order from an array of project IDs (first → order 0). */
