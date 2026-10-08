@@ -337,12 +337,12 @@ app.post('/api/projects/:id/images/upload', upload.single('file'), async (req, r
    curation). The SDK reads ANTHROPIC_API_KEY and retries 429/5xx itself. */
 const anthropic = process.env.ANTHROPIC_API_KEY ? new Anthropic({ maxRetries: 4 }) : null;
 
-/* Every AI feature runs on Anthropic's most capable model at its highest
-   effort. Those turns can take minutes, so both callers run as background
-   jobs (Cloudflare drops requests after 100s) and stream the reply, which
-   keeps a long request from hitting the SDK's HTTP timeout. */
-const CLAUDE_MODEL  = 'claude-fable-5-1';
-const CLAUDE_EFFORT = 'max';
+/* Every AI feature runs on Claude Opus 5.5 at high effort. Those turns can
+   take a minute or more, so both callers run as background jobs (Cloudflare
+   drops requests after 100s) and stream the reply, which keeps a long
+   request from hitting the SDK's HTTP timeout. */
+const CLAUDE_MODEL  = 'claude-opus-5-5';
+const CLAUDE_EFFORT = 'high';
 
 async function _askClaudeJSON({ system, content, schema }) {
   const msg = await anthropic.beta.messages.stream({

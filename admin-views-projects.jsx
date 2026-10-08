@@ -359,7 +359,7 @@ function DescriptionAIPanel({ project, onPick }) {
             {loading ? 'Analyzing images…' : 'Generate descriptions'}
           </Btn>
           <span className="ad-muted" style={{ fontSize: 12 }}>
-            Uses up to 5 images (cover, favorites, selected). Claude Fable 5.1 at max effort — takes a minute or two, roughly $0.50 / run.
+            Uses up to 5 images (cover, favorites, selected). Claude Opus 5.5 — takes up to a minute, roughly $0.15 / run.
           </span>
         </div>
       </div>
