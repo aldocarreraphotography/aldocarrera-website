@@ -1253,10 +1253,26 @@ function AboutSiteModal({ onClose }) {
 /* ============================================================
    ARCHIVE APP
    ============================================================ */
+/* Windows open ~15% larger than their original design sizes, clamped so
+   they still fit the viewport on smaller laptop screens. */
+const WIN_SCALE = 1.15;
+function _winSize(w, h) {
+  const vw = (typeof window !== 'undefined' && window.innerWidth)  || 1440;
+  const vh = (typeof window !== 'undefined' && window.innerHeight) || 900;
+  return {
+    w: Math.round(Math.min(w * WIN_SCALE, vw - 40)),
+    h: Math.round(Math.min(h * WIN_SCALE, vh - 110)),
+  };
+}
+function _initialWin(win) {
+  const { w, h } = _winSize(win.w, win.h);
+  const vw = (typeof window !== 'undefined' && window.innerWidth) || 1440;
+  return { ...win, w, h, x: Math.max(10, Math.min(win.x, vw - w - 20)) };
+}
 const INITIAL_WINDOWS = {
-  about:     { id:'about',     kind:'about',     title:'about_me.txt',     path:'~/info',          x:  30, y: 30,  w: 460, h: 600, z: 4, minimized: false, mounted: true },
-  portfolio: { id:'portfolio', kind:'portfolio', title:'Selected Work',    path:'~/portfolio',     x: 200, y: 60,  w: 760, h: 590, z: 7, minimized: false, mounted: true },
-  clients:   { id:'clients',   kind:'clients',   title:'Clients.txt',      path:'~/about/clients', x: 760, y: 30,  w: 400, h: 540, z: 5, minimized: false, mounted: true },
+  about:     _initialWin({ id:'about',     kind:'about',     title:'about_me.txt',     path:'~/info',          x:  30, y: 30,  w: 460, h: 600, z: 4, minimized: false, mounted: true }),
+  portfolio: _initialWin({ id:'portfolio', kind:'portfolio', title:'Selected Work',    path:'~/portfolio',     x: 200, y: 60,  w: 760, h: 590, z: 7, minimized: false, mounted: true }),
+  clients:   _initialWin({ id:'clients',   kind:'clients',   title:'Clients.txt',      path:'~/about/clients', x: 760, y: 30,  w: 400, h: 540, z: 5, minimized: false, mounted: true }),
 };
 
 function ArchiveApp() {
@@ -1476,7 +1492,9 @@ function ArchiveApp() {
       })(),
       project:   { title: opts.project ? opts.project.name : 'Project', path: opts.project ? `~/portfolio/${opts.project.id}` : '~/portfolio', w: Math.min(1360, window.innerWidth - 40), h: Math.min(820, window.innerHeight - 80), x: 4, y: 30 },
     };
-    const p = presets[kind] || { title: kind, w: 500, h: 400 };
+    const base = presets[kind] || { title: kind, w: 500, h: 400 };
+    // Video and project windows already size themselves to the content/viewport.
+    const p = (kind === 'video' || kind === 'project') ? base : { ...base, ..._winSize(base.w, base.h) };
     setWindows(ws => ({
       ...ws,
       [id]: {
@@ -1495,16 +1513,25 @@ function ArchiveApp() {
     setFocused(id);
   }, [windows, focus]);
 
+  /* The photo viewer joins the normal stacking order (id '__viewer'), so
+     clicking a window behind it brings that window forward, like macOS. */
   const openPhotoViewer = aUseCallback((photo, list) => {
     setOpenPhoto({ photo, list: list || null });
+    focus('__viewer');
+  }, [focus]);
+  const closePhotoViewer = aUseCallback(() => {
+    setOpenPhoto(null);
+    setViewerWin({ x: null, y: null, w: 1040, h: 720 });
+    setOrder(o => o.filter(x => x !== '__viewer'));
+    setFocused(f => (f === '__viewer' ? null : f));
   }, []);
 
   /* keyboard nav */
   aUseEffect(() => {
     const onKey = (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
-      if (openPhoto) {
-        if (e.key === 'Escape') { setOpenPhoto(null); return; }
+      if (openPhoto && focused === '__viewer') {
+        if (e.key === 'Escape') { closePhotoViewer(); return; }
         const list = openPhoto.list || ARCHIVE;
         const i = list.findIndex(x => x.id === openPhoto.photo.id);
         if (e.key === 'ArrowRight' && i < list.length - 1) setOpenPhoto({ ...openPhoto, photo: list[i+1] });
@@ -1515,7 +1542,7 @@ function ArchiveApp() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [openPhoto, focused, close]);
+  }, [openPhoto, focused, close, closePhotoViewer]);
 
   const taskList = order.map(id => windows[id]).filter(w => w && w.mounted);
   const now = useNow();
@@ -1600,14 +1627,14 @@ function ArchiveApp() {
             y={viewerWin.y != null ? viewerWin.y : 50}
             w={Math.min(viewerWin.w, window.innerWidth - 40)}
             h={Math.min(viewerWin.h, window.innerHeight - 90)}
-            z={9100}
-            focused={true}
+            z={order.indexOf('__viewer') + 10}
+            focused={focused === '__viewer'}
             minimized={false}
             onMove={(_, x, y) => setViewerWin(v => ({ ...v, x, y }))}
             onResize={(_, w, h) => setViewerWin(v => ({ ...v, w, h }))}
-            onFocus={() => {}}
-            onClose={() => { setOpenPhoto(null); setViewerWin({ x: null, y: null, w: 1040, h: 720 }); }}
-            onMinimize={() => { setOpenPhoto(null); setViewerWin({ x: null, y: null, w: 1040, h: 720 }); }}
+            onFocus={focus}
+            onClose={closePhotoViewer}
+            onMinimize={closePhotoViewer}
             onMaximize={() => setViewerWin(v => ({ x: 20, y: 50, w: window.innerWidth - 40, h: window.innerHeight - 100 }))}
           >
             <PhotoViewer
