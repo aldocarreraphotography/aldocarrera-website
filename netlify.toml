@@ -11,9 +11,9 @@
   publish  = "dist"
   functions = "functions"
   # Each production deploy costs 15 Netlify credits. Skip the build when a
-  # push only touches the NAS server (deployed separately via docker) or
-  # docs — exit 0 = nothing changed for Netlify = no deploy.
-  ignore = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- . ':(exclude)nas-server' ':(exclude)*.md'"
+  # push only touches the NAS server (deployed separately via docker),
+  # docs, or GitHub workflows — exit 0 = nothing changed for Netlify.
+  ignore = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- . ':(exclude)nas-server' ':(exclude)*.md' ':(exclude).github'"
 
 [functions]
   node_bundler = "esbuild"
