@@ -3167,6 +3167,49 @@ input, textarea, select {
 }
 .reel-title { font-size: 13px; font-weight: 600; color: #fff; line-height: 1.25; text-shadow: 0 1px 4px rgba(0,0,0,.4); }
 .reel-meta  { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: rgba(255,255,255,.75); margin-top: 3px; text-transform: uppercase; letter-spacing: .04em; }
+/* Reel feed — one reel per screen, snap scrolling */
+.reel-feed {
+  height: 100%; overflow-y: scroll; scroll-snap-type: y mandatory;
+  background: #000; outline: none; scrollbar-width: none; overscroll-behavior: contain;
+}
+.reel-feed::-webkit-scrollbar { display: none; }
+.feed-item {
+  position: relative; height: 100%; scroll-snap-align: start; scroll-snap-stop: always;
+  display: flex; align-items: center; justify-content: center; overflow: hidden;
+}
+.feed-video { height: 100%; width: 100%; object-fit: contain; border: 0; background: #000; cursor: pointer; display: block; }
+.feed-paused {
+  position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none;
+  font-size: 54px; color: rgba(255,255,255,.85); text-shadow: 0 2px 18px rgba(0,0,0,.5);
+}
+.feed-caption {
+  position: absolute; left: 0; right: 64px; bottom: 0;
+  padding: 60px 16px 18px; color: #fff; pointer-events: none;
+  background: linear-gradient(to top, rgba(0,0,0,.7), transparent);
+}
+.feed-handle { font-size: 13px; font-weight: 600; }
+.feed-title  { font-size: 15px; font-weight: 600; margin-top: 4px; }
+.feed-meta   { font-family: 'IBM Plex Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: .05em; opacity: .75; margin-top: 3px; }
+.feed-desc   { font-size: 12px; line-height: 1.4; opacity: .85; margin-top: 6px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.feed-actions {
+  position: absolute; right: 10px; bottom: 22px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.feed-actions button {
+  width: 40px; height: 40px; border-radius: 50%; border: 0; cursor: pointer;
+  background: rgba(255,255,255,.16); color: #fff; font-size: 16px; line-height: 1;
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  transition: background .15s;
+}
+.feed-actions button:hover:not(:disabled) { background: rgba(255,255,255,.3); }
+.feed-actions button:disabled { opacity: .3; cursor: default; }
+.feed-counter {
+  position: absolute; top: 12px; right: 14px; pointer-events: none;
+  font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: rgba(255,255,255,.8);
+}
+.feed-progress { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: rgba(255,255,255,.2); pointer-events: none; }
+.feed-progress span { display: block; height: 100%; background: #fff; transition: width .25s linear; }
+
 .reels-empty { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; }
 .reels-empty-icon { font-size: 36px; color: var(--rule); }
 .reels-empty-text { font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--ink-muted); }

@@ -1,6 +1,6 @@
 /* aldo-views.jsx — Portfolio, Archive, Clients, About, Contact */
 
-const { useState: vsUseState, useEffect: vsUseEffect, useMemo: vsUseMemo, useRef: vsUseRef } = React;
+const { useState: vsUseState, useEffect: vsUseEffect, useMemo: vsUseMemo, useRef: vsUseRef, useLayoutEffect: vsUseLayoutEffect } = React;
 
 const { PROJECTS, ARCHIVE, CLIENTS, PHOTOS, SERVICES, ABOUT, SETTINGS, PRINTS = [] } = window.ALDO;
 
@@ -1052,7 +1052,7 @@ function ReelCard({ video, onOpen }) {
   );
 }
 
-function ReelsView({ onOpenVideo }) {
+function ReelsView({ onOpenVideo, onOpenFeed }) {
   const { VIDEOS } = window.ALDO;
   if (!VIDEOS || VIDEOS.length === 0) {
     return (
@@ -1076,8 +1076,132 @@ function ReelsView({ onOpenVideo }) {
         <a className="reels-follow" href={`https://www.instagram.com/${ig}`} target="_blank" rel="noopener noreferrer">Follow</a>
       </header>
       <div className="reels-grid">
-        {VIDEOS.map(v => <ReelCard key={v.id} video={v} onOpen={onOpenVideo}/>)}
+        {VIDEOS.map(v => <ReelCard key={v.id} video={v} onOpen={onOpenFeed || onOpenVideo}/>)}
       </div>
+    </div>
+  );
+}
+
+/* ============================================================
+   REEL FEED — TikTok/Instagram-style vertical feed
+   One reel per screen, scroll / swipe / arrow keys to move, the reel in
+   view autoplays (others pause), tap to pause, sound toggle (browsers
+   only allow sound after a click, so it starts muted and remembers the
+   choice). Opened from the Reels grid; #reel/<ID> links straight to one.
+   ============================================================ */
+function ReelFeed({ startId }) {
+  const { VIDEOS } = window.ALDO;
+  const list = (VIDEOS || []).filter(v => videoSrc(v) || v.embedUrl);
+  const startIndex = Math.max(0, list.findIndex(v => v.id === startId));
+  const listRef = vsUseRef(null);
+  const vidRefs = vsUseRef({});
+  const [active, setActive] = vsUseState(startIndex);
+  const [muted, setMuted] = vsUseState(() => { try { return localStorage.getItem('aldo-feed-sound') !== 'on'; } catch (_) { return true; } });
+  const [paused, setPaused] = vsUseState(false);
+  const [progress, setProgress] = vsUseState(0);
+  const [copied, setCopied] = vsUseState(false);
+
+  // Start at the reel that was clicked
+  vsUseLayoutEffect(() => {
+    const el = listRef.current;
+    if (el) el.scrollTop = startIndex * el.clientHeight;
+    el?.focus({ preventScroll: true });
+  }, []);
+
+  // Whichever reel fills most of the view is the active one
+  vsUseEffect(() => {
+    const root = listRef.current;
+    if (!root) return;
+    const io = new IntersectionObserver(entries => {
+      entries.forEach(e => { if (e.isIntersecting) setActive(Number(e.target.dataset.index)); });
+    }, { root, threshold: 0.6 });
+    root.querySelectorAll('.feed-item').forEach(el => io.observe(el));
+    return () => io.disconnect();
+  }, [list.length]);
+
+  // Play the active reel from the top, pause the rest
+  vsUseEffect(() => {
+    setPaused(false); setProgress(0);
+    Object.entries(vidRefs.current).forEach(([i, v]) => {
+      if (!v) return;
+      if (Number(i) === active) { try { v.currentTime = 0; } catch (_) {} v.play().catch(() => {}); }
+      else v.pause();
+    });
+  }, [active]);
+
+  const go = (d) => {
+    const el = listRef.current;
+    const next = Math.min(list.length - 1, Math.max(0, active + d));
+    el && el.scrollTo({ top: next * el.clientHeight, behavior: 'smooth' });
+  };
+  const toggleSound = () => {
+    const m = !muted;
+    setMuted(m);
+    try { localStorage.setItem('aldo-feed-sound', m ? 'off' : 'on'); } catch (_) {}
+    const v = vidRefs.current[active];
+    if (v && !m) v.play().catch(() => {});
+  };
+  const togglePlay = () => {
+    const v = vidRefs.current[active];
+    if (!v) return;
+    if (v.paused) { v.play().catch(() => {}); setPaused(false); } else { v.pause(); setPaused(true); }
+  };
+  const share = (v) => {
+    const url = `${location.origin}/#reel/${encodeURIComponent(v.id)}`;
+    (navigator.clipboard ? navigator.clipboard.writeText(url) : Promise.reject()).then(
+      () => { setCopied(true); setTimeout(() => setCopied(false), 1600); },
+      () => { window.prompt('Copy link', url); });
+  };
+  const onKey = (e) => {
+    if (e.key === 'ArrowDown' || e.key === 'j') { e.preventDefault(); go(1); }
+    else if (e.key === 'ArrowUp' || e.key === 'k') { e.preventDefault(); go(-1); }
+    else if (e.key === ' ') { e.preventDefault(); togglePlay(); }
+    else if (e.key === 'm') toggleSound();
+  };
+
+  if (!list.length) return <div className="reels-empty"><div className="reels-empty-text">No reels yet.</div></div>;
+
+  return (
+    <div className="reel-feed" ref={listRef} tabIndex={0} onKeyDown={onKey}>
+      {list.map((v, i) => {
+        const near = Math.abs(i - active) <= 1;
+        const src = videoSrc(v);
+        return (
+          <section key={v.id} className="feed-item" data-index={i}>
+            {src ? (
+              <video
+                ref={el => { vidRefs.current[i] = el; }}
+                className="feed-video"
+                src={near ? src : undefined}
+                poster={videoPosterUrl(v) || undefined}
+                muted={muted}
+                loop
+                playsInline
+                preload={near ? 'auto' : 'none'}
+                onClick={togglePlay}
+                onTimeUpdate={i === active ? (e => setProgress(e.currentTarget.duration ? e.currentTarget.currentTime / e.currentTarget.duration : 0)) : undefined}
+              />
+            ) : (
+              <iframe className="feed-video" src={near ? getFullEmbedSrc(v.embedUrl) : undefined} frameBorder="0" allow="autoplay; fullscreen; picture-in-picture" allowFullScreen/>
+            )}
+            {i === active && paused && <div className="feed-paused" aria-hidden="true">▶</div>}
+            <div className="feed-caption">
+              <div className="feed-handle">@{((window.ALDO.SETTINGS && window.ALDO.SETTINGS.instagram) || 'aldocarrera').replace(/^@/, '')}</div>
+              <div className="feed-title">{v.title}</div>
+              <div className="feed-meta">{[v.client, v.category, v.year].filter(Boolean).join(' · ')}</div>
+              {v.description && <div className="feed-desc">{v.description}</div>}
+            </div>
+            <div className="feed-actions">
+              <button onClick={toggleSound} aria-label={muted ? 'Sound on' : 'Sound off'} title={muted ? 'Sound on (m)' : 'Sound off (m)'}>{muted ? '🔇' : '🔊'}</button>
+              <button onClick={() => share(v)} aria-label="Copy link" title="Copy link">{copied && i === active ? '✓' : '↗'}</button>
+              <button onClick={() => go(-1)} disabled={i === 0} aria-label="Previous reel" title="Previous (↑)">↑</button>
+              <button onClick={() => go(1)} disabled={i === list.length - 1} aria-label="Next reel" title="Next (↓)">↓</button>
+            </div>
+            <div className="feed-counter">{i + 1} / {list.length}</div>
+            {i === active && <div className="feed-progress"><span style={{ width: `${progress * 100}%` }}/></div>}
+          </section>
+        );
+      })}
     </div>
   );
 }
@@ -1440,4 +1564,5 @@ window.Clients = Clients;
 window.About = About;
 window.Contact = Contact;
 window.ReelsView = ReelsView;
+window.ReelFeed = ReelFeed;
 window.VideoPlayer = VideoPlayer;

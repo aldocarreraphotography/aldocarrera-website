@@ -1311,6 +1311,7 @@ function ArchiveApp() {
       about:     'About',
       contact:   'Contact',
       reels:     'Reels',
+      reelfeed:  'Reels',
       crew:      win.crewName || 'Crew',
       prints:    win.print ? (win.print.title || 'Print').split(' — ')[0] : 'Prints',
       video:     win.video?.title || 'Reels',
@@ -1410,6 +1411,16 @@ function ArchiveApp() {
         if (name) openWindow('crew', { crewName: name });
         return;
       }
+      // Reel deep link: #reel/ID (the feed's share button)
+      if (hash.startsWith('reel/')) {
+        const id = decodeURIComponent(hash.slice(5));
+        const v = (window.ALDO.VIDEOS || []).find(x => x.id === id);
+        if (v && deepLinkedRef.current !== hash) {
+          deepLinkedRef.current = hash;
+          openWindow('reelfeed', { startId: id });
+        }
+        return;
+      }
       // Project deep link: #project/ID (from the static /work/ pages). Data
       // may still be loading — the effect re-runs as openWindow changes, and
       // deepLinkedRef stops it reopening once handled.
@@ -1484,6 +1495,12 @@ function ArchiveApp() {
         focus(existing.id);
         return;
       }
+      // One feed window: clicking another reel restarts it at that reel
+      if (kind === 'reelfeed') {
+        setWindows(ws => ({ ...ws, [existing.id]: { ...ws[existing.id], minimized: false, mounted: true, startId: opts.startId || null } }));
+        focus(existing.id);
+        return;
+      }
       // Same idea for prints — toggle between shop index and print detail in one window
       if (kind === 'prints') {
         const newPrint = opts.print || null;
@@ -1506,6 +1523,7 @@ function ArchiveApp() {
       about:     { title:'about_me.txt',         path: '~/info',                            w: 460, h: 620 },
       contact:   { title:'Inquiry · contact.html', path:'~/contact',                        w: 480, h: 540 },
       reels:     { title:'Reels',                path: '~/reels',                           w: 720, h: 780 },
+      reelfeed:  { title:'Reels',                path: '~/reels/feed',                      w: 480, h: 820 },
       crew:      { title: opts.crewName || 'Crew', path: opts.crewName ? `~/crew/${opts.crewName}` : '~/crew', w: 820, h: 620 },
       prints:    { title: opts.print ? opts.print.title : 'Print shop', path: opts.print ? `~/prints/${opts.print.id}` : '~/prints', w: 900, h: 640 },
       video:     (() => {
@@ -1539,6 +1557,7 @@ function ArchiveApp() {
         video:   opts.video   || null,
         crewName: opts.crewName || null,
         print:   opts.print   || null,
+        startId: opts.startId || null,
       },
     }));
     setOrder(o => [...o, id]);
@@ -1638,6 +1657,7 @@ function ArchiveApp() {
             }}
             onOpenVideo={(v, dims) => openWindow('video', { video: v, dims })}
             onOpenReels={() => openWindow('reels')}
+            onOpenFeed={(v) => openWindow('reelfeed', { startId: v.id })}
             onOpenCrew={(name) => openWindow('crew', { crewName: name || null })}
             onOpenPrint={(p) => openWindow('prints', { print: p })}
             view={view} setView={setView}
@@ -1793,7 +1813,7 @@ function ArchiveApp() {
 /* ============================================================
    WINDOW HOST — content router
    ============================================================ */
-function WindowHost({ win, z, focused, minimized, onMove, onResize, onFocus, onClose, onMinimize, onMaximize, onOpenPhoto, onOpenProject, onOpenVideo, onOpenReels, onOpenCrew, onOpenPrint, view, setView, archiveFilter, setArchiveFilter, selectionMode, setSelectionMode, selectedIds, toggleSelection }) {
+function WindowHost({ win, z, focused, minimized, onMove, onResize, onFocus, onClose, onMinimize, onMaximize, onOpenPhoto, onOpenProject, onOpenVideo, onOpenReels, onOpenFeed, onOpenCrew, onOpenPrint, view, setView, archiveFilter, setArchiveFilter, selectionMode, setSelectionMode, selectedIds, toggleSelection }) {
   let content, toolbar, statusbar;
   const baseCrumb = (parts) => (
     <div className="crumbs">
@@ -1894,12 +1914,22 @@ function WindowHost({ win, z, focused, minimized, onMove, onResize, onFocus, onC
     );
   } else if (win.kind === 'reels') {
     toolbar = <div className="window-toolbar">{baseCrumb(['~', 'reels'])}</div>;
-    content = <ReelsView onOpenVideo={onOpenVideo}/>;
+    content = <ReelsView onOpenVideo={onOpenVideo} onOpenFeed={onOpenFeed}/>;
     statusbar = (
       <div className="window-statusbar">
         <span className="col"><b>{VIDEOS.length}</b> {VIDEOS.length === 1 ? 'reel' : 'reels'}</span>
         <span className="spacer"/>
         <span>photography · direction · production</span>
+      </div>
+    );
+  } else if (win.kind === 'reelfeed') {
+    // key: clicking another reel in the grid restarts the feed at that reel
+    content = <ReelFeed key={win.startId || 'feed'} startId={win.startId}/>;
+    statusbar = (
+      <div className="window-statusbar">
+        <span className="col"><b>{VIDEOS.length}</b> {VIDEOS.length === 1 ? 'reel' : 'reels'}</span>
+        <span className="spacer"/>
+        <span>scroll or ↑ ↓ · space pause · m sound</span>
       </div>
     );
   } else if (win.kind === 'video') {
