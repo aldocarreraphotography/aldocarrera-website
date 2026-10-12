@@ -1505,7 +1505,7 @@ function ArchiveApp() {
       clients:   { title:'Clients.txt',          path: '~/about/clients',                   w: 400, h: 540 },
       about:     { title:'about_me.txt',         path: '~/info',                            w: 460, h: 620 },
       contact:   { title:'Inquiry · contact.html', path:'~/contact',                        w: 480, h: 540 },
-      reels:     { title:'Reels',                path: '~/reels',                           w: 680, h: 520 },
+      reels:     { title:'Reels',                path: '~/reels',                           w: 720, h: 780 },
       crew:      { title: opts.crewName || 'Crew', path: opts.crewName ? `~/crew/${opts.crewName}` : '~/crew', w: 820, h: 620 },
       prints:    { title: opts.print ? opts.print.title : 'Print shop', path: opts.print ? `~/prints/${opts.print.id}` : '~/prints', w: 900, h: 640 },
       video:     (() => {

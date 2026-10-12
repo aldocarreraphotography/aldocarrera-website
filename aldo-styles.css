@@ -3095,30 +3095,48 @@ input, textarea, select {
 /* ============================================================
    REELS WINDOW
    ============================================================ */
+.reels-view { height: 100%; overflow-y: auto; background: var(--paper); }
+
+/* Profile header — the Instagram "profile" strip above the grid */
+.reels-profile {
+  display: flex; align-items: center; gap: 12px;
+  padding: 16px 18px 14px;
+  border-bottom: 1px solid var(--rule-soft);
+}
+.reels-avatar {
+  width: 46px; height: 46px; border-radius: 50%; flex-shrink: 0;
+  display: grid; place-items: center; color: var(--accent);
+  background: var(--paper-soft);
+  box-shadow: 0 0 0 2px var(--paper), 0 0 0 4px var(--accent); /* story ring */
+}
+.reels-profile-text { flex: 1; min-width: 0; }
+.reels-handle { font-size: 14px; font-weight: 600; color: var(--ink); }
+.reels-count  { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink-soft); margin-top: 2px; }
+.reels-follow {
+  font-size: 12px; font-weight: 600; text-decoration: none;
+  color: var(--paper); background: var(--ink);
+  padding: 6px 14px; border-radius: 6px;
+}
+.reels-follow:hover { filter: brightness(1.08); }
+
+/* Tight 9:16 grid. align-content: start stops rows stretching to fill
+   the window (the old cards grew into tall empty boxes). */
 .reels-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 16px;
-  padding: 18px;
-  overflow-y: auto;
-  height: 100%;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  align-content: start;
+  gap: 3px;
+  padding: 3px;
 }
-.reel-card {
-  cursor: pointer;
-  border: 1px solid var(--rule-soft);
-  border-radius: 3px;
-  overflow: hidden;
-  background: var(--paper);
-  transition: border-color .15s, box-shadow .15s;
-}
-.reel-card:hover { border-color: var(--ink-soft); box-shadow: 0 4px 16px rgba(0,0,0,.08); }
+.reel-card { cursor: pointer; overflow: hidden; background: var(--ink); }
 .reel-thumb {
   position: relative;
-  aspect-ratio: 16 / 9;
+  aspect-ratio: 9 / 16;
   background: var(--ink);
   overflow: hidden;
 }
-.reel-poster, .reel-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; transition: opacity .2s; }
+.reel-poster, .reel-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; transition: opacity .2s, transform .5s var(--easing); }
+.reel-card:hover .reel-poster { transform: scale(1.03); }
 .reel-poster.is-hidden { opacity: 0; }
 .reel-thumb-placeholder {
   width: 100%; height: 100%;
@@ -3133,19 +3151,22 @@ input, textarea, select {
   object-fit: cover;
   border: none;
 }
-.reel-play-overlay {
-  position: absolute; inset: 0;
-  display: flex; align-items: center; justify-content: center;
-  background: rgba(0,0,0,.25);
-  opacity: 0; transition: opacity .15s;
+/* Reel badge, top-right — like the Reels icon on an Instagram grid */
+.reel-badge {
+  position: absolute; top: 9px; right: 10px;
+  font-size: 13px; color: #fff; line-height: 1;
+  text-shadow: 0 1px 6px rgba(0,0,0,.55);
   pointer-events: none;
 }
-.reel-card:hover .reel-play-overlay { opacity: .6; }
-.reel-play-overlay span { font-size: 22px; color: #fff; text-shadow: 0 2px 8px rgba(0,0,0,.6); }
-.reel-info { padding: 10px 12px 12px; }
-.reel-title { font-size: 13px; font-weight: 500; color: var(--ink); margin-bottom: 5px; }
-.reel-meta  { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--ink-soft); display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
-.reel-cat   { text-transform: uppercase; letter-spacing: .06em; }
+/* Caption over a bottom fade */
+.reel-info {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  padding: 36px 12px 11px;
+  background: linear-gradient(to top, rgba(0,0,0,.72), rgba(0,0,0,.35) 55%, transparent);
+  pointer-events: none;
+}
+.reel-title { font-size: 13px; font-weight: 600; color: #fff; line-height: 1.25; text-shadow: 0 1px 4px rgba(0,0,0,.4); }
+.reel-meta  { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: rgba(255,255,255,.75); margin-top: 3px; text-transform: uppercase; letter-spacing: .04em; }
 .reels-empty { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; }
 .reels-empty-icon { font-size: 36px; color: var(--rule); }
 .reels-empty-text { font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--ink-muted); }

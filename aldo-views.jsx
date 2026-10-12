@@ -1040,14 +1040,12 @@ function ReelCard({ video, onOpen }) {
         {hover && !fileSrc && embed && (
           <iframe className="reel-preview" src={embed} frameBorder="0" allow="autoplay"/>
         )}
-        <div className="reel-play-overlay"><span>▶</span></div>
-      </div>
-      <div className="reel-info">
-        <div className="reel-title">{video.title}</div>
-        <div className="reel-meta">
-          <span className="reel-cat">{video.category}</span>
-          {video.client && <><span className="dot">·</span><span>{video.client.toUpperCase()}</span></>}
-          <span className="dot">·</span><span>{video.year}</span>
+        <span className="reel-badge" aria-hidden="true">▶</span>
+        <div className="reel-info">
+          <div className="reel-title">{video.title}</div>
+          <div className="reel-meta">
+            {[video.client, video.year].filter(Boolean).join(' · ')}
+          </div>
         </div>
       </div>
     </article>
@@ -1064,9 +1062,22 @@ function ReelsView({ onOpenVideo }) {
       </div>
     );
   }
+  /* Laid out like an Instagram profile's Reels tab: a profile header and a
+     tight grid of 9:16 tiles, video edge to edge with the caption overlaid. */
+  const ig = ((window.ALDO.SETTINGS && window.ALDO.SETTINGS.instagram) || '@aldocarrera').replace(/^@/, '');
   return (
-    <div className="reels-grid">
-      {VIDEOS.map(v => <ReelCard key={v.id} video={v} onOpen={onOpenVideo}/>)}
+    <div className="reels-view">
+      <header className="reels-profile">
+        <div className="reels-avatar"><AldoLogo size={30}/></div>
+        <div className="reels-profile-text">
+          <div className="reels-handle">{ig}</div>
+          <div className="reels-count">{VIDEOS.length} reel{VIDEOS.length !== 1 ? 's' : ''} · Los Angeles</div>
+        </div>
+        <a className="reels-follow" href={`https://www.instagram.com/${ig}`} target="_blank" rel="noopener noreferrer">Follow</a>
+      </header>
+      <div className="reels-grid">
+        {VIDEOS.map(v => <ReelCard key={v.id} video={v} onOpen={onOpenVideo}/>)}
+      </div>
     </div>
   );
 }
