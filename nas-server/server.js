@@ -304,9 +304,15 @@ app.post('/api/projects/:id/images/upload', upload.single('file'), async (req, r
     if (!req.file) return res.status(400).json({ error: 'missing_file' });
 
     const rawName  = (req.body?.filename || req.file.originalname || `upload_${Date.now()}.jpg`).toString();
-    const safeName = rawName.replace(/[^A-Za-z0-9._-]+/g, '_');
     const dateTaken  = req.body?.dateTaken  || null;
-    const dimensions = req.body?.dimensions || '';
+
+    // Store a web master, unless a client portal hands out downloads from this project
+    const portals = await readGalleryPortals().catch(() => ({ portals: [] }));
+    const delivers = (portals.portals || []).some(p => p.projectId === projectId && p.downloadsEnabled);
+    const master = delivers ? { buffer: req.file.buffer, filename: rawName } : await _webMaster(req.file.buffer, rawName);
+    req.file.buffer = master.buffer;
+    const safeName   = master.filename.replace(/[^A-Za-z0-9._-]+/g, '_');
+    const dimensions = master.filename === rawName ? (req.body?.dimensions || '') : '';
 
     // De-dupe filename
     let finalName = safeName;
@@ -604,6 +610,32 @@ async function _prewarmResizes(id, filename, original) {
     }
   } catch (err) {
     console.warn('[prewarm] failed for', id, filename, err?.message);
+  }
+}
+
+/* Camera originals are far bigger than the site needs (a GFX 100 frame is
+   50–65 MB, and the site never shows anything wider than 2000px), so
+   portfolio images are stored as a 4000px-long-edge JPEG at quality 90
+   (~3–5 MB) that keeps EXIF and the colour profile. Files that are already
+   small are kept as they are. Projects that deliver downloads through a
+   client portal keep their originals (see the upload route). */
+const MASTER_LONG_EDGE = 4000;
+const MASTER_MAX_BYTES = 8 * 1024 * 1024;
+async function _webMaster(buffer, filename) {
+  try {
+    const meta = await sharp(buffer).metadata();
+    const long = Math.max(meta.width || 0, meta.height || 0);
+    if (buffer.length <= MASTER_MAX_BYTES && long <= MASTER_LONG_EDGE) return { buffer, filename };
+    const out = await sharp(buffer).rotate()
+      .resize({ width: MASTER_LONG_EDGE, height: MASTER_LONG_EDGE, fit: 'inside', withoutEnlargement: true })
+      .withMetadata()
+      .jpeg({ quality: 90, mozjpeg: true })
+      .toBuffer();
+    if (out.length >= buffer.length) return { buffer, filename };
+    return { buffer: out, filename: filename.replace(/\.[^.]*$/, '') + '.jpg' };
+  } catch (err) {
+    console.warn('[master] could not shrink', filename, err?.message);
+    return { buffer, filename };
   }
 }
 
@@ -3998,8 +4030,12 @@ async function _runImportJob(job, specs) {
     for (const dropboxPath of imageDropboxPaths) {
       job.phase = `Importing ${projectName} (${order} of ${imageDropboxPaths.length})…`;
       try {
-        const rawName = dropboxPath.split('/').pop() || `image_${order}.jpg`;
-        const safeName = rawName.replace(/[^A-Za-z0-9._-]+/g, '_');
+        // Download full-res from Dropbox (refresh-token auth handled in util),
+        // then keep a web master rather than the camera original
+        const original = await downloadFile(null, dropboxPath);
+        const master = await _webMaster(original, dropboxPath.split('/').pop() || `image_${order}.jpg`);
+        const buffer = master.buffer;
+        const safeName = master.filename.replace(/[^A-Za-z0-9._-]+/g, '_');
 
         // De-dupe filename
         let finalName = safeName;
@@ -4011,9 +4047,6 @@ async function _runImportJob(job, specs) {
           while (newProject.images.find(i => i.filename === `${stem}_${n}${ext}`)) n++;
           finalName = `${stem}_${n}${ext}`;
         }
-
-        // Download full-res from Dropbox (refresh-token auth handled in util)
-        const buffer = await downloadFile(null, dropboxPath);
 
         await writeBytes(projectId, finalName, buffer);
         await _prewarmResizes(projectId, finalName, buffer);
@@ -4034,7 +4067,7 @@ async function _runImportJob(job, specs) {
         // Dropbox's media_info which is often unpopulated for RAW/unindexed files.
         let dateTaken = null;
         try {
-          const exif = await exifr.parse(buffer, ['DateTimeOriginal', 'DateTimeDigitized', 'DateTime']);
+          const exif = await exifr.parse(original, ['DateTimeOriginal', 'DateTimeDigitized', 'DateTime']);
           const raw = exif?.DateTimeOriginal || exif?.DateTimeDigitized || exif?.DateTime;
           if (raw) {
             const d = new Date(raw);
