@@ -1023,6 +1023,8 @@ function videoSrc(v) {
   return `${API_BASE_V}/api/videos/${parts[0]}/file/${parts.slice(1).join('/')}`;
 }
 
+// Touch screens: no hover preview (a tap would start loading a video it's about to replace)
+const _REEL_TOUCH = window.matchMedia && window.matchMedia('(hover: none)').matches;
 function ReelCard({ video, onOpen }) {
   const [hover, setHover] = vsUseState(false);
   const videoRef = vsUseRef(null);
@@ -1041,7 +1043,7 @@ function ReelCard({ video, onOpen }) {
   return (
     <article
       className="reel-card"
-      onMouseEnter={() => setHover(true)}
+      onMouseEnter={() => { if (!_REEL_TOUCH) setHover(true); }}
       onMouseLeave={() => setHover(false)}
       onClick={() => onOpen(video)}
     >
@@ -1136,16 +1138,15 @@ function ReelFeed({ startId }) {
     el?.focus({ preventScroll: true });
   }, []);
 
-  // Whichever reel fills most of the view is the active one
-  vsUseEffect(() => {
-    const root = listRef.current;
-    if (!root) return;
-    const io = new IntersectionObserver(entries => {
-      entries.forEach(e => { if (e.isIntersecting) setActive(Number(e.target.dataset.index)); });
-    }, { root, threshold: 0.6 });
-    root.querySelectorAll('.feed-item').forEach(el => io.observe(el));
-    return () => io.disconnect();
-  }, [list.length]);
+  // Active reel = scroll position ÷ screen height. Deterministic: it can't
+  // flip between two partly-visible reels (which restarted the video and
+  // made the sound jump).
+  const onScroll = () => {
+    const el = listRef.current;
+    if (!el || !el.clientHeight) return;
+    const i = Math.min(list.length - 1, Math.max(0, Math.round(el.scrollTop / el.clientHeight)));
+    if (i !== active) setActive(i);
+  };
 
   // Play the active reel from the top, pause the rest
   vsUseEffect(() => {
@@ -1190,16 +1191,17 @@ function ReelFeed({ startId }) {
   if (!list.length) return <div className="reels-empty"><div className="reels-empty-text">No reels yet.</div></div>;
 
   return (
-    <div className="reel-feed" ref={listRef} tabIndex={0} onKeyDown={onKey}>
+    <div className="reel-feed" ref={listRef} tabIndex={0} onKeyDown={onKey} onScroll={onScroll}>
       {list.map((v, i) => {
         const near = Math.abs(i - active) <= 1;
         const src = videoSrc(v);
         return (
           <section key={v.id} className="feed-item" data-index={i}>
+           <div className="feed-stage">
             {src ? (
               <video
                 ref={el => { vidRefs.current[i] = el; }}
-                className="feed-video"
+                className={`feed-video ${v.width > v.height ? 'is-wide' : ''}`}
                 src={near ? src : undefined}
                 poster={videoPosterUrl(v) || undefined}
                 muted={muted}
@@ -1227,6 +1229,7 @@ function ReelFeed({ startId }) {
             </div>
             <div className="feed-counter">{i + 1} / {list.length}</div>
             {i === active && <div className="feed-progress"><span style={{ width: `${progress * 100}%` }}/></div>}
+           </div>
           </section>
         );
       })}

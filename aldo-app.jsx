@@ -1436,6 +1436,8 @@ function ArchiveApp() {
         if (name) openWindow('crew', { crewName: name });
         return;
       }
+      // Phones use MobileShell's own handling of these links (the desktop is hidden there)
+      if (/^(moodboard|reel|project)\//.test(hash) && window.matchMedia('(max-width: 820px)').matches) return;
       // Shared moodboard: #moodboard/TOKEN
       if (hash.startsWith('moodboard/')) {
         const token = decodeURIComponent(hash.slice(10));
@@ -2057,7 +2059,31 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
     { k: 'prints',    l: 'Prints'    },
     { k: 'about',     l: 'About'     },
     { k: 'contact',   l: 'Contact'   },
+    { k: 'search',    l: 'Search'    },
+    { k: 'saved',     l: '♡ Saved'   },
   ];
+  const savedCount = useMoodboard().length;
+  const [mobileFeed, setMobileFeed] = aUseState(null);       // reel id → full-screen swipe feed
+  const [mobileSheet, setMobileSheet] = aUseState(false);    // project page: contact sheet view
+  const [sharedBoard, setSharedBoard] = aUseState(null);     // #moodboard/<token> on a phone
+
+  /* Shared links on a phone: #moodboard/<token>, #reel/<id>, #project/<id>
+     (the desktop shell handles the same hashes with windows). */
+  aUseEffect(() => {
+    const apply = () => {
+      // Both shells are always mounted (CSS hides one): only the phone shell
+      // acts on phones, or a hidden copy would play reels underneath.
+      if (!window.matchMedia('(max-width: 820px)').matches) return;
+      const h = decodeURIComponent(location.hash.replace(/^#/, ''));
+      if (h.startsWith('moodboard/')) { setSharedBoard(h.slice(10)); setActive('saved'); setProject(null); }
+      else if (h.startsWith('reel/')) setMobileFeed(h.slice(5));
+      else if (h.startsWith('project/')) { const p = PROJECTS.find(x => x.id === h.slice(8)); if (p) setProject(p); }
+    };
+    apply();
+    window.addEventListener('hashchange', apply);
+    window.addEventListener('aldo-data-updated', apply);
+    return () => { window.removeEventListener('hashchange', apply); window.removeEventListener('aldo-data-updated', apply); };
+  }, []);
 
   const toggleFolder = (y) => setFolders(f => ({ ...f, [y]: !f[y] }));
   const years = [...new Set(ARCHIVE.map(a => a.year))].sort().reverse();
@@ -2284,7 +2310,7 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
 
   /* ── iOS-safe scroll lock when viewer/video is open ── */
   aUseEffect(() => {
-    const isOpen = !!(openPhoto || mobileVideo);
+    const isOpen = !!(openPhoto || mobileVideo || mobileFeed);
     if (!isOpen) return;
     const scrollY = window.scrollY;
     document.body.style.position = 'fixed';
@@ -2296,7 +2322,7 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
       document.body.style.width    = '';
       window.scrollTo(0, scrollY);
     };
-  }, [!!openPhoto, !!mobileVideo]);
+  }, [!!openPhoto, !!mobileVideo, !!mobileFeed]);
 
   /* ── Swipe navigation for photo viewer ── */
   const onViewerTouchStart = (e) => setSwipeStartX(e.touches[0].clientX);
@@ -2320,7 +2346,13 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
         <h2 className="headline" style={{fontSize: 24, margin: '0 0 4px'}}>{project.name}</h2>
         <div className="ui-label" style={{marginBottom:14}}>{project.client} · {project.year} · {project.type}</div>
         {project.note && <p style={{fontSize:14, color:'var(--ink-soft)', marginBottom:18, fontStyle:'italic'}}>"{project.note}"</p>}
-        {projectImages.map((img) => (
+        <div className="view-toggle project-view-toggle m-sheet-toggle">
+          <button className={!mobileSheet ? 'on' : ''} onClick={() => setMobileSheet(false)}>Photos</button>
+          <button className={mobileSheet ? 'on' : ''} onClick={() => setMobileSheet(true)}>Contact sheet</button>
+        </div>
+        {mobileSheet ? (
+          <ContactSheet project={project} images={(project.images || []).filter(i => !i.rejected)} viewerList={projectImages} onOpenPhoto={(it, list) => setOpenPhoto({ photo: it, list })}/>
+        ) : projectImages.map((img) => (
           <div key={img.id} className="mp-project" onClick={() => setOpenPhoto({ photo: img, list: projectImages })}>
             <div className="photo" style={placeholderStyle(img)}>
               <img src={window.aldoSizedFull(img.photo)} alt={img.name} decoding="async" className="lazy-img" style={focalImgStyle(img)} onLoad={_markLoaded} ref={_onImgRef}/>
@@ -2389,40 +2421,19 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
       </div>
     );
   } else if (active === 'reels') {
-    const posterFor = videoPosterUrl; // null for HEIC outside Safari → video frame below
+    body = <div className="mobile-page reels"><ReelsView onOpenFeed={(v) => setMobileFeed(v.id)}/></div>;
+  } else if (active === 'search') {
+    body = <div className="mobile-page search"><SearchView onOpenPhoto={(it, list) => setOpenPhoto({ photo: it, list })}/></div>;
+  } else if (active === 'saved') {
     body = (
-      <div className="mobile-page reels">
-        {VIDEOS.length === 0 ? (
-          <div style={{ padding: 40, textAlign: 'center', color: 'var(--ink-muted)' }}>
-            <div style={{ fontSize: 36, color: 'var(--rule)' }}>▶</div>
-            <div style={{ fontFamily: '"IBM Plex Mono", monospace', fontSize: 12, marginTop: 8 }}>No reels yet.</div>
-          </div>
-        ) : (
-          VIDEOS.map(v => {
-            const p = posterFor(v);
-            return (
-              <div key={v.id} className="m-reel" onClick={() => setMobileVideo(v)}>
-                <div className="m-reel-thumb">
-                  {p
-                    ? <img src={p} alt={v.title}/>
-                    : videoSrc(v)
-                      ? <video src={`${videoSrc(v)}#t=0.5`} muted playsInline preload="metadata"/>
-                      : <div className="m-reel-placeholder">▶</div>
-                  }
-                  <div className="m-reel-play">▶</div>
-                </div>
-                <div className="m-reel-info">
-                  <div className="m-reel-title">{v.title}</div>
-                  <div className="m-reel-meta">
-                    <span>{v.category}</span>
-                    {v.client && <><span> · </span><span>{v.client.toUpperCase()}</span></>}
-                    <span> · </span><span>{v.year}</span>
-                  </div>
-                </div>
-              </div>
-            );
-          })
-        )}
+      <div className="mobile-page saved">
+        <MoodboardView
+          key={sharedBoard || 'mine'}
+          token={sharedBoard}
+          onOpenPhoto={(it, list) => setOpenPhoto({ photo: it, list })}
+          onOpenContact={() => { setSharedBoard(null); setActive('contact'); window.scrollTo(0, 0); }}
+        />
+        {sharedBoard && <button className="btn ghost m-myboard" onClick={() => { setSharedBoard(null); history.replaceState(null, '', location.pathname); }}>View my moodboard</button>}
       </div>
     );
   } else if (active === 'services') {
@@ -2447,7 +2458,7 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
         </div>
         <div className="mobile-tabs">
           {tabs.map(t => (
-            <button key={t.k} className={`tab ${active === t.k && !project ? 'on' : ''}`} onClick={() => { setActive(t.k); setProject(null); window.scrollTo(0, 0); }}>{t.l}</button>
+            <button key={t.k} className={`tab ${active === t.k && !project ? 'on' : ''}`} onClick={() => { setActive(t.k); setProject(null); if (t.k === 'saved') setSharedBoard(null); window.scrollTo(0, 0); }}>{t.l}{t.k === 'saved' && savedCount > 0 ? ` ${savedCount}` : ''}</button>
           ))}
         </div>
       </div>
@@ -2468,6 +2479,9 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
             </div>
             <div className="stage">
               <img src={window.aldoSized(openPhoto.photo.photo || openPhoto.photo.src, 1600)} alt={openPhoto.photo.name} decoding="async"/>
+              {openPhoto.photo.project && (
+                <HeartButton className="viewer-heart" item={{ project: openPhoto.photo.project, name: openPhoto.photo.name, photo: openPhoto.photo.photo || openPhoto.photo.src, client: openPhoto.photo.client, projectName: (PROJECTS.find(p => p.id === openPhoto.photo.project) || {}).name }}/>
+              )}
               {list.length > 1 && (
                 <div className="m-viewer-dots">
                   {list.map((_, di) => (
@@ -2485,6 +2499,12 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
           </div>
         );
       })()}
+      {mobileFeed && (
+        <div className="m-feed">
+          <button className="m-feed-close" onClick={() => { setMobileFeed(null); if (location.hash.startsWith('#reel/')) history.replaceState(null, '', location.pathname); }} aria-label="Close">×</button>
+          <ReelFeed key={mobileFeed} startId={mobileFeed}/>
+        </div>
+      )}
       {mobileVideo && (
         <div className="m-viewer">
           <div className="topbar">

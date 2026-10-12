@@ -4,10 +4,12 @@
  * edge print chosen from the project's format (35mm / medium format /
  * digital). Hovering a frame shows a loupe that magnifies it 3× from a
  * high-resolution copy, the way a photographer reviews a sheet on a light
- * table. Click a frame to open it in the viewer.
+ * table. Click a frame to open it in the viewer. On touch screens the
+ * loupe appears on press-and-hold (it floats above the finger and follows
+ * it); a quick tap still opens the frame.
  */
 
-const { useState: csS, useRef: csR } = React;
+const { useState: csS, useRef: csR, useEffect: csE } = React;
 
 const CS_ZOOM = 3;
 const CS_LENS = 190; // px diameter
@@ -29,24 +31,64 @@ function ContactSheet({ project, images, viewerList, onOpenPhoto }) {
   const [lens, setLens] = csS(null); // { i, x, y, bgW, bgH, bgX, bgY }
   const hiRes = csR({});
 
-  const onMove = (e, i, img) => {
-    const r = e.currentTarget.getBoundingClientRect();
-    const px = e.clientX - r.left, py = e.clientY - r.top;
+  const lensAt = (frameEl, i, img, clientX, clientY, lift = 0) => {
+    const r = frameEl.getBoundingClientRect();
+    const px = clientX - r.left, py = clientY - r.top;
     if (px < 0 || py < 0 || px > r.width || py > r.height) return setLens(null);
     if (!hiRes.current[i]) hiRes.current[i] = window.aldoSized(img.blobPath, 1600);
     setLens({
-      i, x: e.clientX, y: e.clientY, src: hiRes.current[i],
+      i, x: clientX, y: clientY - lift, src: hiRes.current[i],
       bgW: r.width * CS_ZOOM, bgH: r.height * CS_ZOOM,
       bgX: -(px * CS_ZOOM - CS_LENS / 2), bgY: -(py * CS_ZOOM - CS_LENS / 2),
     });
   };
+  const onMove = (e, i, img) => lensAt(e.currentTarget, i, img, e.clientX, e.clientY);
+
+  /* Touch: long-press (250ms without moving) shows the loupe 110px above
+     the finger; while it's up, moving the finger pans it instead of
+     scrolling. Native listeners: React's touch handlers are passive, so
+     they can't stop the page scrolling. */
+  const sheetRef = csR(null);
+  csE(() => {
+    const el = sheetRef.current;
+    if (!el) return;
+    let timer = null, active = false, start = null, suppressClick = false;
+    const frameOf = (t) => {
+      const f = document.elementFromPoint(t.clientX, t.clientY)?.closest('.cs-frame');
+      return f && el.contains(f) ? { f, i: Number(f.dataset.i) } : null;
+    };
+    const show = (t) => { const hit = frameOf(t); if (hit) lensAt(hit.f, hit.i, images[hit.i], t.clientX, t.clientY, 110); };
+    const onStart = (e) => {
+      const t = e.touches[0]; start = { x: t.clientX, y: t.clientY };
+      timer = setTimeout(() => { active = true; suppressClick = true; show(t); }, 250);
+    };
+    const onTMove = (e) => {
+      const t = e.touches[0];
+      if (active) { e.preventDefault(); show(t); return; }
+      if (start && Math.hypot(t.clientX - start.x, t.clientY - start.y) > 10) clearTimeout(timer);
+    };
+    const onEnd = () => { clearTimeout(timer); if (active) { active = false; setLens(null); } };
+    const onClick = (e) => { if (suppressClick) { e.stopPropagation(); e.preventDefault(); suppressClick = false; } };
+    el.addEventListener('touchstart', onStart, { passive: true });
+    el.addEventListener('touchmove', onTMove, { passive: false });
+    el.addEventListener('touchend', onEnd);
+    el.addEventListener('touchcancel', onEnd);
+    el.addEventListener('click', onClick, true);
+    return () => {
+      clearTimeout(timer);
+      el.removeEventListener('touchstart', onStart); el.removeEventListener('touchmove', onTMove);
+      el.removeEventListener('touchend', onEnd); el.removeEventListener('touchcancel', onEnd);
+      el.removeEventListener('click', onClick, true);
+    };
+  }, [images]);
 
   return (
-    <div className={`cs-sheet cs-${stock.kind}`} onMouseLeave={() => setLens(null)}>
+    <div ref={sheetRef} className={`cs-sheet cs-${stock.kind}`} onMouseLeave={() => setLens(null)} onContextMenu={e => e.preventDefault()}>
       {images.map((img, i) => (
         <div key={img.filename} className="cs-cell">
           <div
             className="cs-frame"
+            data-i={i}
             style={{ aspectRatio: _csAspect(img) }}
             onMouseMove={e => onMove(e, i, img)}
             onMouseLeave={() => setLens(null)}

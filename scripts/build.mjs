@@ -231,13 +231,35 @@ async function writeCompiled(name, code) {
   return '/' + rel;
 }
 
+/* Stylesheets get content-hashed names too. Cloudflare tells browsers to
+   keep .css for 4 hours, so after a deploy visitors ran the new (hashed)
+   scripts against the OLD stylesheet — new features showed up unstyled. */
+async function fingerprintCss(rel, cache) {
+  if (cache.has(rel)) return cache.get(rel);
+  let css = await fs.readFile(path.join(DIST, rel), 'utf8');
+  // admin-styles.css @imports aldo-styles.css — point it at the hashed copy
+  for (const m of [...css.matchAll(/url\("([^"]+\.css)"\)/g)]) {
+    css = css.replace(m[0], `url("${await fingerprintCss(m[1].replace(/^\//, ''), cache)}")`);
+  }
+  const hash = crypto.createHash('sha256').update(css).digest('hex').slice(0, 10);
+  const out = `/build/${rel.replace(/\.css$/, '')}.${hash}.css`;
+  await fs.mkdir(path.join(DIST, 'build'), { recursive: true });
+  await fs.writeFile(path.join(DIST, out.slice(1)), css);
+  cache.set(rel, out);
+  return out;
+}
+
 async function precompilePages() {
+  const cssCache = new Map();
   const compiled = new Map(); // jsx path → /build/... url
   const pages = (await fs.readdir(DIST)).filter(f => f.endsWith('.html'));
   for (const page of pages) {
     const file = path.join(DIST, page);
     let html = await fs.readFile(file, 'utf8');
-    if (!/text\/babel/.test(html)) continue;
+    for (const m of [...html.matchAll(/<link rel="stylesheet" href="\/?([A-Za-z0-9_-]+\.css)"/g)]) {
+      html = html.replace(m[0], `<link rel="stylesheet" href="${await fingerprintCss(m[1], cssCache)}"`);
+    }
+    if (!/text\/babel/.test(html)) { await fs.writeFile(file, html); continue; }
 
     // External <script type="text/babel" src="x.jsx">
     for (const m of [...html.matchAll(/<script type="text\/babel" src="\/?([^"]+\.jsx)"><\/script>/g)]) {
