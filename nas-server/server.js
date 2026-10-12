@@ -26,6 +26,7 @@ import { listFolder, getThumbnailBatch, downloadFile, isImageFile, isConfigured 
 import { backupStatus, runBackup, scheduleBackups } from './utils/backup.js';
 import { videoJobs, queueVideo, queueUnprocessed } from './utils/video.js';
 import { renderProjectPage, renderWorkIndex, renderSitemap } from './utils/seo.js';
+import { tagStatus, tagUntagged, scheduleTagging } from './utils/ai-tags.js';
 import { Resend } from 'resend';
 import {
   readProjects, writeProjects,
@@ -34,6 +35,7 @@ import {
   readServices, writeServices,
   readSettings, writeSettings,
   readBytes, writeBytes, deleteImage, deleteProjectImages,
+  readMoodboards, writeMoodboards, readAiTags,
   readVideos, writeVideos, readVideoBytes, writeVideoBytes, writeVideoBytesFromPath, getVideoTmpDir, deleteVideoFile, videoFilePath,
   readGalleryPortals, writeGalleryPortals,
   readPrints, writePrints,
@@ -375,7 +377,7 @@ const anthropic = process.env.ANTHROPIC_API_KEY ? new Anthropic({ maxRetries: 4 
 const CLAUDE_MODEL  = 'claude-opus-5-5';
 const CLAUDE_EFFORT = 'high';
 
-async function _askClaudeJSON({ system, content, schema }) {
+async function _askClaudeJSON({ system, content, schema, effort = CLAUDE_EFFORT }) {
   const msg = await anthropic.beta.messages.stream({
     model: CLAUDE_MODEL,
     max_tokens: 64000,
@@ -384,7 +386,7 @@ async function _askClaudeJSON({ system, content, schema }) {
     betas: ['server-side-fallback-2026-07-01'],
     fallbacks: 'default',
     output_config: {
-      effort: CLAUDE_EFFORT,
+      effort,
       format: { type: 'json_schema', schema },
     },
     system,
@@ -978,6 +980,90 @@ app.get('/api/public/site', async (req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
   res.setHeader('x-aldo-served', new Date().toISOString());
   res.json(data);
+});
+
+/* ── Search by vibe (utils/ai-tags.js) ─────────────────────────────────
+   Public index of every public image with its Claude caption + tags; the
+   site loads it when the Search window opens and matches client-side. */
+app.get('/api/public/search-index', async (req, res) => {
+  const [{ projects }, tags] = await Promise.all([publicSiteData(), readAiTags()]);
+  const items = [];
+  for (const p of projects || []) {
+    for (const img of p.images || []) {
+      const t = tags.images[`${p.id}/${img.filename}`];
+      if (!t) continue;
+      items.push({ p: p.id, n: p.name, c: p.client || '', y: String(p.year || ''), f: img.filename, b: img.blobPath, cap: t.caption, t: t.tags });
+    }
+  }
+  res.setHeader('Cache-Control', 'public, max-age=300');
+  res.json({ items });
+});
+const _tagDeps = {
+  askClaudeJSON: (opts) => _askClaudeJSON(opts),
+  readProjects,
+  // 800px WebP from the resize cache (pre-generated at import/upload)
+  imageForClaude: async (projectId, filename) => {
+    const buf = await _resizedCached(projectId, filename, 800, () => readBytes(projectId, filename).catch(() => null), 'webp');
+    return buf ? { data: buf.toString('base64'), mediaType: 'image/webp' } : null;
+  },
+};
+app.get('/api/admin/ai-tags/status', (req, res) => {
+  if (!requireAuth(req, res)) return;
+  res.json(tagStatus);
+});
+app.post('/api/admin/ai-tags/run', (req, res) => {
+  if (!requireAuth(req, res)) return;
+  if (anthropic) tagUntagged(_tagDeps);
+  res.status(202).json({ started: !!anthropic });
+});
+
+/* ── Moodboards ─────────────────────────────────────────────────────────
+   Visitors heart photos into a moodboard (kept in their browser); sharing
+   saves a copy here and returns a link token. Only images from public
+   projects are accepted; creation is rate-limited per IP. */
+const _moodboardHits = new Map();
+app.post('/api/moodboards', async (req, res) => {
+  try {
+    const ip = _clientIp(req);
+    const recent = (_moodboardHits.get(ip) || []).filter(t => Date.now() - t < 60 * 60 * 1000);
+    if (recent.length >= 20) return res.status(429).json({ error: 'rate_limited', message: 'Too many moodboards — try again later.' });
+    const items = Array.isArray(req.body?.items) ? req.body.items.slice(0, 60) : [];
+    const { projects } = await publicSiteData();
+    const byId = new Map((projects || []).map(p => [p.id, p]));
+    const clean = [];
+    for (const it of items) {
+      const p = byId.get(String(it?.project || ''));
+      const img = p && (p.images || []).find(i => i.filename === String(it?.name || ''));
+      if (img && !clean.some(c => c.project === p.id && c.name === img.filename)) clean.push({ project: p.id, name: img.filename });
+    }
+    if (!clean.length) return res.status(400).json({ error: 'empty', message: 'Add at least one photo.' });
+    const token = crypto.randomBytes(9).toString('base64url');
+    const data = await readMoodboards();
+    data.boards[token] = {
+      title: String(req.body?.title || '').slice(0, 80),
+      items: clean,
+      createdAt: new Date().toISOString(),
+    };
+    await writeMoodboards(data);
+    _moodboardHits.set(ip, [...recent, Date.now()]);
+    res.status(201).json({ token });
+  } catch (err) {
+    console.error('[POST /api/moodboards]', err?.message);
+    res.status(500).json({ error: 'internal' });
+  }
+});
+app.get('/api/moodboards/:token', async (req, res) => {
+  const board = (await readMoodboards()).boards[req.params.token];
+  if (!board) return res.status(404).json({ error: 'not_found' });
+  const { projects } = await publicSiteData();
+  const byId = new Map((projects || []).map(p => [p.id, p]));
+  const items = board.items.map(it => {
+    const p = byId.get(it.project);
+    const img = p && (p.images || []).find(i => i.filename === it.name);
+    return img ? { project: p.id, name: img.filename, projectName: p.name, client: p.client || '', blobPath: img.blobPath, focalX: img.focalX ?? null, focalY: img.focalY ?? null } : null;
+  }).filter(Boolean); // photos since made private or deleted drop out
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ title: board.title, createdAt: board.createdAt, items });
 });
 
 /* Crawlable pages, rendered live from the same data (utils/seo.js).
@@ -4310,6 +4396,7 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
   console.log(`[nas-api] listening on port ${PORT}`);
   scheduleBackups({ dataDir: DATA_DIR, imagesDir: IMAGES_DIR });
+  if (anthropic) scheduleTagging(_tagDeps);
   // Pick up videos that predate processing (or arrived while it was down).
   setTimeout(() => queueUnprocessed().catch(err => console.warn('[video] startup queue:', err?.message)), 3 * 60 * 1000);
   // Warm the compact placeholder cache in the background (see compactBlur).

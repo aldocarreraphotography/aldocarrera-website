@@ -120,6 +120,13 @@ export const readVideos  = () => readJson('videos.json').then(d => d || { videos
 export const writeVideos = (d) => writeJson('videos.json', d);
 
 export const readPrints  = () => readJson('prints.json').then(d => d || { prints: [] });
+
+// Visitor moodboards shared by link (token → items) and Claude-written
+// captions/tags for search ("<projectId>/<filename>" → { caption, tags }).
+export const readMoodboards  = () => readJson('moodboards.json').then(d => d || { boards: {} });
+export const writeMoodboards = (d) => writeJson('moodboards.json', d);
+export const readAiTags      = () => readJson('ai-tags.json').then(d => d || { images: {} });
+export const writeAiTags     = (d) => writeJson('ai-tags.json', d);
 export const writePrints = (d) => writeJson('prints.json', d);
 
 export async function readVideoBytes(videoId, filename) {
