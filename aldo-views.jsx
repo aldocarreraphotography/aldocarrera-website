@@ -270,6 +270,7 @@ function ProjectDetail({ project, onOpenPhoto, onOpenVideo, onOpenReels }) {
   });
 
   const viewerList = vsUseMemo(() => images.map(toViewerItem), [images, project.id]);
+  const [sheet, setSheet] = vsUseState(false); // contact sheet view (aldo-contactsheet.jsx)
 
   const mainContent = (
     <div>
@@ -319,7 +320,15 @@ function ProjectDetail({ project, onOpenPhoto, onOpenVideo, onOpenReels }) {
           {project.note && <div style={{gridColumn:'1 / -1', fontStyle:'italic', color:'var(--ink)', fontFamily:'Neue Haas Grotesk Display Pro, Inter, sans-serif', fontSize: 14, lineHeight: 1.5, paddingTop: 10, borderTop:'1px solid var(--rule-soft)'}}>"{project.note}"</div>}
         </div>
       </div>
-      {images.length > 0 ? (
+      {images.length > 0 && window.ContactSheet && (
+        <div className="view-toggle project-view-toggle">
+          <button className={!sheet ? 'on' : ''} onClick={() => setSheet(false)}>Grid</button>
+          <button className={sheet ? 'on' : ''} onClick={() => setSheet(true)}>Contact sheet</button>
+        </div>
+      )}
+      {images.length > 0 && sheet && window.ContactSheet ? (
+        <window.ContactSheet project={project} images={images} viewerList={viewerList} onOpenPhoto={onOpenPhoto}/>
+      ) : images.length > 0 ? (
         <div className="thumb-grid project-thumb-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', gap: '28px', padding: '24px 28px 64px' }}>
           {images.map(img => {
             const it = toViewerItem(img);
@@ -327,6 +336,7 @@ function ProjectDetail({ project, onOpenPhoto, onOpenVideo, onOpenReels }) {
               <div key={img.filename} className="thumb" onClick={() => onOpenPhoto(it, viewerList)}>
                 <div className="pic" style={placeholderStyle(img)}>
                   <img src={window.aldoSized(img.blobPath, 360)} srcSet={window.aldoSrcSet(img.blobPath)} sizes="auto, (max-width: 820px) 50vw, 360px" alt={`${project.name}${project.client ? " — " + project.client : ""}`} loading="lazy" decoding="async" className="lazy-img" style={focalImgStyle(img)} onLoad={_markLoaded} ref={_onImgRef}/>
+                  {window.HeartButton && <window.HeartButton className="thumb-heart" item={{ project: project.id, name: img.filename, photo: img.blobPath, client: project.client, projectName: project.name }}/>}
                 </div>
                 <span className="name">{img.filename}</span>
                 <span className="sub">{[it.dims, it.size].filter(Boolean).join(' · ') || 'archive'}</span>
@@ -600,6 +610,7 @@ function Archive({ onOpenPhoto, onSetCrumb, initialFilter, onFilterChange, selec
                 >
                   <div className="pic" style={placeholderStyle(it)}>
                     <img src={window.aldoSized(it.photo, 240)} srcSet={window.aldoSrcSet(it.photo)} sizes="auto, (max-width: 820px) 50vw, 240px" alt={it.name} loading="lazy" decoding="async" className="lazy-img" style={focalImgStyle(it)} onLoad={_markLoaded} ref={_onImgRef}/>
+                    {!selectionMode && window.HeartButton && <window.HeartButton className="thumb-heart" item={{ project: it.project, name: it.name, photo: it.photo, client: it.client, projectName: ((window.ALDO.PROJECTS || []).find(p => p.id === it.project) || {}).name }}/>}
                     {selectionMode && (
                       <span className={`select-mark ${isSelected ? 'on' : ''}`}>
                         {isSelected ? selectedIds.indexOf(it.id) + 1 : ''}
@@ -674,6 +685,9 @@ function PhotoViewer({ photo, list, onPrev, onNext }) {
         </div>
         {onPrev && <button className="nav prev" onClick={onPrev} aria-label="previous">‹</button>}
         <img src={window.aldoSized(photo.photo || photo.src, 2000)} alt={photo.name} decoding="async"/>
+        {window.HeartButton && photo.project && (photo.photo || photo.src) && (
+          <window.HeartButton className="viewer-heart" item={{ project: photo.project, name: photo.name, photo: photo.photo || photo.src, client: photo.client, projectName: ((window.ALDO.PROJECTS || []).find(p => p.id === photo.project) || {}).name }}/>
+        )}
         {onNext && <button className="nav next" onClick={onNext} aria-label="next">›</button>}
       </div>
       <div className="info-panel">
@@ -820,6 +834,9 @@ function Contact() {
   const [submitting, setSubmitting] = vsUseState(false);
   const [error, setError] = vsUseState(null);
   const [f, setF] = vsUseState({ name: '', email: '', subject: 'editorial', message: '' });
+  // Moodboard: the visitor's saved photos can ride along as a share link
+  const moodboard = window.useMoodboard ? window.useMoodboard() : [];
+  const [attachBoard, setAttachBoard] = vsUseState(() => !!window.__aldoInquiryMoodboard);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -827,10 +844,15 @@ function Contact() {
     setSubmitting(true);
     setError(null);
     try {
+      let message = f.message;
+      if (attachBoard && moodboard.length) {
+        const url = (window.__aldoInquiryMoodboard && window.__aldoInquiryMoodboard.url) || await window.AldoMoodboard.share();
+        message += `\n\nMoodboard (${moodboard.length} photos): ${url}`;
+      }
       const res = await fetch('/api/contact', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(f),
+        body: JSON.stringify({ ...f, message }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -904,6 +926,12 @@ function Contact() {
           <label htmlFor="cm">Message</label>
           <textarea id="cm" name="message" required value={f.message} onChange={e => setF({...f, message: e.target.value})}/>
         </div>
+        {moodboard.length > 0 && (
+          <label className="mb-attach">
+            <input type="checkbox" checked={attachBoard} onChange={e => setAttachBoard(e.target.checked)}/>
+            <span>Attach my moodboard <b>♥ {moodboard.length}</b> — Aldo gets a link to the photos you saved</span>
+          </label>
+        )}
         {error && (
           <div style={{color:'#b34', fontSize:13, marginBottom:10, fontFamily:'var(--mono)'}}>
             {error}

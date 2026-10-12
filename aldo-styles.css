@@ -508,14 +508,16 @@ input, textarea, select {
 .window-toolbar .crumbs .sep { color: var(--ink-muted); margin: 0 6px; }
 .window-toolbar .crumbs .here { color: var(--ink); }
 .window-toolbar .view-toggle,
-.archive-only > .toolbar .view-toggle {
+.archive-only > .toolbar .view-toggle,
+.project-view-toggle {
   display: flex; gap: 0;
   border: 1px solid var(--rule);
   border-radius: 2px;
   overflow: hidden;
 }
 .window-toolbar .view-toggle button,
-.archive-only > .toolbar .view-toggle button {
+.archive-only > .toolbar .view-toggle button,
+.project-view-toggle button {
   border: none;
   background: var(--window);
   padding: 4px 10px;
@@ -529,11 +531,14 @@ input, textarea, select {
   transition: background 120ms var(--easing), color 120ms var(--easing);
 }
 .window-toolbar .view-toggle button:last-child,
-.archive-only > .toolbar .view-toggle button:last-child { border-right: none; }
+.archive-only > .toolbar .view-toggle button:last-child,
+.project-view-toggle button:last-child { border-right: none; }
 .window-toolbar .view-toggle button:hover:not(.on),
-.archive-only > .toolbar .view-toggle button:hover:not(.on) { background: var(--paper-soft); color: var(--ink); }
+.archive-only > .toolbar .view-toggle button:hover:not(.on),
+.project-view-toggle button:hover:not(.on) { background: var(--paper-soft); color: var(--ink); }
 .window-toolbar .view-toggle button.on,
-.archive-only > .toolbar .view-toggle button.on { background: var(--ink); color: var(--paper); }
+.archive-only > .toolbar .view-toggle button.on,
+.project-view-toggle button.on { background: var(--ink); color: var(--paper); }
 
 .window-content {
   flex: 1;
@@ -3493,3 +3498,143 @@ img.lazy-img.lazy-revealed { visibility: visible; }
   .thumb:hover .pic img { transform: none; }
   .thumb-grid.selection-mode .thumb:hover .pic { transform: none; }
 }
+
+/* ============================================================
+   MOODBOARD (aldo-moodboard.jsx)
+   ============================================================ */
+.mb-heart {
+  position: absolute; z-index: 2; width: 32px; height: 32px; border-radius: 50%;
+  border: 0; cursor: pointer; display: grid; place-items: center;
+  font-size: 17px; line-height: 1; color: #fff;
+  background: rgba(20,17,13,.35); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  transition: opacity .15s, transform .15s, background .15s;
+}
+.mb-heart:hover { background: rgba(20,17,13,.55); }
+.mb-heart.on { color: var(--accent); background: rgba(255,255,255,.9); }
+.mb-heart.pop { transform: scale(1.3); }
+.thumb-heart { top: 8px; right: 8px; opacity: 0; }
+.thumb:hover .thumb-heart, .thumb-heart.on { opacity: 1; }
+@media (hover: none) { .thumb-heart { opacity: 1; } }
+.viewer .stage { position: relative; }
+.viewer-heart { right: 16px; bottom: 16px; width: 40px; height: 40px; font-size: 20px; }
+.dock-item { position: relative; }
+.dock-badge {
+  position: absolute; top: -4px; right: -4px; min-width: 16px; height: 16px; padding: 0 4px;
+  border-radius: 8px; background: var(--accent); color: #fff;
+  font: 600 10px/16px Inter, sans-serif; text-align: center;
+}
+.mb-view { height: 100%; overflow-y: auto; }
+.mb-head { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding: 18px 20px 14px; border-bottom: 1px solid var(--rule-soft); }
+.mb-title { font-size: 18px; font-weight: 600; color: var(--ink); }
+.mb-sub { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink-soft); margin-top: 3px; }
+.mb-actions { margin-left: auto; display: flex; gap: 8px; }
+.mb-link { padding: 10px 20px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink-soft); word-break: break-all; }
+.mb-link a { color: var(--ink); }
+.mb-err { padding: 10px 20px; color: #b34; font-size: 13px; }
+.mb-empty { padding: 70px 24px; text-align: center; color: var(--ink-soft); }
+.mb-empty-heart { font-size: 40px; color: var(--accent); margin-bottom: 10px; }
+.mb-grid { column-width: 220px; column-gap: 12px; padding: 16px 20px 40px; }
+.mb-item { break-inside: avoid; margin: 0 0 12px; position: relative; cursor: zoom-in; }
+.mb-item img { width: 100%; display: block; background: var(--paper-soft); }
+.mb-item figcaption { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--ink-soft); margin-top: 5px; text-transform: uppercase; }
+.mb-remove {
+  position: absolute; top: 6px; right: 6px; width: 24px; height: 24px; border-radius: 50%; border: 0;
+  background: rgba(20,17,13,.6); color: #fff; cursor: pointer; opacity: 0; transition: opacity .15s;
+}
+.mb-item:hover .mb-remove { opacity: 1; }
+.mb-attach { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--ink-soft); margin: 4px 0 14px; cursor: pointer; }
+.mb-attach b { color: var(--accent); font-weight: 600; }
+
+/* ============================================================
+   SEARCH BY VIBE (aldo-search.jsx)
+   ============================================================ */
+.sr-view { height: 100%; overflow-y: auto; }
+.sr-bar { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 10px; padding: 14px 18px; background: var(--window); border-bottom: 1px solid var(--rule-soft); }
+.sr-icon { font-size: 20px; color: var(--ink-soft); }
+.sr-input { flex: 1; border: 0; outline: none; background: transparent; font: 400 18px Inter, sans-serif; color: var(--ink); }
+.sr-suggest { padding: 22px 20px; }
+.sr-label { font-family: 'IBM Plex Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-soft); margin-bottom: 10px; }
+.sr-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.sr-chip { border: 1px solid var(--rule); background: var(--paper); color: var(--ink); border-radius: 999px; padding: 6px 13px; font-size: 13px; cursor: pointer; }
+.sr-chip:hover { border-color: var(--accent); color: var(--accent); }
+.sr-note { font-size: 13px; color: var(--ink-soft); margin-top: 18px; }
+.sr-pad { padding: 30px 20px; margin: 0; }
+.sr-count { padding: 12px 20px 0; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink-soft); }
+.sr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; padding: 12px 20px 40px; }
+.sr-item { margin: 0; cursor: zoom-in; position: relative; }
+.sr-item img { width: 100%; aspect-ratio: 4/5; object-fit: cover; display: block; background: var(--paper-soft); }
+.sr-item .sr-heart { top: 8px; right: 8px; opacity: 0; }
+.sr-item:hover .sr-heart, .sr-item .sr-heart.on { opacity: 1; }
+.sr-item figcaption { margin-top: 6px; font-size: 12px; line-height: 1.35; color: var(--ink-soft); }
+.sr-item figcaption b { display: block; color: var(--ink); font-weight: 500; }
+.sr-item figcaption span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* ============================================================
+   CONTACT SHEET (aldo-contactsheet.jsx)
+   ============================================================ */
+.project-view-toggle { width: max-content; margin: 16px 28px 0 auto; }
+.cs-sheet {
+  margin: 18px 28px 64px; padding: 22px 18px; background: #161412;
+  display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0 6px;
+  box-shadow: inset 0 0 0 1px #000;
+}
+.cs-cell { position: relative; padding: 20px 6px 26px; cursor: zoom-in; }
+/* sprocket holes along both edges of each frame (35mm + digital stock) */
+.cs-35 .cs-cell::before, .cs-35 .cs-cell::after, .cs-dig .cs-cell::before, .cs-dig .cs-cell::after {
+  content: ''; position: absolute; left: 0; right: 0; height: 8px;
+  background: repeating-linear-gradient(90deg, transparent 0 5px, #e9e4da 5px 11px, transparent 11px 16px);
+  opacity: .82; border-radius: 1px;
+}
+.cs-35 .cs-cell::before, .cs-dig .cs-cell::before { top: 6px; }
+.cs-35 .cs-cell::after, .cs-dig .cs-cell::after { bottom: 12px; }
+.cs-frame { height: 170px; background: #000; overflow: hidden; box-shadow: 0 0 0 1px #000; }
+.cs-frame img { height: 100%; width: 100%; object-fit: cover; display: block; }
+.cs-mf .cs-frame { height: 200px; }
+.cs-edge {
+  position: absolute; left: 6px; right: 6px; bottom: 2px; display: flex; gap: 10px; align-items: baseline;
+  font: 600 9px 'IBM Plex Mono', monospace; color: #e8a33d; letter-spacing: .06em; white-space: nowrap; overflow: hidden;
+}
+.cs-mf .cs-edge, .cs-35 .cs-edge { bottom: 4px; }
+.cs-num { font-size: 11px; }
+.cs-stock { opacity: .85; }
+.cs-lens {
+  position: fixed; z-index: 9500; pointer-events: none; border-radius: 50%;
+  background-repeat: no-repeat; background-color: #000;
+  box-shadow: 0 0 0 3px rgba(255,255,255,.9), 0 12px 40px rgba(0,0,0,.45);
+}
+
+/* ============================================================
+   SCREENSAVER (aldo-screensaver.jsx)
+   ============================================================ */
+.ss-overlay { position: fixed; inset: 0; z-index: 20000; background: #000; cursor: none; animation: ss-in 1.2s ease; overflow: hidden; }
+@keyframes ss-in { from { opacity: 0; } to { opacity: 1; } }
+.ss-slide { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity 1.6s ease; }
+.ss-slide.on { opacity: 1; }
+.ss-slide.on.ss-pan-0 { animation: ss-pan-0 8s linear forwards; }
+.ss-slide.on.ss-pan-1 { animation: ss-pan-1 8s linear forwards; }
+.ss-slide.on.ss-pan-2 { animation: ss-pan-2 8s linear forwards; }
+.ss-slide.on.ss-pan-3 { animation: ss-pan-3 8s linear forwards; }
+.ss-still .ss-slide.on { animation: none !important; }
+@keyframes ss-pan-0 { from { transform: scale(1.04) translate(0, 0); } to { transform: scale(1.14) translate(-2%, -1.5%); } }
+@keyframes ss-pan-1 { from { transform: scale(1.14) translate(2%, 1%); } to { transform: scale(1.04) translate(0, 0); } }
+@keyframes ss-pan-2 { from { transform: scale(1.06) translate(-1.5%, 1%); } to { transform: scale(1.15) translate(1.5%, -1%); } }
+@keyframes ss-pan-3 { from { transform: scale(1.15) translate(0, -2%); } to { transform: scale(1.05) translate(0, 1%); } }
+.ss-caption { position: absolute; left: 44px; bottom: 40px; color: #fff; text-shadow: 0 2px 14px rgba(0,0,0,.5); }
+.ss-name { font-size: 28px; font-weight: 500; letter-spacing: -.01em; }
+.ss-meta { font: 12px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: .08em; opacity: .8; margin-top: 4px; }
+.ss-brand { position: absolute; right: 44px; bottom: 44px; color: rgba(255,255,255,.55); font: 11px 'IBM Plex Mono', monospace; letter-spacing: .1em; text-transform: uppercase; }
+
+/* ============================================================
+   TERMINAL (aldo-terminal.jsx)
+   ============================================================ */
+.tm-view {
+  height: 100%; overflow-y: auto; padding: 14px 16px; background: #0f0e0c; color: #e7e2d6;
+  font: 13px/1.55 'IBM Plex Mono', ui-monospace, monospace; cursor: text;
+}
+.tm-line { white-space: pre-wrap; word-break: break-word; }
+.tm-sys { color: #8b867b; }
+.tm-cmd { color: #f2eee5; }
+.tm-out { color: #c9c3b6; }
+.tm-err { color: #ff8a80; }
+.tm-prompt { display: flex; color: #9fd28c; }
+.tm-prompt input { flex: 1; min-width: 0; background: transparent; border: 0; outline: none; color: #f2eee5; font: inherit; caret-color: var(--accent); }

@@ -48,6 +48,11 @@ const FILES = [
   'aldo-views.jsx',
   'aldo-app.jsx',
   'tweaks-panel.jsx',
+  'aldo-moodboard.jsx',
+  'aldo-search.jsx',
+  'aldo-contactsheet.jsx',
+  'aldo-screensaver.jsx',
+  'aldo-terminal.jsx',
 
   // Admin code
   'admin-styles.css',

@@ -73,6 +73,27 @@ const DockGlyph = ({ kind, accent }) => {
           <line x1="6" y1="15.5" x2="12" y2="15.5" stroke={stroke} strokeWidth="1.2"/>
         </svg>
       );
+    case 'search':
+      return (
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+          <circle cx="9.5" cy="9.5" r="5.8" stroke={stroke} strokeWidth="1.2"/>
+          <line x1="13.8" y1="13.8" x2="19" y2="19" stroke={stroke} strokeWidth="1.2"/>
+        </svg>
+      );
+    case 'heart':
+      return (
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+          <path d="M11 18.5 C5 14 3 11 3 8.2 C3 5.8 4.9 4 7.1 4 C8.7 4 10.1 4.9 11 6.3 C11.9 4.9 13.3 4 14.9 4 C17.1 4 19 5.8 19 8.2 C19 11 17 14 11 18.5 Z" stroke={stroke} strokeWidth="1.2"/>
+        </svg>
+      );
+    case 'terminal':
+      return (
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+          <rect x="2.5" y="4" width="17" height="14" stroke={stroke} strokeWidth="1.2"/>
+          <path d="M6 9 L9 11.5 L6 14" stroke={stroke} strokeWidth="1.2" fill="none"/>
+          <line x1="11" y1="14.5" x2="15.5" y2="14.5" stroke={stroke} strokeWidth="1.2"/>
+        </svg>
+      );
     case 'contact':
       return (
         <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
@@ -1310,6 +1331,9 @@ function ArchiveApp() {
       clients:   'Clients',
       about:     'About',
       contact:   'Contact',
+      search:    'Search',
+      moodboard: 'Moodboard',
+      terminal:  'Terminal',
       reels:     'Reels',
       reelfeed:  'Reels',
       crew:      win.crewName || 'Crew',
@@ -1323,6 +1347,7 @@ function ArchiveApp() {
 
   const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
   const [windows, setWindows] = aUseState(INITIAL_WINDOWS);
+  const moodboard = useMoodboard();
   const [order, setOrder] = aUseState(['about', 'clients', 'portfolio']);
   const [focused, setFocused] = aUseState('portfolio');
   const [ctx, setCtx] = aUseState(null);
@@ -1411,6 +1436,15 @@ function ArchiveApp() {
         if (name) openWindow('crew', { crewName: name });
         return;
       }
+      // Shared moodboard: #moodboard/TOKEN
+      if (hash.startsWith('moodboard/')) {
+        const token = decodeURIComponent(hash.slice(10));
+        if (token && deepLinkedRef.current !== hash) {
+          deepLinkedRef.current = hash;
+          openWindow('moodboard', { token });
+        }
+        return;
+      }
       // Reel deep link: #reel/ID (the feed's share button)
       if (hash.startsWith('reel/')) {
         const id = decodeURIComponent(hash.slice(5));
@@ -1495,6 +1529,12 @@ function ArchiveApp() {
         focus(existing.id);
         return;
       }
+      // Search / moodboard: reuse the window with the new query or shared board
+      if ((kind === 'search' && opts.query) || (kind === 'moodboard' && (opts.token || null) !== (existing.token || null))) {
+        setWindows(ws => ({ ...ws, [existing.id]: { ...ws[existing.id], minimized: false, mounted: true, query: opts.query || null, token: opts.token || null, title: kind === 'moodboard' ? (opts.token ? 'Shared moodboard' : 'Moodboard') : ws[existing.id].title } }));
+        focus(existing.id);
+        return;
+      }
       // One feed window: clicking another reel restarts it at that reel
       if (kind === 'reelfeed') {
         setWindows(ws => ({ ...ws, [existing.id]: { ...ws[existing.id], minimized: false, mounted: true, startId: opts.startId || null } }));
@@ -1524,6 +1564,9 @@ function ArchiveApp() {
       contact:   { title:'Inquiry · contact.html', path:'~/contact',                        w: 480, h: 540 },
       reels:     { title:'Reels',                path: '~/reels',                           w: 720, h: 780 },
       reelfeed:  { title:'Reels',                path: '~/reels/feed',                      w: 480, h: 820 },
+      search:    { title:'Search',               path: '~/search',                          w: 760, h: 640 },
+      moodboard: { title: opts.token ? 'Shared moodboard' : 'Moodboard', path: '~/moodboard', w: 760, h: 640 },
+      terminal:  { title:'Terminal — zsh',       path: '~',                                 w: 660, h: 440 },
       crew:      { title: opts.crewName || 'Crew', path: opts.crewName ? `~/crew/${opts.crewName}` : '~/crew', w: 820, h: 620 },
       prints:    { title: opts.print ? opts.print.title : 'Print shop', path: opts.print ? `~/prints/${opts.print.id}` : '~/prints', w: 900, h: 640 },
       video:     (() => {
@@ -1558,6 +1601,8 @@ function ArchiveApp() {
         crewName: opts.crewName || null,
         print:   opts.print   || null,
         startId: opts.startId || null,
+        query:   opts.query   || null,
+        token:   opts.token   || null,
       },
     }));
     setOrder(o => [...o, id]);
@@ -1639,6 +1684,7 @@ function ArchiveApp() {
         onOpenPhoto={openPhotoViewer}
       />
 
+      <Screensaver/>
       <div className="desktop" onContextMenu={onDesktopCtx} onClick={() => setCtx(null)}>
         {/* WINDOWS */}
         {taskList.map(w => (
@@ -1658,6 +1704,7 @@ function ArchiveApp() {
             onOpenVideo={(v, dims) => openWindow('video', { video: v, dims })}
             onOpenReels={() => openWindow('reels')}
             onOpenFeed={(v) => openWindow('reelfeed', { startId: v.id })}
+            onOpenWindow={openWindow}
             onOpenCrew={(name) => openWindow('crew', { crewName: name || null })}
             onOpenPrint={(p) => openWindow('prints', { print: p })}
             view={view} setView={setView}
@@ -1737,12 +1784,16 @@ function ArchiveApp() {
             { k: 'prints',    g: 'prints',    l: 'Prints'    },
             { k: 'about',     g: 'about',     l: 'About'     },
             { k: 'contact',   g: 'contact',   l: 'Contact'   },
+            { k: 'search',    g: 'search',    l: 'Search by vibe' },
+            { k: 'moodboard', g: 'heart',     l: 'Moodboard' },
+            { k: 'terminal',  g: 'terminal',  l: 'Terminal'  },
           ].map(d => {
             const open = taskList.some(w => w.kind === d.k && !w.minimized);
             return (
               <button key={d.k} className={`dock-item ${open ? 'active' : ''}`} onClick={() => openWindow(d.k)}>
                 <DockGlyph kind={d.g}/>
                 <span className="label-tip">{d.l}</span>
+                {d.k === 'moodboard' && moodboard.length > 0 && <span className="dock-badge">{moodboard.length}</span>}
                 {open && <span className="open-dot"/>}
               </button>
             );
@@ -1813,7 +1864,7 @@ function ArchiveApp() {
 /* ============================================================
    WINDOW HOST — content router
    ============================================================ */
-function WindowHost({ win, z, focused, minimized, onMove, onResize, onFocus, onClose, onMinimize, onMaximize, onOpenPhoto, onOpenProject, onOpenVideo, onOpenReels, onOpenFeed, onOpenCrew, onOpenPrint, view, setView, archiveFilter, setArchiveFilter, selectionMode, setSelectionMode, selectedIds, toggleSelection }) {
+function WindowHost({ win, z, focused, minimized, onMove, onResize, onFocus, onClose, onMinimize, onMaximize, onOpenPhoto, onOpenProject, onOpenVideo, onOpenReels, onOpenFeed, onOpenWindow, onOpenCrew, onOpenPrint, view, setView, archiveFilter, setArchiveFilter, selectionMode, setSelectionMode, selectedIds, toggleSelection }) {
   let content, toolbar, statusbar;
   const baseCrumb = (parts) => (
     <div className="crumbs">
@@ -1922,6 +1973,17 @@ function WindowHost({ win, z, focused, minimized, onMove, onResize, onFocus, onC
         <span>photography · direction · production</span>
       </div>
     );
+  } else if (win.kind === 'search') {
+    content = <SearchView key={win.query || 'search'} initialQuery={win.query || ''} onOpenPhoto={onOpenPhoto}/>;
+  } else if (win.kind === 'moodboard') {
+    content = <MoodboardView key={win.token || 'mine'} token={win.token} onOpenPhoto={onOpenPhoto} onOpenContact={() => onOpenWindow('contact')}/>;
+  } else if (win.kind === 'terminal') {
+    content = <TerminalView actions={{
+      open: (k, o) => onOpenWindow(k, o || {}),
+      openProject: (p) => onOpenProject(p),
+      openFeed: (v) => onOpenFeed(v),
+      close: () => onClose(win.id),
+    }}/>;
   } else if (win.kind === 'reelfeed') {
     // key: clicking another reel in the grid restarts the feed at that reel
     content = <ReelFeed key={win.startId || 'feed'} startId={win.startId}/>;
