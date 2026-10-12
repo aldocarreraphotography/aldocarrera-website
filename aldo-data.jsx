@@ -268,6 +268,20 @@ window.aldoSized = function (src, w) {
   return clean + (clean.includes('?') ? '&' : '?') + 'w=' + bucket + fmt;
 };
 
+/* srcset for NAS images: every width bucket, so the browser picks the one
+   that matches the rendered size × screen density. The old fixed hints
+   (1200/1600 × DPR, capped at 2000) sent 2000px photos — up to ~650 KB —
+   into 392px grid tiles on retina screens. Pair with a `sizes` attribute;
+   "auto, …" lets Chrome measure the actual layout (lazy images), other
+   browsers use the fallback width that follows. */
+window.aldoSrcSet = function (src) {
+  if (!src || typeof src !== 'string' || !/\/api\/(projects|ug)\//.test(src)) return undefined;
+  const clean = src.replace(/([?&])(w=\d+|f=webp)(?=&|$)/g, '$1').replace(/&&+/g, '&').replace(/[?&]+$/, '').replace('?&', '?');
+  const fmt = /\/api\/projects\//.test(clean) ? '&f=webp' : '';
+  const sep = clean.includes('?') ? '&' : '?';
+  return _ALDO_W_BUCKETS.filter(w => w >= 400).map(w => `${clean}${sep}w=${w}${fmt} ${w}w`).join(', ');
+};
+
 /* Full-bleed images (mobile cards span the whole viewport). Passing a fixed
    hint like 800 over-served phones badly: 800 × DPR2 = 1600px for a 375px
    slot — roughly 3× the bytes needed. Size from the actual viewport instead. */

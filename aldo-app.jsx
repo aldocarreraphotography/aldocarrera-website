@@ -2020,19 +2020,83 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
       return p;
     };
 
-    const HOLD_MS = 220; // how long the pixelated placeholder is visible
+    /* De-pixelation effect, played ON TOP of the loaded photo when it comes
+       into view: a canvas over the <img> steps from coarse to fine blocks to
+       sharp (~450ms), then removes itself. It's decoupled from loading, so it
+       plays the same whether the photo took 50ms or 5s. Guardrails: the
+       photo underneath is already visible, so any failure just shows the
+       photo; skipped for reduced-motion users, non-cover images and when
+       many are already running; plays once per image. */
+    const PIXEL_STEPS = [6, 12, 24, 48, 96]; // blocks across, coarse → fine
+    const STEP_MS = 85;
+    const MAX_ACTIVE = 8;
+    let active = 0;
+    const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const pixelate = (img) => {
+      if (reduceMotion || active >= MAX_ACTIVE || img.dataset.pixelated) return;
+      img.dataset.pixelated = '1';
+      let canvas = null;
+      try {
+        const cs = getComputedStyle(img);
+        const W = img.offsetWidth, H = img.offsetHeight;
+        const iw = img.naturalWidth, ih = img.naturalHeight;
+        if (cs.objectFit !== 'cover' || !W || !H || !iw || !ih) return;
+        // Source rect that object-fit: cover + object-position actually shows
+        const scale = Math.max(W / iw, H / ih);
+        const sw = W / scale, sh = H / scale;
+        const [px, py] = (cs.objectPosition || '50% 50%').split(' ').map(v => v.endsWith('%') ? parseFloat(v) / 100 : 0.5);
+        const sx = (iw - sw) * (isNaN(px) ? 0.5 : px), sy = (ih - sh) * (isNaN(py) ? 0.5 : py);
 
+        const wrap = img.parentElement;
+        if (getComputedStyle(wrap).position === 'static') wrap.style.position = 'relative';
+        canvas = document.createElement('canvas');
+        canvas.className = 'pixel-fx';
+        Object.assign(canvas.style, {
+          position: 'absolute', left: img.offsetLeft + 'px', top: img.offsetTop + 'px',
+          width: W + 'px', height: H + 'px', imageRendering: 'pixelated',
+          pointerEvents: 'none', zIndex: 1, filter: cs.filter,
+        });
+        const ctx = canvas.getContext('2d');
+        const draw = (cols) => {
+          const rows = Math.max(1, Math.round(cols * H / W));
+          canvas.width = cols; canvas.height = rows;
+          ctx.imageSmoothingEnabled = true; // average each block's colour
+          ctx.drawImage(img, sx, sy, sw, sh, 0, 0, cols, rows);
+        };
+        draw(PIXEL_STEPS[0]);
+        wrap.appendChild(canvas);
+        active++;
+        let i = 0;
+        const done = () => { canvas.remove(); active--; };
+        const tick = () => {
+          if (++i >= PIXEL_STEPS.length) return done();
+          try { draw(PIXEL_STEPS[i]); } catch (_) { return done(); }
+          setTimeout(tick, STEP_MS);
+        };
+        setTimeout(tick, STEP_MS);
+        setTimeout(() => { if (canvas.isConnected) done(); }, STEP_MS * (PIXEL_STEPS.length + 4)); // can't get stuck
+      } catch (_) {
+        if (canvas && canvas.isConnected) { canvas.remove(); active--; }
+      }
+    };
+
+    /* The hold only starts once the image is actually on screen. Images now
+       load fast (WebP, pre-generated sizes, CDN cache) and the far observer
+       preloads them 3000px ahead, so revealing on load meant the pixel grid
+       played out off-screen and visitors never saw it. Off-screen images are
+       parked with the near observer, which reveals them as they scroll in. */
     const reveal = (el) => {
       if (el.classList.contains('lazy-revealed')) return;
-      // Wait for BOTH: decode complete AND minimum placeholder hold time
-      const hold = new Promise(r => setTimeout(r, HOLD_MS));
-      Promise.all([preload(el), hold]).then(() => {
-        requestAnimationFrame(() => el.classList.add('lazy-revealed'));
+      if (el.dataset.inview !== '1') { preload(el); nearObs.observe(el); return; }
+      // On screen: show it as soon as it's decoded, with the effect on top.
+      preload(el).then(() => {
+        if (el.classList.contains('lazy-revealed')) return;
+        el.classList.add('lazy-revealed');
+        if (el.complete && el.naturalWidth > 0) pixelate(el);
       });
-      // Hard fallback: never stay stuck longer than HOLD_MS + 2.5s — with
-      // sized images (~100-300 KB) anything still loading at that point is
-      // close enough to done that progressive paint beats frozen pixels.
-      setTimeout(() => el.classList.add('lazy-revealed'), HOLD_MS + 2500);
+      // Hard fallback: a slow image shows (painting progressively) after
+      // 2.5s instead of sitting behind the placeholder.
+      setTimeout(() => el.classList.add('lazy-revealed'), 2500);
     };
 
     // Far observer: triggers preload well before image enters viewport
@@ -2046,16 +2110,17 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
     }, { rootMargin: '3000px 0px 3000px 0px' });
 
     // Near observer: fires as image is entering the viewport — combined with
-    // the HOLD_MS delay in reveal(), the placeholder is visible briefly while
+    // the pixel effect in reveal(), the effect plays as the image arrives while
     // the user scrolls toward it, then snaps to sharp.
     const nearObs = new IntersectionObserver((entries) => {
       entries.forEach(e => {
         if (e.isIntersecting) {
-          reveal(e.target);
           nearObs.unobserve(e.target);
+          e.target.dataset.inview = '1';
+          reveal(e.target);
         }
       });
-    }, { rootMargin: '200px 0px 200px 0px' });
+    }, { rootMargin: '0px', threshold: 0.15 });
 
     const observe = () => {
       document.querySelectorAll('img.lazy-img:not(.lazy-revealed)').forEach(img => {
@@ -2064,7 +2129,7 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
           img.classList.add('lazy-revealed');
           return;
         }
-        // Already loaded (cache hit / loaded before we attached)? Reveal now.
+        // Already loaded (cache hit)? reveal() parks it until it's on screen.
         if (img.complete && img.naturalWidth > 0) { reveal(img); return; }
         farObs.observe(img);
         nearObs.observe(img);
@@ -2082,10 +2147,26 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
     /* Backstop sweep: anything that finished loading but somehow never got
        revealed gets caught within ~600ms. Cheap (a querySelectorAll over a
        shrinking set) and guarantees the pixel grid can never freeze. */
+    // Geometric check, independent of IntersectionObserver: on screen and
+    // inside its window's visible scroll area.
+    const onScreen = (el) => {
+      const r = el.getBoundingClientRect();
+      if (!r.width || !r.height) return false;
+      const box = el.closest('.window-content');
+      const b = box ? box.getBoundingClientRect() : { top: 0, bottom: innerHeight, left: 0, right: innerWidth };
+      return r.bottom > Math.max(0, b.top) && r.top < Math.min(innerHeight, b.bottom)
+          && r.right > Math.max(0, b.left) && r.left < Math.min(innerWidth, b.right);
+    };
     const sweep = setInterval(() => {
       const pending = document.querySelectorAll('img.lazy-img:not(.lazy-revealed)');
       if (!pending.length) return;
-      pending.forEach(img => { if (img.complete && img.naturalWidth > 0) reveal(img); });
+      pending.forEach(img => {
+        if (!(img.complete && img.naturalWidth > 0)) return;
+        // Fail-open: a loaded image that's visibly on screen is revealed even
+        // if the near observer missed it — the pixel grid must never freeze.
+        if (onScreen(img)) img.dataset.inview = '1';
+        reveal(img);
+      });
     }, 600);
 
     return () => {

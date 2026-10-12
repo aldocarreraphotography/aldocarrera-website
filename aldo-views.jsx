@@ -128,9 +128,12 @@ function FeaturedStrip({ onOpenProject }) {
             key={s.blobPath || i}
             src={
               (i === idx || i === (idx + 1) % stars.length || i === (idx - 1 + stars.length) % stars.length)
-                ? window.aldoSized(s.blobPath, 1600)
+                ? window.aldoSized(s.blobPath, 640)
                 : undefined
             }
+            srcSet={(i === idx || i === (idx + 1) % stars.length || i === (idx - 1 + stars.length) % stars.length)
+                ? window.aldoSrcSet(s.blobPath) : undefined}
+            sizes="(max-width: 820px) 100vw, 640px"
             alt={s.projectName}
             className={i === idx ? 'on' : ''}
             fetchPriority={i === idx ? 'high' : 'low'}
@@ -188,7 +191,9 @@ function Portfolio({ view, onSetView, onOpenProject, onSetCrumb }) {
           >
             <div className="photo" style={placeholderStyle(p)}>
               <img
-                src={window.aldoSized(p.photo, 1200)}
+                src={window.aldoSized(p.photo, 440)}
+                srcSet={window.aldoSrcSet(p.photo)}
+                sizes="auto, (max-width: 820px) 100vw, 440px"
                 alt={p.name}
                 loading="lazy"
                 decoding="async"
@@ -321,7 +326,7 @@ function ProjectDetail({ project, onOpenPhoto, onOpenVideo, onOpenReels }) {
             return (
               <div key={img.filename} className="thumb" onClick={() => onOpenPhoto(it, viewerList)}>
                 <div className="pic" style={placeholderStyle(img)}>
-                  <img src={window.aldoSized(img.blobPath, 800)} alt={`${project.name}${project.client ? " — " + project.client : ""}`} loading="lazy" decoding="async" className="lazy-img" style={focalImgStyle(img)} onLoad={_markLoaded} ref={_onImgRef}/>
+                  <img src={window.aldoSized(img.blobPath, 360)} srcSet={window.aldoSrcSet(img.blobPath)} sizes="auto, (max-width: 820px) 50vw, 360px" alt={`${project.name}${project.client ? " — " + project.client : ""}`} loading="lazy" decoding="async" className="lazy-img" style={focalImgStyle(img)} onLoad={_markLoaded} ref={_onImgRef}/>
                 </div>
                 <span className="name">{img.filename}</span>
                 <span className="sub">{[it.dims, it.size].filter(Boolean).join(' · ') || 'archive'}</span>
@@ -594,7 +599,7 @@ function Archive({ onOpenPhoto, onSetCrumb, initialFilter, onFilterChange, selec
                   }}
                 >
                   <div className="pic" style={placeholderStyle(it)}>
-                    <img src={window.aldoSized(it.photo, 800)} alt={it.name} loading="lazy" decoding="async" className="lazy-img" style={focalImgStyle(it)} onLoad={_markLoaded} ref={_onImgRef}/>
+                    <img src={window.aldoSized(it.photo, 240)} srcSet={window.aldoSrcSet(it.photo)} sizes="auto, (max-width: 820px) 50vw, 240px" alt={it.name} loading="lazy" decoding="async" className="lazy-img" style={focalImgStyle(it)} onLoad={_markLoaded} ref={_onImgRef}/>
                     {selectionMode && (
                       <span className={`select-mark ${isSelected ? 'on' : ''}`}>
                         {isSelected ? selectedIds.indexOf(it.id) + 1 : ''}
@@ -1253,7 +1258,9 @@ function CrewDetail({ name, onOpenProject, onBack }) {
           <article key={project.id} className="project" onClick={() => onOpenProject(project)}>
             <div className="photo" style={placeholderStyle(project)}>
               <img
-                src={window.aldoSized(project.photo, 1200)}
+                src={window.aldoSized(project.photo, 440)}
+                srcSet={window.aldoSrcSet(project.photo)}
+                sizes="auto, (max-width: 820px) 100vw, 440px"
                 alt={project.name}
                 loading="lazy"
                 decoding="async"
@@ -1320,7 +1327,9 @@ function PrintShop({ onOpenPrint }) {
             <article key={p.id} className="print-card" onClick={() => onOpenPrint && onOpenPrint(p)}>
               <div className="print-photo" style={placeholderStyle(p)}>
                 <img
-                  src={window.aldoSized(p.blobPath, 800)}
+                  src={window.aldoSized(p.blobPath, 360)}
+                  srcSet={window.aldoSrcSet(p.blobPath)}
+                  sizes="auto, (max-width: 820px) 50vw, 360px"
                   alt={p.title}
                   loading="lazy"
                   decoding="async"
