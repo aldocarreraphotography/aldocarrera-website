@@ -1253,21 +1253,35 @@ function AboutSiteModal({ onClose }) {
 /* ============================================================
    ARCHIVE APP
    ============================================================ */
-/* Windows open ~15% larger than their original design sizes, clamped so
-   they still fit the viewport on smaller laptop screens. */
+/* Window sizes were designed for a ~1440×900 screen. They open ~15%
+   larger than that design, and on bigger displays they also scale with the
+   screen (up to 1.8×) — on a large monitor the fixed sizes left the windows
+   bunched in the top-left corner. Always clamped to fit the viewport. */
 const WIN_SCALE = 1.15;
+function _uiScale() {
+  const vw = (typeof window !== 'undefined' && window.innerWidth)  || 1440;
+  const vh = (typeof window !== 'undefined' && window.innerHeight) || 900;
+  return Math.min(1.8, Math.max(1, Math.min(vw / 1440, vh / 900)));
+}
 function _winSize(w, h) {
   const vw = (typeof window !== 'undefined' && window.innerWidth)  || 1440;
   const vh = (typeof window !== 'undefined' && window.innerHeight) || 900;
+  const k = WIN_SCALE * _uiScale();
   return {
-    w: Math.round(Math.min(w * WIN_SCALE, vw - 40)),
-    h: Math.round(Math.min(h * WIN_SCALE, vh - 110)),
+    w: Math.round(Math.min(w * k, vw - 40)),
+    h: Math.round(Math.min(h * k, vh - 110)),
   };
 }
 function _initialWin(win) {
   const { w, h } = _winSize(win.w, win.h);
   const vw = (typeof window !== 'undefined' && window.innerWidth) || 1440;
-  return { ...win, w, h, x: Math.max(10, Math.min(win.x, vw - w - 20)) };
+  const ui = _uiScale();
+  return { ...win, w, h, x: Math.max(10, Math.min(Math.round(win.x * ui), vw - w - 20)), y: Math.round(win.y * ui) };
+}
+/* Photo viewer default size: 1040×720 at the design size, scaled the same way. */
+function _viewerSize() {
+  const ui = _uiScale();
+  return { x: null, y: null, w: Math.round(1040 * ui), h: Math.round(720 * ui) };
 }
 const INITIAL_WINDOWS = {
   about:     _initialWin({ id:'about',     kind:'about',     title:'about_me.txt',     path:'~/info',          x:  30, y: 30,  w: 460, h: 600, z: 4, minimized: false, mounted: true }),
@@ -1312,7 +1326,7 @@ function ArchiveApp() {
   const [focused, setFocused] = aUseState('portfolio');
   const [ctx, setCtx] = aUseState(null);
   const [openPhoto, setOpenPhoto] = aUseState(null); // { photo, list }
-  const [viewerWin, setViewerWin] = aUseState({ x: null, y: null, w: 1040, h: 720 });
+  const [viewerWin, setViewerWin] = aUseState(_viewerSize);
   const [view, setView] = aUseState('grid');
   const [activeMobileTab, setActiveMobileTab] = aUseState('portfolio');
   const [mobileProject, setMobileProject] = aUseState(null);
@@ -1497,7 +1511,7 @@ function ArchiveApp() {
       video:     (() => {
         // Size the window to the video's actual aspect ratio — eliminates black bars
         const CHROME_H = 90; // toolbar + statusbar + title bar
-        const MAX_W = Math.min(960, window.innerWidth - 80);
+        const MAX_W = Math.min(960 * _uiScale(), window.innerWidth - 80);
         const MAX_H = window.innerHeight - 140;
         let w = 840, h = 560;
         if (opts.dims && opts.dims.w && opts.dims.h) {
@@ -1508,7 +1522,7 @@ function ArchiveApp() {
         }
         return { title: opts.video ? opts.video.title : 'Video', path: opts.video ? `~/reels/${opts.video.id}` : '~/reels', w, h };
       })(),
-      project:   { title: opts.project ? opts.project.name : 'Project', path: opts.project ? `~/portfolio/${opts.project.id}` : '~/portfolio', w: Math.min(1360, window.innerWidth - 40), h: Math.min(820, window.innerHeight - 80), x: 4, y: 30 },
+      project:   { title: opts.project ? opts.project.name : 'Project', path: opts.project ? `~/portfolio/${opts.project.id}` : '~/portfolio', w: Math.min(1360 * _uiScale(), window.innerWidth - 40), h: Math.min(820 * _uiScale(), window.innerHeight - 80), x: 4, y: 30 },
     };
     const base = presets[kind] || { title: kind, w: 500, h: 400 };
     // Video and project windows already size themselves to the content/viewport.
@@ -1517,8 +1531,8 @@ function ArchiveApp() {
       ...ws,
       [id]: {
         id, kind, mounted: true, minimized: false,
-        x: p.x !== undefined ? p.x : Math.min(window.innerWidth - p.w - 40, 200 + Object.keys(ws).length * 28),
-        y: p.y !== undefined ? p.y : Math.min(window.innerHeight - p.h - 60, 70 + Object.keys(ws).length * 28),
+        x: p.x !== undefined ? p.x : Math.max(10, Math.min(window.innerWidth - p.w - 40, (200 + Object.keys(ws).length * 28) * _uiScale())),
+        y: p.y !== undefined ? p.y : Math.max(10, Math.min(window.innerHeight - p.h - 60, (70 + Object.keys(ws).length * 28) * _uiScale())),
         w: p.w, h: p.h, z: 10,
         title: p.title, path: p.path,
         project: opts.project || null,
@@ -1539,7 +1553,7 @@ function ArchiveApp() {
   }, [focus]);
   const closePhotoViewer = aUseCallback(() => {
     setOpenPhoto(null);
-    setViewerWin({ x: null, y: null, w: 1040, h: 720 });
+    setViewerWin(_viewerSize());
     setOrder(o => o.filter(x => x !== '__viewer'));
     setFocused(f => (f === '__viewer' ? null : f));
   }, []);
@@ -1642,7 +1656,7 @@ function ArchiveApp() {
             id="__viewer"
             title={openPhoto.photo.name || 'Photo'}
             path={openPhoto.photo.client}
-            x={viewerWin.x != null ? viewerWin.x : Math.max(40, (window.innerWidth - Math.min(1040, window.innerWidth - 60))/2)}
+            x={viewerWin.x != null ? viewerWin.x : Math.max(40, (window.innerWidth - Math.min(viewerWin.w, window.innerWidth - 60))/2)}
             y={viewerWin.y != null ? viewerWin.y : 50}
             w={Math.min(viewerWin.w, window.innerWidth - 40)}
             h={Math.min(viewerWin.h, window.innerHeight - 90)}
