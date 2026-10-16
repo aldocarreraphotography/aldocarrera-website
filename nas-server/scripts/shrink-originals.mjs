@@ -58,6 +58,8 @@ for (const p of projects) {
       await fs.writeFile(tmp, out.data);
       await fs.copyFile(tmp, file);
       await fs.unlink(tmp);
+      // the copy lands with mode 000 on this volume; match the other files
+      await fs.chmod(file, 0o777).catch(() => {});
       patches.push({ projectId: p.id, filename: img.filename, fileSize: out.data.length, dimensions: `${out.info.width}×${out.info.height}` });
     }
   }
