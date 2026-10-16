@@ -418,7 +418,7 @@ body {
   z-index: 10;
   box-shadow: var(--ad-shadow);
 }
-.ad-combo:focus-within .ad-combo-list { max-height: 220px; overflow: auto; }
+.ad-combo:focus-within .ad-combo-list { max-height: 280px; overflow-y: auto; overscroll-behavior: contain; }
 .ad-combo-item {
   display: block; width: 100%; text-align: left;
   background: none; border: none;

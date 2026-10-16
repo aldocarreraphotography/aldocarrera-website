@@ -595,11 +595,17 @@ function ProjectEditorView({ projectId, navigate }) {
 }
 
 function ClientCombobox({ value, onChange, options }) {
+  /* Show every match (the list scrolls) — it used to stop at 6. When the
+     field already holds an exact client name, show the full list so you
+     can switch clients without clearing the field first. */
+  const q = (value || '').trim().toLowerCase();
+  const exact = q && options.some(o => o.toLowerCase() === q);
+  const shown = !q || exact ? options : options.filter(o => o.toLowerCase().includes(q));
   return (
     <div className="ad-combo">
       <TextInput value={value} onChange={onChange} placeholder="BAPE"/>
       <div className="ad-combo-list">
-        {options.filter(o => !value || o.toLowerCase().includes(value.toLowerCase())).slice(0, 6).map(o => (
+        {shown.map(o => (
           /* onMouseDown + preventDefault — clicking an item used to lose focus
              from the input before onClick fired, collapsing the list (via
              `:focus-within`) and dropping the click. preventDefault on
