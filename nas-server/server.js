@@ -304,7 +304,7 @@ app.post('/api/projects/:id/images/upload', upload.single('file'), async (req, r
     if (!req.file) return res.status(400).json({ error: 'missing_file' });
 
     const rawName  = (req.body?.filename || req.file.originalname || `upload_${Date.now()}.jpg`).toString();
-    const dateTaken  = req.body?.dateTaken  || null;
+    const dateTaken  = req.body?.dateTaken  || (await _exifDate(req.file.buffer))?.toISOString() || null;
 
     // Store a web master, unless a client portal hands out downloads from this project
     const portals = await readGalleryPortals().catch(() => ({ portals: [] }));
@@ -619,6 +619,23 @@ async function _prewarmResizes(id, filename, original) {
    (~3–5 MB) that keeps EXIF and the colour profile. Files that are already
    small are kept as they are. Projects that deliver downloads through a
    client portal keep their originals (see the upload route). */
+/* Capture date from a photo's metadata. exifr names the EXIF tags
+   DateTimeOriginal / CreateDate (it renames DateTimeDigitized → CreateDate
+   and DateTime → ModifyDate, so asking for the raw names found nothing).
+   Film scans exported from Lightroom usually have no DateTimeOriginal, only
+   CreateDate or the IPTC DigitalCreationDate (YYYYMMDD). ModifyDate is the
+   export date, not the shoot, so it's deliberately not used. */
+async function _exifDate(buffer) {
+  try {
+    const e = await exifr.parse(buffer, { pick: ['DateTimeOriginal', 'CreateDate', 'DigitalCreationDate'], iptc: true, xmp: false });
+    let raw = e?.DateTimeOriginal || e?.CreateDate;
+    const dc = String(e?.DigitalCreationDate || '');
+    if (!raw && /^\d{8}$/.test(dc)) raw = `${dc.slice(0, 4)}-${dc.slice(4, 6)}-${dc.slice(6, 8)}T12:00:00Z`;
+    const d = raw ? new Date(raw) : null;
+    return d && !isNaN(d.getTime()) && d.getFullYear() > 1990 ? d : null;
+  } catch (_) { return null; }
+}
+
 const MASTER_LONG_EDGE = 4000;
 const MASTER_MAX_BYTES = 8 * 1024 * 1024;
 async function _webMaster(buffer, filename) {
@@ -4066,17 +4083,11 @@ async function _runImportJob(job, specs) {
         // Read EXIF date directly from the image bytes — more reliable than
         // Dropbox's media_info which is often unpopulated for RAW/unindexed files.
         let dateTaken = null;
-        try {
-          const exif = await exifr.parse(original, ['DateTimeOriginal', 'DateTimeDigitized', 'DateTime']);
-          const raw = exif?.DateTimeOriginal || exif?.DateTimeDigitized || exif?.DateTime;
-          if (raw) {
-            const d = new Date(raw);
-            if (!isNaN(d.getTime()) && d.getFullYear() > 1990) {
-              dateTaken = d.toISOString();
-              yearTally[d.getFullYear()] = (yearTally[d.getFullYear()] || 0) + 1;
-            }
-          }
-        } catch (_) { /* EXIF unavailable — fine, leave dateTaken null */ }
+        const shot = await _exifDate(original);
+        if (shot) {
+          dateTaken = shot.toISOString();
+          yearTally[shot.getFullYear()] = (yearTally[shot.getFullYear()] || 0) + 1;
+        }
 
         newProject.images.push({
           filename: finalName,

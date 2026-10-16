@@ -74,14 +74,10 @@ function _onImgRef(el) { if (el && el.complete && el.naturalWidth > 0) _revealNo
 /* ============================================================
    PORTFOLIO
    ============================================================ */
-/* Featured rotation.
-   Explicit highlights always win — if enough work is highlighted in admin,
-   that curation is used verbatim. But with only a handful highlighted the
-   strip loops the same 2–3 frames forever, which reads as a broken or
-   half-built homepage. Below MIN_POOL we top up with each project's cover
-   (its chosen cover, else its first frame) so the hero always cycles across
-   the body of work. Adding highlights in admin simply takes over. */
-const FEATURED_MIN_POOL = 8;
+/* Featured rotation: exactly the photos marked ✦ HIGHLIGHT in admin.
+   Covers are NOT mixed in — topping up with covers made every cover look
+   like a highlight. Covers are only a fallback when nothing is highlighted,
+   so the homepage never shows an empty strip. */
 const FEATURED_MAX_POOL = 14;
 
 function FeaturedStrip({ onOpenProject }) {
@@ -91,9 +87,9 @@ function FeaturedStrip({ onOpenProject }) {
     const highlighted = PROJECTS.flatMap(p =>
       (p.images || []).filter(i => i.highlighted).map(i => decorate(i, p))
     );
-    if (highlighted.length >= FEATURED_MIN_POOL) return highlighted.slice(0, FEATURED_MAX_POOL);
+    if (highlighted.length) return highlighted.slice(0, FEATURED_MAX_POOL);
 
-    // Top up with one cover per project, skipping anything already highlighted.
+    // Nothing highlighted: one cover per project.
     const taken = new Set(highlighted.map(i => i.blobPath));
     const covers = [];
     for (const p of PROJECTS) {

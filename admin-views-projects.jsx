@@ -1227,7 +1227,26 @@ function useMemoClients() {
      clients between project saves. The previous version cached the list
      with `[]` deps and never recomputed — new clients never showed. */
   window.useStoreSubscribe();
-  return window.AdminStore.getClients().map(c => c.name);
+  /* Every client already used on a project counts as "worked
+     with", not just the Clients page list — that list only grew when a
+     project was saved from this form, so clients set by the Dropbox AI
+     import (or before the auto-add existed) never appeared. Case-insensitive
+     de-dupe; the Clients page spelling wins, then the most-used spelling. */
+  const counts = new Map();
+  const tally = (name, w) => {
+    const n = (name || '').trim();
+    if (!n) return;
+    const k = n.toLowerCase();
+    const e = counts.get(k) || { spellings: new Map(), total: 0 };
+    e.spellings.set(n, (e.spellings.get(n) || 0) + w);
+    e.total += w;
+    counts.set(k, e);
+  };
+  window.AdminStore.getClients().forEach(c => tally(c.name, 1000));
+  window.AdminStore.getProjects().forEach(p => tally(p.client, 1));
+  return [...counts.values()]
+    .map(e => [...e.spellings.entries()].sort((a, b) => b[1] - a[1])[0][0])
+    .sort((a, b) => a.localeCompare(b));
 }
 
 /* ============================================================

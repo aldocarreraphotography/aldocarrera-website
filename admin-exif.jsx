@@ -43,10 +43,9 @@ async function parseExif(file) {
     } catch (_) {}
   }
 
-  // Fallback for date: file's lastModified — better than nothing.
-  if (!out.dateTaken && file.lastModified) {
-    out.dateTaken = new Date(file.lastModified).toISOString();
-  }
+  // No capture date: leave it empty and let the server read it (it also
+  // checks the IPTC date film scans carry). file.lastModified used to fill
+  // in here, but that's usually the export/download day, not the shoot.
   return out;
 }
 
