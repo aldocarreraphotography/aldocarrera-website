@@ -623,6 +623,12 @@ function ClientCombobox({ value, onChange, options }) {
   );
 }
 
+/* Self-contained client picker for forms outside the project editor
+   (gallery / unified gallery create) — same list, same behaviour. */
+function ClientPicker({ value, onChange }) {
+  return <ClientCombobox value={value} onChange={onChange} options={useMemoClients()}/>;
+}
+
 /* Type field: preset dropdown + "Custom…" option that reveals a free-text input.
    Uses local `customMode` state because clearing `value` to '' on Custom select
    made isCustom evaluate false, which snapped the dropdown back to Editorial

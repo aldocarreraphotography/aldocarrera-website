@@ -635,11 +635,7 @@ function GalleryCreateModal({ open, onClose, onCreated, prefill }) {
         </select>
       </Field>
       <Field label="Client name" wide hint="Who you're sending this to — shown in the gallery header.">
-        <TextInput
-          value={form.clientName}
-          onChange={v => set('clientName', v)}
-          placeholder="e.g. BAPE Studio"
-        />
+        <ClientPicker value={form.clientName} onChange={v => set('clientName', v)}/>
       </Field>
       <Field label="Gallery title" wide hint="Appears at the top of the client page.">
         <TextInput

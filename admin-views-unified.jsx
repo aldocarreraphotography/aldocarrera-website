@@ -164,7 +164,7 @@ function UnifiedCreateModal({ onClose, onCreated }) {
         <TextInput value={title} onChange={setTitle} placeholder="BAPE SS24 — Round 1" autoFocus/>
       </Field>
       <Field label="Client name" hint="Internal — for your list.">
-        <TextInput value={client} onChange={setClient} placeholder="BAPE"/>
+        <ClientPicker value={client} onChange={setClient}/>
       </Field>
       <Field label="PIN" hint="4 digits. Leave blank for an open link (no PIN).">
         <TextInput value={pin} onChange={(v) => setPin(v.replace(/\D/g, '').slice(0, 4))} placeholder="1234"/>
