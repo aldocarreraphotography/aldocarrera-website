@@ -2164,14 +2164,29 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
     const MAX_ACTIVE = 8;
     let active = 0;
     const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    /* drawImage() crops in the downloaded file's real pixels, but with
+       srcset img.naturalWidth is scaled to the `sizes` width (a 2000px file
+       shown in a 400px tile reports ~400). Cropping with those numbers drew
+       only the top-left corner, so the effect zoomed in and then jumped back
+       out. A plain Image of the same URL (already cached) reports real pixels. */
     const pixelate = (img) => {
       if (reduceMotion || active >= MAX_ACTIVE || img.dataset.pixelated) return;
       img.dataset.pixelated = '1';
+      const src = new Image();
+      src.src = img.currentSrc || img.src;
+      if (src.complete && src.naturalWidth) return play(img, src);
+      // Not instantly available: only play if it's ready almost at once,
+      // never re-pixelate a photo the visitor has already seen sharp.
+      const t0 = performance.now();
+      src.decode().then(() => { if (performance.now() - t0 < 150) play(img, src); }, () => {});
+    };
+    const play = (img, src) => {
+      if (active >= MAX_ACTIVE) return;
       let canvas = null;
       try {
         const cs = getComputedStyle(img);
         const W = img.offsetWidth, H = img.offsetHeight;
-        const iw = img.naturalWidth, ih = img.naturalHeight;
+        const iw = src.naturalWidth, ih = src.naturalHeight;
         if (cs.objectFit !== 'cover' || !W || !H || !iw || !ih) return;
         // Source rect that object-fit: cover + object-position actually shows
         const scale = Math.max(W / iw, H / ih);
@@ -2193,7 +2208,7 @@ function MobileShell({ active, setActive, project, setProject, folders, setFolde
           const rows = Math.max(1, Math.round(cols * H / W));
           canvas.width = cols; canvas.height = rows;
           ctx.imageSmoothingEnabled = true; // average each block's colour
-          ctx.drawImage(img, sx, sy, sw, sh, 0, 0, cols, rows);
+          ctx.drawImage(src, sx, sy, sw, sh, 0, 0, cols, rows);
         };
         draw(PIXEL_STEPS[0]);
         wrap.appendChild(canvas);
