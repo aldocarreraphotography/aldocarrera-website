@@ -48,9 +48,23 @@ function focalImgStyle(src) {
    can never freeze on a loaded image. `__aldoReveal` (installed by
    aldo-app.jsx) applies the brief pixel hold before snapping to sharp;
    the class fallback keeps images visible if that hook isn't mounted. */
+/* object-fit: cover crops a landscape photo into a portrait tile, so the
+   visible part is stretched well past the tile width. `sizes` only knows
+   the tile width, so the browser picked a file too small and upscaled it.
+   Once the aspect ratio is known, ask srcset for the width actually shown. */
+function _fitCover(el) {
+  const nw = el.naturalWidth, nh = el.naturalHeight, bw = el.clientWidth, bh = el.clientHeight;
+  if (el.dataset.fit || !el.srcset || !nw || !nh || !bw || !bh) return;
+  if (getComputedStyle(el).objectFit !== 'cover') return;
+  const need = Math.ceil(Math.max(bw, bh * nw / nh));
+  if (need <= bw * 1.15) return;
+  el.dataset.fit = '1';
+  el.sizes = need + 'px';
+}
 function _revealNow(el) {
   if (!el) return;
   el.classList.add('loaded');
+  _fitCover(el);
   if (window.__aldoReveal) window.__aldoReveal(el);
   else el.classList.add('lazy-revealed');
 }

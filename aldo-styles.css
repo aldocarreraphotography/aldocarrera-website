@@ -3493,6 +3493,10 @@ img {
 /* Scroll-reveal: image hidden behind pixelated placeholder until in viewport.
    Two-phase: observer at 1500px starts native load early; observer at 0px
    reveals once image is already decoded — so the snap is truly instant. */
+/* image-rendering is INHERITED: the wrapper's inline `pixelated` (for the
+   placeholder) made every real photo scale with hard nearest-neighbour
+   edges, so photos stayed blocky after the reveal. Photos scale smoothly. */
+img { image-rendering: auto; }
 img.lazy-img { visibility: hidden; }
 img.lazy-img.lazy-revealed { visibility: visible; }
 
